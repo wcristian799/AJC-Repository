@@ -1,0 +1,33 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "es2021",
+    "module": "commonjs",
+    "lib": ["es2021", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@ajc/shared/domain-types": ["libs/shared/domain-types/src/index.ts"],
+      "@ajc/shared/api-contract": ["libs/shared/api-contract/src/index.ts"],
+      "@ajc/shared/validation": ["libs/shared/validation/src/index.ts"],
+      "@ajc/ui": ["libs/ui/src/index.ts"],
+      "@ajc/ui-field": ["libs/ui-field/src/index.ts"],
+      "@ajc/config-client": ["libs/config-client/src/index.ts"],
+      "@ajc/offline-sync": ["libs/offline-sync/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}

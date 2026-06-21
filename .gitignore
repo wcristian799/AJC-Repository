@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+tmp/
+out-tsc/
+*.tsbuildinfo
+
+# Nx
+.nx/cache
+.nx/workspace-data
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Testing
+coverage/
+.nyc_output/
+
+# Capacitor / mobile artifacts
+apps/**/android/
+apps/**/ios/
+apps/**/.capacitor/
+*.apk
+*.aab
+
+# Editor / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.log
+
+# Postgres local volume (se montado no repo)
+infra/docker/pgdata/
+
+# Claude local
+.claude/

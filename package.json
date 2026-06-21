@@ -1,0 +1,28 @@
+{
+  "name": "@ajc/source",
+  "version": "0.0.1",
+  "private": true,
+  "description": "ERP/TMS AJC — transporte fluvial (monorepo Nx + monolito modular NestJS)",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "nx run-many -t build",
+    "lint": "nx run-many -t lint",
+    "test": "nx run-many -t test",
+    "graph": "nx graph",
+    "api:serve": "nx serve api",
+    "console:serve": "nx serve web-console",
+    "migrate": "nx run api:migrate",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d postgres",
+    "stack:up": "docker compose -f infra/docker/docker-compose.yml up -d --build",
+    "stack:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "prepare": "husky || true"
+  },
+  "workspaces": [
+    "apps/*",
+    "libs/*",
+    "libs/shared/*"
+  ]
+}

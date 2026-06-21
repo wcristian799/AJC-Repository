@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: ajc_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ajc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ajc_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-ajc}
+    ports:
+      # Exposto só para o host de desenvolvimento. Em produção (VPS) NÃO publicar:
+      # o Postgres fica acessível apenas na rede interna do compose (ver ADR 01 §3).
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ajc} -d ${POSTGRES_DB:-ajc}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ajc_internal
+
+  migrate:
+    image: postgis/postgis:16-3.4
+    container_name: ajc_migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-ajc}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-ajc_dev}
+      PGDATABASE: ${POSTGRES_DB:-ajc}
+    volumes:
+      - ../migrations:/migrations:ro
+    # Aplica todas as migrations em ordem alfabética e encerra.
+    entrypoint: ['/bin/bash', '-c']
+    command:
+      - |
+        set -e
+        for f in /migrations/*.sql; do
+          echo ">> aplicando $$f";
+          psql -v ON_ERROR_STOP=1 -f "$$f";
+        done
+        echo ">> migrations concluidas"
+    networks:
+      - ajc_internal
+    profiles:
+      - tools
+
+  # api e worker entram quando o esqueleto NestJS existir (E4). Placeholders documentados:
+  # api:    build ../../apps/api ; command: node main.js ; depends_on: postgres
+  # worker: build ../../apps/api ; command: node worker.js ; depends_on: postgres
+  # nginx:  reverse proxy 80/443 -> api + estáticos dos fronts
+
+volumes:
+  pgdata:
+    name: ajc_pgdata
+
+networks:
+  ajc_internal:
+    name: ajc_internal
