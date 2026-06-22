@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Verificação do teste de fogo do schema AJC.
+echo "=== Postgres + PostGIS ==="
+psql -d ajc -tAc "SELECT version();" | head -1
+psql -d ajc -tAc "SELECT postgis_version();"
+echo "=== nº de tabelas (esperado 41) ==="
+psql -d ajc -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';"
+echo "=== nº de enums/tipos (esperado ~27) ==="
+psql -d ajc -tAc "SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public' AND t.typtype='e';"
+echo "=== índices únicos de client_uuid (sync/idempotência) ==="
+psql -d ajc -tAc "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname LIKE 'ux_%client_uuid%';"
+echo "=== índice GiST de geolocalização ==="
+psql -d ajc -tAc "SELECT indexname FROM pg_indexes WHERE schemaname='public' AND tablename='posicao_embarcacao';"
+echo "=== FKs circulares adiadas (bilhete<->caixa_movimento, item_preco->embarcacao) ==="
+psql -d ajc -tAc "SELECT conname FROM pg_constraint WHERE contype='f' AND conname IN ('fk_bilhete_caixa_movimento','fk_caixa_movimento_bilhete','fk_item_preco_embarcacao') ORDER BY 1;"
+echo "=== seed: cidades (esperado 8, BEL base) ==="
+psql -d ajc -tAc "SELECT count(*) FROM cidade; SELECT sigla FROM cidade WHERE is_base;"
+echo "=== seed: perfis / permissoes / config ==="
+psql -d ajc -tAc "SELECT 'perfis='||count(*) FROM perfil; SELECT 'permissoes='||count(*) FROM permissao; SELECT 'config_chaves='||count(*) FROM config_chave; SELECT 'config_versoes='||count(*) FROM config_versao;"
+echo "=== teste idempotência: reinserir cidade BEL deve ser no-op ==="
+psql -d ajc -tAc "INSERT INTO cidade (sigla,nome,uf,is_base,ativo) VALUES ('BEL','Belém','PA',true,true) ON CONFLICT (sigla) DO NOTHING; SELECT count(*) FROM cidade;"
+echo "=== FIM ==="

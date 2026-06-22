@@ -3,22 +3,30 @@
 > Atualize ao fim de cada bloco de trabalho. Topo = mais recente. Uma sessão nova lê o `CLAUDE.md` e depois este arquivo para saber exatamente onde retomar.
 
 ## Onde estamos agora
-**Fase atual:** Fase 0 — fundação técnica (repo + docker + banco + esqueletos).
-**Status:** planejamento da Fase 0 completo (épicos + modelo de dados). Construção do repositório em andamento — fundação do monorepo, tipos, migrations e docker do banco prontos; falta esqueleto back/front/Capacitor e o teste de fogo do banco.
+**Fase atual:** Fase 0 — fundação técnica. **Banco + API validados rodando no WSL.**
+**Status:** monorepo, tipos, migrations (42 tabelas) e seed prontos e APLICADOS em Postgres vivo; esqueleto NestJS sobe e o health-check confirma `db:up`. Falta: front + design system, app Capacitor PoC, CI, spike offline-sync.
 
-### Já construído (verificável)
-- Monorepo: `package.json`, `nx.json`, `tsconfig.base.json` (paths `@ajc/*`), `.gitignore`, `.env.example`, `README.md`.
-- `libs/shared/domain-types`: enums do MVP em TS espelhando o banco — **compila limpo no tsc** (exit 0).
-- `infra/migrations/0001..0007`: schema completo do MVP (**41 tabelas, 27 enums**, FKs circulares adiadas) — validado no parser oficial do Postgres. Ainda NÃO aplicado em banco vivo.
-- `infra/seed/0001_seed_minimo.sql`: 8 cidades, 8 perfis, catálogo de permissões, admin placeholder, chaves de config vazias. Idempotente.
-- `infra/docker/docker-compose.yml`: Postgres+PostGIS + serviço `migrate` que aplica os SQL em ordem.
+### Já construído e VERIFICADO
+- Monorepo: configs Nx, `tsconfig.base.json` (paths `@ajc/*`), `.gitignore`, `.env.example`, READMEs.
+- `libs/shared/domain-types`: enums do MVP — tsc OK.
+- `infra/migrations/0001..0007` + `infra/seed`: **aplicados em Postgres 16.14+PostGIS 3.6 no WSL** (teste de fogo verde — ver seção do banco).
+- `apps/api` (NestJS): main + worker pg-boss + database pool + health + módulos vazios. **Build OK; `GET /api/health` → `db:up`** rodando no WSL.
 
-### Bloqueio nesta máquina
-- **Docker Desktop não inicializa** sem aceite de licença/setup interativo (daemon não responde a `docker info`). Por isso o **teste de fogo do banco** (aplicar migrations num Postgres vivo) ficou pendente. Não é problema do código — é setup da máquina.
+### Banco — RESOLVIDO via WSL2 (Docker Desktop abandonado)
+- **Docker Desktop (4.78 e 4.77) é inutilizável nesta máquina:** o "Inference manager" tenta criar o socket `unix://C:/...dockerInference` (caminho inválido no Windows) e derruba o app no boot, em ambas as versões, mesmo com `enableInference:false`. O lock via `admin-settings.json` exige licença Docker Business (não temos). **Decisão: não usar Docker Desktop.**
+- **Solução adotada:** PostgreSQL **16.14 + PostGIS 3.6** instalados **nativos no WSL2 (Ubuntu-22.04)** via repositório PGDG. Cluster online na porta 5432. Role `ajc` / senha `ajc_dev` / db `ajc`.
+- **TESTE DE FOGO PASSOU** (banco vivo): 42 tabelas, 27 enums, 9 índices únicos de `client_uuid`, índice GiST de geolocalização, FKs circulares adiadas OK, seed (8 cidades/8 perfis/13 permissões/7 configs), idempotência confirmada.
+
+### Ambiente de execução = WSL (Linux), não Windows
+- O forward de rede WSL2↔Windows (NAT, Win10 build 19045) é **instável**: `localhost`/`127.0.0.1` do Windows não alcança o Postgres do WSL de forma confiável (Node resolve `localhost`→IPv6 `::1`; NAT cobre só IPv4 e de forma intermitente; portproxy via IP do WSL também caiu porque o IP da VM muda a cada restart). `mirrored` não é suportado no Win10.
+- **Decisão:** rodar o **back (Node/NestJS) DENTRO do WSL**, junto do Postgres, onde `localhost:5432` é nativo. É idêntico à produção (tudo Linux/Docker). Node 20.18 instalado no WSL.
+- **API VALIDADA ponta a ponta:** `GET /api/health` → `{"status":"ok","db":"up"}` rodando no WSL contra o Postgres local. Build NestJS OK (precisou de `esModuleInterop` no tsconfig por causa do pg-boss).
+- Scripts: `infra/apply-wsl.sh` (migrations+seed), `infra/verify-wsl.sh` (validação), `infra/open-pg-wsl.sh` (abre listen do PG), `infra/run-api-wsl.sh` (build+run da API no WSL). Rodar com `MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -u root -- bash /mnt/c/.../infra/<script>.sh`.
+- Para o FRONT (web-console): o Vite dev server roda no WSL e o navegador do Windows acessa — validar o forward nesse sentido (servidor no WSL→browser Windows costuma funcionar melhor que o inverso; testar no E5).
 
 ## Próximo passo imediato (retomada)
-1. **Subir o Docker Desktop manualmente** uma vez (aceitar licença) e rodar o teste de fogo do banco conforme o `README.md` (seção "Subir o banco"). Conferir: 41 tabelas, `postgis_version()`, seed (8 cidades), índices únicos parciais de `client_uuid`, FKs adiadas. Corrigir migration se algo quebrar no banco real.
-2. **E4 — Esqueleto NestJS** (`apps/api`): subir, conectar via `DATABASE_URL`, `GET /health` (processo + DB), módulos vazios, fundação RBAC (guard) e do motor de config (leitura+cache), worker pg-boss. 
+1. **Banco JÁ VALIDADO no WSL2** (ver seção abaixo). Para subir numa máquina nova: instalar PG16+PostGIS no WSL (ou Docker noutra máquina) e rodar `infra/apply-wsl.sh`.
+2. **E4 — Esqueleto NestJS** (`apps/api`): JÁ ESCRITO (main, worker, database pool, health, módulos vazios). Falta: `npm install` das deps e `npm run build`/`start` apontando `DATABASE_URL=postgresql://ajc:ajc_dev@localhost:5432/ajc`, confirmar `GET /api/health` retorna db:up. Decidir Prisma vs TypeORM (E3-H1) ao ligar dados de domínio.
 3. **E5 — Front** (`apps/web-console`): `libs/ui` (tokens da Fundação UX) + shell de navegação.
 4. **E6 — App Capacitor PoC** (`field-conferente`): abre e lê QR (`@capacitor-mlkit/barcode-scanning`).
 5. **E7 — CI**: lint/build/test + `migrate` do zero no CI; Husky/commitlint.

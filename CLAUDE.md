@@ -46,5 +46,9 @@ Sistema de gestão (ERP + TMS) para a **AJC**, empresa de transporte fluvial no 
 - Nada de valor de negócio hard-coded — sempre via motor de config.
 
 ## Ambiente de desenvolvimento (verificado)
-- Node v24, npm 11, git 2.54, Docker 29 disponíveis. pnpm ausente (usar npm).
-- SO: Windows; shell do assistente é Git Bash (POSIX).
+- Node v24, npm 11, git 2.54 disponíveis no Windows. pnpm ausente (usar npm).
+- SO: Windows 10 (build 19045); shell do assistente é Git Bash (POSIX).
+- **Docker Desktop NÃO funciona nesta máquina** (bug do Inference manager derruba o boot em 4.77 e 4.78; não-resolvível por config sem licença Business). **Não tentar usar Docker Desktop.**
+- **Banco e back rodam no WSL2 (Ubuntu-22.04), não no Windows.** PostgreSQL 16.14 + PostGIS 3.6 nativos no WSL; Node 20.18 no WSL. O forward de rede WSL2↔Windows é instável (NAT, sem mirrored no Win10), então **execute o back DENTRO do WSL** onde `localhost:5432` é nativo — não tente conectar do Node no Windows ao Postgres do WSL.
+- Padrão para rodar scripts no WSL: `MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -u root -- bash /mnt/c/Users/Administrador/Desktop/Trabalho/AJC/infra/<script>.sh`. Scripts úteis em `infra/`: `apply-wsl.sh`, `verify-wsl.sh`, `open-pg-wsl.sh`, `run-api-wsl.sh`.
+- Credenciais de dev do banco: db `ajc` / role `ajc` / senha `ajc_dev` / `DATABASE_URL=postgresql://ajc:ajc_dev@localhost:5432/ajc` (a partir de dentro do WSL).
