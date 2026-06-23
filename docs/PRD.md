@@ -163,9 +163,11 @@ O objetivo não é só digitalizar: é **fechar as brechas de receita e blindar 
 
 > Decisão do cliente: começar o aprofundamento por **TMS/Carga** e **Vendas/Passagens**.
 
-- **Fase 1 (núcleo antifraude + receita):** Cadastros essenciais + Navegação (embarcações/viagens) + Vendas de passagem com QR e validação + Encomendas com declaração de conteúdo + TMS (entrada de veículos, conferência bipada, etiqueta, entrega).
+- **Fase 1 (núcleo antifraude + receita):** Cadastros essenciais + Navegação (embarcações/viagens) + Vendas de passagem com QR e validação + **Portal online público de venda de passagem com pagamento integrado (gateway + emissão fiscal)** + Encomendas com declaração de conteúdo + TMS (entrada de veículos, conferência bipada, etiqueta, entrega).
 - **Fase 2 (financeiro e inteligência):** Financeiro completo, caixas/tesouraria, compras/estoque, pagamento de agentes, BI por viagem/embarcação/cidade.
 - **Fase 3 (experiência e periféricos):** CRM avançado/cotações, PDV lanchonete/restaurante, rastreamento em tempo real, NPS, integração NF/boleto no CNPJ.
+
+> **Decisão (atualização de escopo):** o cliente confirmou que o **portal público de venda online com pagamento integrado** É parte do MVP (Fase 1), não item posterior. Isso eleva ao caminho crítico do MVP: (a) integração de **gateway de pagamento** (cartão/PIX), (b) **emissão fiscal** do bilhete, (c) **reserva/locação de assento com concorrência** (evitar venda dupla), (d) conta/área do cliente e recuperação de bilhete. Os itens (a) e (b) dependem de fornecedores externos com risco de prazo já sinalizado no quadro de riscos — precisam de spike/decisão de fornecedor cedo.
 
 ## 10. Glossário
 

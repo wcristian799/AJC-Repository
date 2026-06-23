@@ -1,6 +1,8 @@
 # Módulo Vendas / Passagens — SPEC + Detalhamento de Telas
 
 > Canais: **Site, App, PDV (porto), Totem**. Núcleo: venda de passagem com **QR Code**, validação no embarque por **pulseira por classe**, e controle regulatório de **gratuidades/cortesias**. Inclui também a venda de despacho de encomendas no PDV (precificação detalhada no módulo Encomendas).
+>
+> **Escopo MVP:** o **portal público de venda online com pagamento integrado** faz parte do MVP (Fase 1) — detalhamento na **Parte C**. Emissão fiscal do bilhete (BP-e) é dependência em aberto (🔶 confirmar com Lucas/contador, ver §C.7).
 
 ---
 
@@ -148,3 +150,79 @@ NPS (id, viagem_id, cliente_id, nota, comentario, respondido_em)
 - Definição das **cores de pulseira** por classe.
 - Confirmar **gateway de pagamento** e meios (PIX/cartão) por canal.
 - Subtipos de **camarote** (ex.: Royal) e seus preços/atributos.
+- 🔶 **Emissão fiscal do bilhete (BP-e)** — confirmar com Lucas/contador se é obrigatória no MVP e qual o caminho (SeFAZ-PA, certificado, credenciamento). Ver Parte C §C.7.
+
+---
+
+## Parte C — Portal Público de Venda Online (MVP)
+
+> **Decisão de escopo:** o portal público de autoatendimento com **pagamento integrado** faz parte do **MVP (Fase 1)** — confirmado pelo cliente. Esta parte aprofunda o que B.1/B.2 introduzem, com o que é necessário para vender de verdade pela internet sem fraude nem venda dupla. Depende do **design system do UX** para as telas finais; aqui especificamos comportamento, dados e integrações.
+
+### C.1 Objetivo e princípios
+- Cliente compra passagem sozinho, paga online (cartão/PIX), recebe o QR e o comprovante.
+- **Mobile-first** (a maioria compra pelo celular, muitas vezes em conexão ruim).
+- **Fonte única de disponibilidade:** portal, PDV e totem leem/escrevem a MESMA lotação por classe — nunca vender o mesmo assento/vaga duas vezes.
+- O portal é um **canal do mesmo backend** (não um sistema à parte): reusa tarifa, viagem, bilhete, cliente, termo de aceite.
+
+### C.2 Fluxo de compra (feliz)
+1. **Busca:** origem, destino, data → viagens com horário e **disponibilidade por classe em tempo real**.
+2. **Seleção de classe/assento:** Rede / Rede VIP / Camarote (subtipos com foto/preço). Onde houver assento/vaga marcada, escolhe; senão, conta por lotação da classe.
+3. **Reserva temporária:** ao avançar, o sistema **segura a vaga por N minutos** (TTL, ex.: 10 min) para o cliente concluir o pagamento (ver C.4).
+4. **Identificação:** logado → autopreenche; senão → autocadastro (C.6) ou compra como visitante com cadastro mínimo.
+5. **Termo de aceite de embarque:** obrigatório marcar "Li e aceito" (🔶 texto). Versão do termo + data/IP/dispositivo gravados (`TermoAceite`).
+6. **Pagamento:** cartão ou PIX via gateway (C.5).
+7. **Confirmação:** QR exibido na hora + enviado por e-mail/WhatsApp/área do cliente; comprovante; (se aplicável) documento fiscal (C.7).
+
+### C.3 Estados do pedido (máquina de estados)
+Separamos **Pedido (compra)** do **Bilhete (resultado)** porque um pedido pode falhar no pagamento sem gerar bilhete.
+
+```
+Pedido: iniciado → reservado(vaga segura, TTL) → aguardando_pagamento
+        → pago → emitido(gera Bilhete[s])           (caminho feliz)
+        → expirado            (TTL estourou antes de pagar → libera vaga)
+        → falha_pagamento     (recusado → mantém reserva enquanto houver TTL; permite retry)
+        → cancelado           (cliente desiste / antifraude)
+Bilhete (após emitido): emitido → validado(embarcado) → usado | cancelado | reembolsado
+```
+
+- **Expiração:** job que varre reservas com TTL vencido e devolve a vaga ao estoque da classe.
+- **Idempotência:** o retorno do gateway (webhook) é idempotente — reprocessar o mesmo evento não emite bilhete em dobro.
+
+### C.4 Reserva de vaga e concorrência (ponto crítico de engenharia)
+- A lotação por classe é recurso disputado entre 4 canais simultâneos. Em alta temporada a demanda dobra.
+- **Mecanismo:** decremento de disponibilidade sob transação no Postgres (lock de linha do "estoque da viagem/classe" ou contador com verificação atômica), garantindo que duas compras concorrentes nunca ultrapassem a capacidade.
+- Reserva gera registro com `expira_em`; só vira venda firme quando o pagamento confirma. Assento nominal (camarote) usa trava por assento; classe sem assento (rede) usa contador de vagas.
+- **Sem overbooking** é requisito duro (PRD A.4). Esta lógica entra no backend (módulo `vendas`/`caixa` + `navegacao` para capacidade).
+
+### C.5 Pagamento (gateway) — integração externa
+- Suporte a **cartão de crédito** e **PIX** no mínimo.
+- Fluxo assíncrono baseado em **webhook**: o backend cria a cobrança, o cliente paga, o gateway notifica; só então o pedido vai a `pago → emitido`.
+- **Reconciliação:** todo pagamento referencia o pedido; valores conferidos contra a tarifa no momento da reserva (evita manipulação de preço no cliente).
+- **A decidir (spike):** fornecedor (ex.: Mercado Pago, Pagar.me, Stripe, PagBank), taxas, prazos de repasse, exigências de cadastro (CNPJ da AJC). **Não construir o portal sem fechar o fornecedor.**
+
+### C.6 Conta e área do cliente
+- **Autocadastro (B.2):** nome, CPF, contato (WhatsApp/e-mail), senha; validação de CPF e contato; aceite LGPD.
+- **Área "Minhas viagens":** bilhetes ativos e passados, **reenvio do QR**, status de embarque, comprovantes, 2ª via.
+- **Recuperação de senha** e **recuperação de bilhete** por e-mail/WhatsApp (cliente perde o e-mail com frequência).
+
+### C.7 Emissão fiscal do bilhete — 🔶 dependência em aberto
+- Passagem hidroviária normalmente exige documento fiscal próprio (**BP-e — Bilhete de Passagem eletrônico**), com transmissão à SEFAZ, possível **certificado digital** e **credenciamento**.
+- **Status:** a confirmar com **Lucas/contador** — se o BP-e é obrigatório já no MVP, qual o modelo atual da AJC, e se há API/fornecedor.
+- **Arquitetura preparada:** o ponto de emissão fiscal é um **passo plugável** após `pago` (antes ou junto de `emitido`). Se a confirmação atrasar, o portal pode entregar o **QR de embarque** no MVP e a emissão fiscal pluga depois sem retrabalho do fluxo.
+
+### C.8 Antifraude e segurança (mínimos do MVP)
+- O **portal é endpoint público na internet** — exige cuidados que os canais internos não exigem:
+  - QR como **token assinado, não sequencial** (já previsto em A.2).
+  - Preço validado no servidor (nunca confiar em valor vindo do cliente).
+  - Rate limiting e proteção contra abuso nos endpoints de busca/checkout.
+  - Pagamento confirmado **só** por webhook server-to-server (não pela tela de "sucesso" do cliente).
+  - Autenticação da área do cliente separada da dos operadores internos (perfis distintos).
+- **Nota de segurança:** este canal entra na internet pública; auth, rate limiting e validação server-side são obrigatórios desde o primeiro deploy — não deixar para depois.
+
+### C.9 Telas do portal (a vestir com o design system do UX)
+1. Home/busca · 2. Resultados (viagens + disponibilidade) · 3. Seleção classe/assento · 4. Login/autocadastro · 5. Termo de aceite · 6. Checkout/pagamento (cartão/PIX) · 7. Confirmação (QR + comprovante) · 8. Área do cliente "Minhas viagens" · 9. Recuperação de senha/bilhete.
+> Estados por tela: Vazio · Carregando · Erro · Esgotado · Reserva expirada · Falha de pagamento · Sucesso.
+
+### C.10 Impacto no modelo de dados (a refletir na Fase 0)
+- Novas entidades/ajustes: **Pedido** (compra com estados de C.3), **Reserva** (vaga + `expira_em`), **Pagamento** (referência ao gateway, status, valor, webhook), **ContaCliente/credenciais** (login do portal), e o gancho de **DocumentoFiscal** (C.7, opcional no MVP conforme confirmação).
+- A capacidade por viagem/classe precisa de representação que suporte decremento atômico (C.4).
