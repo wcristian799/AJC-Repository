@@ -2,6 +2,10 @@
 
 > Atualize ao fim de cada bloco de trabalho. Topo = mais recente. Uma sessão nova lê o `CLAUDE.md` e depois este arquivo para saber exatamente onde retomar.
 
+## Deploy (Vercel)
+- **Front `apps/web-console` → Vercel.** Root Directory: `apps/web-console`. Install/Build com **Bun** (`vercel.json`). SSR via Nitro com preset **vercel** forçado em `vite.config.ts` (`nitro: { preset: "vercel" }`) — sem isso o wrapper do Lovable pula o plugin de deploy fora do ambiente Lovable e a saída fica só estática (404 na raiz). Saída gerada em `.vercel/output/` (Build Output API v3, função `__server.func`).
+- Autoria git do repo fixada localmente em `wcristian799 <wellington.cris799@gmail.com>` (antes ia como `dev@ajc.local`, não vinculado ao GitHub).
+
 ## Onde estamos agora
 **Fase atual:** Fase 1 — telas reais mockadas para aprovação comercial. **Front adotado e telas dos módulos MVP construídas.** (Fase 0/banco já validada no WSL — ver mais abaixo.)
 **Status:** o designer do cliente entregou um front completo (Lovable) que **adotamos como base oficial** em `apps/web-console` — design system "Crimson Prestige", TanStack Start + Bun + shadcn + Tailwind v4 + motion. Login cinematográfico mantido idêntico. Telas internas (início, navegação, tms, vendas, crm, financeiro, cadastros) e superfícies (portal de venda online, pos, totem, embarque, cliente) com usabilidade real e mockada. Build verde, navegação verificada no preview.
