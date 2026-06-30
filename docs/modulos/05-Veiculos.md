@@ -3,6 +3,8 @@
 > Transporte de veículos (carros) entre cidades. Valor alto em jogo: clientes entregam carros de até R$ 600 mil "na chave". Núcleo: **checklist digital de vistoria com prova fotográfica** e **termo de aceite** — proteção mútua contra disputa por avarias.
 >
 > Nota: parte do recebimento de veículos no pátio também aparece em `01-TMS-Carga.md` (Portaria). Este documento foca no fluxo específico do veículo embarcado.
+>
+> Decisão vigente pós-validação do cliente (25/jun/2026): **Veículos/Máquinas entram agora no MVP**, com envio por PDV/Comercial/Gerente do Porto, checklist/fotos, etiqueta, bipe de subida/descida e checklist de entrega.
 
 ---
 
@@ -40,7 +42,9 @@ TermoAceiteVeiculo (id, veiculo_id, versao_termo, aceito_em, dispositivo)
 > Estados padrão: **Vazio · Carregando · Erro · Sucesso · Offline**.
 
 ### B.1 Checklist digital de embarque
-**Persona:** Vistoriador. **Plataforma:** App mobile, offline-first.
+**Persona:** Conferente (o mesmo que recebe carga). **Plataforma:** App de campo, offline-first.
+
+> Atualizado pós-validação 2026-06-25: o checklist de veículo/máquina **não é app separado** — fica embutido no app de campo que o conferente já usa (recebimento/conferência), para o conferente não precisar logar no TMS à toa. Recebimento de veículos/máquinas é uma função a mais dentro do mesmo fluxo.
 
 **Fluxo:**
 1. **Dados do veículo:** placa, modelo, cor, cliente (CPF/CNPJ), cidade destino, viagem.

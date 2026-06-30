@@ -1,4 +1,4 @@
-# CLAUDE.md — Projeto AJC (ERP/TMS de transporte fluvial)
+# AGENTS.md — Projeto AJC (ERP/TMS de transporte fluvial)
 
 > **LEIA ISTO PRIMEIRO em toda sessão.** Este arquivo é a memória do projeto. Se você é uma sessão nova sem contexto, este documento + os links abaixo te recolocam no jogo. **Mantenha-o atualizado** ao fim de cada bloco de trabalho.
 
@@ -66,7 +66,7 @@ Sistema de gestão (ERP + TMS) para a **AJC**, empresa de transporte fluvial no 
 
 ## Front web (`apps/web-console`) — como rodar e cuidados
 - **Gerenciador: Bun** (instalado no Windows em `C:\Users\Administrador\.bun\bin\bun.exe`). NÃO usar npm/pnpm neste app. Deps já instaladas (`bun install` só se mudar package.json).
-- **Rodar dev:** na pasta `apps/web-console`, `export PATH="$HOME/.bun/bin:$PATH" && bun run dev`. Porta fixa **8080** (sandbox detection do template Lovable). Preview via `.claude/launch.json` (config "web-console", usa caminho absoluto do bun.exe).
+- **Rodar dev:** na pasta `apps/web-console`, `export PATH="$HOME/.bun/bin:$PATH" && bun run dev`. Porta fixa **8080** (sandbox detection do template Lovable). Preview via `.Codex/launch.json` (config "web-console", usa caminho absoluto do bun.exe).
 - **Build/verificar:** `bun run build` (roda `tsc` + vite + nitro). Deve dar exit 0. É a verificação obrigatória após mexer no front.
 - **Login** (`src/routes/index.tsx`): cinematográfico, **deve ficar idêntico** — não alterar sem pedido explícito do dono.
 - **Design system** em `src/styles.css` ("Crimson Prestige") — NÃO alterar tokens; todas as telas consomem dele. Primitives em `src/components/ops/primitives.tsx`, animações em `src/components/ops/motion-bits.tsx`, mocks em `src/mocks/data.ts`. Shell/menu em `src/components/ops/{AppShell,HelmDock}.tsx`. Padrão-ouro de página: `src/routes/app.tms.tsx`.

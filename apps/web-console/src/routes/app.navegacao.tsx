@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Ship, Plus, CalendarRange, Users, Send } from "lucide-react";
+import { Ship, Plus, CalendarRange, Users, Send, AlertTriangle, Clock } from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
 import {
   SectionHeader, KPIStat, StatusChip, ViagemStatusChip, ViagemSituacaoChip,
@@ -16,8 +16,58 @@ export const Route = createFileRoute("/app/navegacao")({
 
 type Tab = "operacao" | "viagens" | "capacidade" | "escalas" | "embarcacoes";
 
+/** Lista oficial de embarcações (Lucas, 30/jun) — substitui os nomes-fantasia do mock antigo. */
+const FROTA_LUCAS = [
+  "F/B Amazonas II",
+  "F/B Amazonas III",
+  "F/B Amazonas IV",
+  "F/B Amazonas V",
+  "F/B Amazonas VI",
+  "F/B Paru (cargas)",
+] as const;
+
+/** Classes por embarcação (matriz do Lucas). Capacidade numérica real ainda pendente. */
+const CLASSES_POR_EMBARCACAO: Record<string, string[]> = {
+  "F/B Amazonas II": ["Rede", "Suíte Comum", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
+  "F/B Amazonas III": ["Rede", "Suíte Comum", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
+  "F/B Amazonas IV": ["Rede", "Suíte Comum", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
+  "F/B Amazonas V": ["Rede", "Rede Sala VIP", "Camarote", "Suíte Comum", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
+  "F/B Amazonas VI": ["Rede", "Suíte Comum", "Suíte Comum VIP", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
+  "F/B Paru (cargas)": [],
+};
+
+/** Templates de cronograma/paradas do FAQ 2026 — alimentam o preenchimento automático das paradas. */
+const ROTAS_FAQ: { id: string; rotulo: string; embarcacao: string; saida: string; paradas: string[] }[] = [
+  {
+    id: "bel-alm", rotulo: "Belém → Almeirim", embarcacao: "F/B Amazonas V",
+    saida: "Terça · 17h/18h (validar)",
+    paradas: ["Breves · qua 09h", "Gurupá · qua 20h", "Porto de Moz · qui 08h", "Almeirim · qui 14h (chegada)"],
+  },
+  {
+    id: "bel-stm-qua", rotulo: "Belém → Santarém (quarta)", embarcacao: "F/B Amazonas VI",
+    saida: "Quarta · 17h/18h (validar)",
+    paradas: ["Breves · qui 09h", "Gurupá · qui 20h", "Almeirim · sex 09h", "Prainha · sex 17h", "Monte Alegre · sex 23h", "Santarém · sáb 10h/início tarde"],
+  },
+  {
+    id: "bel-stm-sex", rotulo: "Belém → Santarém (sexta)", embarcacao: "F/B Amazonas IV",
+    saida: "Sexta · 17h/18h (validar)",
+    paradas: ["Breves · sáb 09h", "Gurupá · sáb 20h", "Almeirim · dom 09h", "Prainha · dom 17h", "Monte Alegre · dom 23h", "Santarém · seg 19h/início tarde"],
+  },
+  {
+    id: "stm-bel-sab", rotulo: "Santarém → Belém (retorno sábado)", embarcacao: "F/B Amazonas VI",
+    saida: "Sábado · 16h",
+    paradas: ["Prainha · 00h (dia a validar)", "Almeirim · dom 08h", "Gurupá · dom 16h", "Breves · seg 02h", "Belém · seg 19h (chegada)"],
+  },
+];
+
 function Navegacao() {
   const [tab, setTab] = useState<Tab>("operacao");
+  const [showNovaViagem, setShowNovaViagem] = useState(false);
+  const [showCalendario, setShowCalendario] = useState(false);
+  const [rotaSel, setRotaSel] = useState(ROTAS_FAQ[1].id);
+  const rota = ROTAS_FAQ.find((r) => r.id === rotaSel) ?? ROTAS_FAQ[0];
+  const embSel = rota.embarcacao;
+  const classesEmb = CLASSES_POR_EMBARCACAO[embSel] ?? [];
   const ativas = EMBARCACOES.filter((e) => e.status === "ativa").length;
   const emCurso = VIAGENS.filter((v) => v.status === "em_curso");
 
@@ -37,8 +87,8 @@ function Navegacao() {
         description="Embarcações, viagens e cumprimento do cronograma. Tudo é vinculado a uma viagem."
         actions={
           <>
-            <GhostButton icon={CalendarRange}>Calendário</GhostButton>
-            <PrimaryButton icon={Plus}>Nova viagem</PrimaryButton>
+            <GhostButton icon={CalendarRange} onClick={() => setShowCalendario((v) => !v)}>Calendário</GhostButton>
+            <PrimaryButton icon={Plus} onClick={() => setShowNovaViagem((v) => !v)}>Nova viagem</PrimaryButton>
           </>
         }
       />
@@ -49,6 +99,101 @@ function Navegacao() {
         <KPIStat index={2} label="Passageiros embarcados (hoje)" value={String(emCurso.reduce((s, v) => s + v.passageiros, 0))} hint="todas as classes" delta={{ value: "+12%", positive: true }} />
         <KPIStat index={3} label="Volumes em trânsito" value={String(emCurso.reduce((s, v) => s + v.volumes, 0))} hint="rastreio QR ativo" delta={{ value: "+128", positive: true }} />
       </section>
+
+      {(showNovaViagem || showCalendario) && (
+        <section className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_1fr]">
+          {showNovaViagem && (
+            <div className="surface-card brand-rail brand-rail-left p-5">
+              <div className="flex items-center gap-2">
+                <Plus className="h-4 w-4 text-[color:var(--brand)]" />
+                <h3 className="font-display text-lg">Nova viagem · fluxo mockado</h3>
+                <StatusChip tone="success">campos Lucas + FAQ 2026</StatusChip>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Número gerado pelo sistema, FerryBoat em lista, saída, e paradas com preenchimento automático a partir do DOC FAQ. Camarotes/classes condicionais à embarcação.</p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <MockField label="Número da viagem (auto)" value="V-0422 · gerado pelo sistema" />
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">FerryBoat</p>
+                  <select
+                    value={embSel}
+                    onChange={() => { /* mock: embarcação segue o template de rota */ }}
+                    disabled
+                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                  >
+                    {FROTA_LUCAS.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Trecho / rota (DOC FAQ)</p>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {ROTAS_FAQ.map((r) => (
+                      <FilterChip key={r.id} active={r.id === rotaSel} onClick={() => setRotaSel(r.id)}>{r.rotulo}</FilterChip>
+                    ))}
+                  </div>
+                </div>
+                <MockField label="Data e hora da saída" value={rota.saida} />
+                <MockField label="Embarcação do template" value={embSel} />
+              </div>
+
+              <div className="mt-4">
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Paradas (preenchidas automaticamente · DOC FAQ)</p>
+                  <StatusChip tone="warning">horários do PDF a validar</StatusChip>
+                </div>
+                <ol className="mt-2 space-y-1.5">
+                  {rota.paradas.map((p, i) => (
+                    <li key={i} className="flex items-center gap-3 rounded-lg bg-[color:var(--muted)] px-3 py-2 text-sm ring-1 ring-[color:var(--hairline)]">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--brand)]/15 text-[10px] font-semibold text-[color:var(--brand)]">{i + 1}</span>
+                      <span className="text-foreground">{p}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <MockField label="Passageiros disponíveis em rede" value="manual · ex. 180" />
+                <MockField label="Camarotes disponíveis (por classe)" value="conforme embarcação selecionada" />
+              </div>
+
+              <div className="mt-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Classes disponíveis · {embSel}</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {classesEmb.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">Embarcação só de carga — sem classes de passageiro.</span>
+                  ) : (
+                    classesEmb.map((c) => (
+                      <span key={c} className="rounded-md bg-[color:var(--muted)] px-2.5 py-1 text-xs text-foreground ring-1 ring-[color:var(--hairline)]">{c}</span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCalendario && (
+            <div className="surface-card p-5">
+              <div className="flex items-center gap-2">
+                <CalendarRange className="h-4 w-4 text-[color:var(--brand)]" />
+                <h3 className="font-display text-lg">Calendário operacional</h3>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Visualização acionável do cronograma longo enquanto a regra final de calendário é definida.</p>
+              <div className="mt-4 space-y-2">
+                {VIAGENS.slice(0, 5).map((v) => (
+                  <div key={v.id} className="flex items-center gap-3 rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
+                    <Clock className="h-4 w-4 text-[color:var(--brand)]" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{v.codigo} · {v.origem} → {v.destino}</p>
+                      <p className="text-[11px] text-muted-foreground">Saída {v.saida} · retorno {v.retorno}</p>
+                    </div>
+                    <ViagemStatusChip s={v.status} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-2 border-b border-[color:var(--hairline)]">
         {tabs.map(([k, label]) => (
@@ -205,6 +350,15 @@ function Navegacao() {
 
       {tab === "escalas" && (
         <div className="mt-5 space-y-4">
+          <div className="surface-card brand-rail brand-rail-left flex flex-wrap items-start gap-3 p-4" style={{ background: "color-mix(in oklab, var(--danger) 7%, var(--card))" }}>
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-[color:var(--danger)]" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">Regra de conflito de escala</p>
+              <p className="mt-1 text-xs text-muted-foreground">Bloquear o mesmo colaborador no mesmo dia, horário ou período em duas embarcações/viagens diferentes.</p>
+              <p className="mt-2 font-mono text-[11px] text-[color:var(--danger)]">Exemplo: João Nonato · 25/06 18:00-22:00 · V-0418 e V-0420</p>
+            </div>
+            <StatusChip tone="danger" pulse>bloqueante</StatusChip>
+          </div>
           <FilterBar searchPlaceholder="Buscar colaborador, viagem, função…" right={<PrimaryButton icon={Send}>Notificar via WhatsApp</PrimaryButton>}>
             <FilterChip active>Todas</FilterChip>
             <FilterChip>Confirmadas</FilterChip>
@@ -266,5 +420,16 @@ function Navegacao() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+function MockField({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={wide ? "sm:col-span-2" : ""}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <div className="mt-1 flex min-h-10 items-center rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)]">
+        {value}
+      </div>
+    </div>
   );
 }

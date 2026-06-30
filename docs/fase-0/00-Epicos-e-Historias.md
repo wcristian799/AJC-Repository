@@ -29,7 +29,7 @@
 - ❌ Matriz real de permissões por perfil (regra) — só a **estrutura** RBAC e um seed placeholder.
 - ❌ Valores de config de negócio (preços, termos, tolerâncias) — só o **motor** que os lê.
 - ❌ Integrações externas reais: Firebase/GPS, WhatsApp/SMS, pagamento, impressora.
-- ❌ Spike de GPS background e spike de impressão PC/USB (rodam em paralelo, fora do caminho crítico do MVP; ver ADR 01).
+- ❌ Spike de GPS background e spike de impressão Bluetooth (rodam em paralelo, fora do caminho crítico do MVP; ver ADR 01).
 - ❌ Deploy em produção no VPS Hostinger (a Fase 0 valida o compose **localmente**; provisionamento de produção e backup/PITR são pré-produção).
 
 ---
@@ -273,9 +273,9 @@ Uma história só está **pronta** quando:
 **Como** tech lead, **quero** os módulos do MVP criados como **shells vazios** com a estrutura em camadas, **para que** as fases seguintes preencham regra sem rediscutir estrutura.
 
 **Tarefas**
-- Criar módulos vazios em `apps/api/src/modules/` conforme ADR 00 §3.1: `auth, config, cadastros, clientes, navegacao, precos, tms, vendas, caixa, encomendas, crm, sync, notificacao, telemetria, audit`.
+- Criar módulos vazios em `apps/api/src/modules/` conforme ADR 00 §3.1 e validação de 25/jun/2026: `auth, config, cadastros, clientes, navegacao, precos, tms, veiculos, vendas, caixa, encomendas, crm, sync, notificacao, telemetria, audit`.
 - Cada módulo com o padrão Controller→Service→Repository (ADR 00 §4) **sem endpoints de negócio** — só o esqueleto e, onde fizer sentido, um stub não-funcional documentado.
-- Reservar lugar (módulo/pasta comentada) para os fora-de-MVP: `financeiro, veiculos, pdv-fnb, compras, estoque`.
+- Reservar lugar (módulo/pasta comentada) para os fora-de-MVP: `financeiro, pdv-fnb, compras, estoque`.
 
 **Critérios de aceite**
 - A api inicializa registrando todos os módulos do MVP sem erro.

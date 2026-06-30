@@ -27,8 +27,8 @@ Fundação/Acesso ─► Cadastros ─► CRM
 
 ## Escopo do MVP e o que ficou fora
 - Recorte do MVP e backlog detalhado: **[../ROADMAP-Pos-MVP.md](../ROADMAP-Pos-MVP.md)**.
-- No MVP: Fundação/Acesso, Navegação-core, Cadastros, TMS, Vendas/Passagens, CRM, e um caixa financeiro mínimo.
-- Fora (fases seguintes): PDV Lanchonete/Restaurante (F&B), Financeiro completo, Encomendas com preço automático, Veículos, rastreamento em tempo real, escalas com WhatsApp, NPS analítico, integrações externas.
+- No MVP: Fundação/Acesso, Navegação-core, Cadastros, TMS, Veículos/Máquinas, Vendas/Passagens, CRM, e um caixa financeiro mínimo.
+- Fora (fases seguintes): PDV Lanchonete/Restaurante (F&B), Financeiro completo, Compras/DRE, Encomendas com preço automático, rastreamento em tempo real, escalas com WhatsApp, NPS analítico, integrações externas.
 
 ## Pendências do cliente que afetam o UX (🔶)
 - Texto do **termo de aceite de embarque** (Vendas).
@@ -36,7 +36,7 @@ Fundação/Acesso ─► Cadastros ─► CRM
 - **Tabela de preço de encomenda** (despacho no PDV usa preço manual até chegar).
 - Modelo de **Declaração de Conteúdo** (Encomendas/TMS).
 - **Gateway de pagamento** e provedor de **WhatsApp/SMS** (QR, NPS, notificações).
-- Especificação do **coletor/Palm** e **impressora térmica** (decide app nativo vs. PWA no campo).
+- Especificação do **celular/coletor** e **impressora térmica Bluetooth** (decide app nativo vs. PWA no campo e plugin de impressão).
 
 ## Princípios que valem em todas as telas (resumo da Fundação)
 1. Operação em pé, com pressa, no sol → toque grande, alto contraste, decisão em 1 olhada.

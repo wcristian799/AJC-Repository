@@ -13,7 +13,9 @@
 
 ### A.2 Viagem e cronograma
 - Cada viagem: embarcação, origem, **dia/hora de saída**, escalas com **dia/hora previstos de chegada por cidade**, e **dia/hora de retorno**.
+- O FAQ 2026 recebido em 30/jun/2026 é a referência operacional inicial para templates de rota/paradas: Belém ↔ Almeirim e Belém ↔ Santarém, com variações por dia/embarcação. Ver `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`.
 - Status calculado comparando previsto × posição real (rastreamento): **no prazo / atenção / atrasado**.
+- Horários precisam continuar configuráveis/versionáveis: o FAQ informa "horários sujeitos a alteração" e contém divergências internas a validar antes do backend definitivo.
 
 ### A.3 Rastreamento
 - Posição em tempo real da embarcação (fonte: GPS próprio ou AIS — 🔶 a definir).
@@ -43,11 +45,21 @@ Escala (colaborador_id, viagem_id, funcao, status, notificado_em)
 
 ### B.1 Cadastro / lista de embarcações
 - Lista: nome, tipo, capacidade, **status** (ativa/manutenção/alugada).
-- Cadastro: dados, capacidade por classe (Rede/VIP/Camarote), capacidade de carga.
+- Cadastro: dados, capacidade por classe e capacidade de carga.
+- Lista inicial recebida do Lucas em 30/jun/2026: F/B Amazonas II, F/B Amazonas III, F/B Amazonas IV, F/B Amazonas V, F/B Amazonas VI e F/B Paru (cargas).
+- Classes por embarcação recebidas: Rede, Rede Sala VIP, Camarote, Suíte Comum, Suíte Comum VIP, Suíte Master, Suíte Master VIP e Mega Suíte. Matriz detalhada em `docs/feedback/2026-06-30-lucas-campos-navegacao-tms.md`.
 - *Estados:* embarcação em manutenção não recebe viagem.
 
 ### B.2 Cronograma de viagens
-- Criação de viagem: embarcação, origem, saída, **escalas (cidade + dia/hora prevista de chegada)**, retorno.
+- Criação de viagem: número/código automático, FerryBoat, data/hora de saída, origem, **paradas/escalas (cidade + data/hora)**, número de passageiros em redes e camarotes disponíveis por classe conforme embarcação selecionada.
+- Paradas/escalas devem ser preenchidas automaticamente conforme o FAQ 2026 recebido e documentado em `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`.
+- Templates iniciais de cronograma vindos do FAQ:
+  - Belém → Almeirim: Breves, Gurupá, Porto de Moz, Almeirim.
+  - Almeirim → Belém: Porto de Moz, Gurupá, Breves, Belém.
+  - Belém → Santarém: Breves, Gurupá, Almeirim, Prainha, Monte Alegre, Santarém.
+  - Santarém → Belém, retorno de sábado: Prainha, Almeirim, Gurupá, Breves, Belém.
+  - Santarém → Belém, retorno de segunda: Monte Alegre, Prainha, Almeirim, Gurupá, Breves, Belém.
+- Front mockado pode usar esses templates; backend/cadastro definitivo deve validar divergências internas do FAQ (17h vs 18h e chegada de Santarém).
 - Calendário/linha do tempo das viagens por embarcação.
 - *Estados:* conflito de agenda da embarcação → alerta.
 

@@ -12,6 +12,7 @@
 ## 0. Convenções deste documento
 
 - **Dois ambientes** (Fundação §1): a esmagadora maioria das telas aqui é **App de campo** (coletor/celular, toque grande, offline-first). Só **TMS-NF** (lançamento ADM) e **TMS-CTRL** (controle por viagem) são **back-office web**. **TMS-PAL** (paletes) é híbrida: cadastro no web, alocação rápida no coletor.
+  - *Nota pós-validação 2026-06-25:* "coletor" aqui = **celular comum** (app Capacitor/PWA), não coletor industrial dedicado; impressão de etiqueta é **térmica via Bluetooth**. As telas de campo (portaria/conferência/recebimento/entrega) vivem em superfície de campo própria (`/campo`, shell próprio), **fora** do painel web de gestão.
 - **Ícone da entidade:** carga/volume = caixa (📦), palete = palete, viagem = barco (⛴), agente = crachá, veículo = caminhão. Set único da Fundação §2.4.
 - **Trio de saúde / cores semânticas** (Fundação §2.1): `success` (verde) = conferido/embarcado/entregue/no prazo · `warning` (âmbar) = divergência leve / atenção · `danger` (vermelho) = divergência **bloqueante** / volume não consta / avaria · `info/offline` (azul-acinzentado) = pendente de sincronizar. **Offline nunca é vermelho** (princípio 2).
 - **O número que importa é gigante** (princípio 4): o `CounterBadge` ("12 / 15") é o maior elemento das telas de conferência e bipe.
@@ -32,7 +33,7 @@
 | `TMS-NF` | Lançamento / upload de NF-DC | Web (+ app) | B.2 / B.3 |
 | `TMS-CTRL` | Controle de carga por viagem | Back-office web | B.11 |
 
-> Fora desta entrega (citado onde toca): **prestação de contas do gerente** (B.10, modelo em papel 🔶), **checklist de veículos e termo** (parte C, RF-5). A entrega da **última milha** agente→destinatário é 🔶 (B.9).
+> Atualização pós-validação do cliente (25/jun/2026): **Veículos/Máquinas entram agora no MVP**. Checklist, fotos, etiqueta, bipe de subida/descida e entrega devem ser tratados junto dos fluxos de portaria/conferência/entrega. O modelo em papel da prestação de contas do gerente (B.10) foi recebido em 29/jun/2026 e deve guiar o refinamento do front; a última milha agente→destinatário ainda precisa de confirmação 🔶.
 
 ### Máquina de estados do volume (referência visual constante)
 
@@ -402,7 +403,7 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 
 ## 5. TMS-ETIQ — Impressão de etiqueta (B.5)
 
-- **Persona:** Conferente do porto (ou da balsa no cross-docking). **Dispositivo:** coletor + **impressora térmica** pareada (Bluetooth/USB). **Online/Offline:** funciona offline (impressão local).
+- **Persona:** Conferente do porto (ou da balsa no cross-docking). **Dispositivo:** coletor/celular + **impressora térmica Bluetooth** pareada. **Online/Offline:** funciona offline (impressão local).
 - **Objetivo:** imprimir a etiqueta física padronizada de cada volume — CIDADE · PALETE · VOLUME (índice/total) · **QR com o UUID** — que vira a chave de todos os bipes seguintes.
 
 ### Wireframe — Pré-visualização e impressão
@@ -851,6 +852,10 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 │ ┌─────────────────────────────┐ │
 │ │ Carga #4471 · STM ▾         │ │
 │ └─────────────────────────────┘ │
+│ Remetente: nome/razão · CPF/CNPJ │
+│           · telefone             │
+│ Destinatário: nome/razão ·       │
+│           CPF/CNPJ · telefone    │
 │ Tipo de documento:               │
 │ ( ) NF-e   ( ) NFC-e   (•) DC    │
 │                                  │
@@ -864,11 +869,14 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 │ ┌─────────────────────────────┐ │
 │ │ 📎 Anexar ou tirar foto      │ │
 │ └─────────────────────────────┘ │
+│ Agendar recebimento:             │
+│ Dia [ ▾ ]   Horária [ 30/30 ▾ ]  │
+│ (máx. 5 caminhões por janela)    │
 ├─────────────────────────────────┤
 │ [        ENVIAR DOCUMENTO     ]  │
 └─────────────────────────────────┘
 ```
-**Composição:** seletor de carga, tipo (NF-e/NFC-e/DC), número/chave ou valor, upload (PDF/foto). **Estados:** vazio (nenhum doc) · carregando (upload com barra) · erro (arquivo grande/inválido) · sucesso ("Documento enviado, aguardando conferência"). **Regras:** valida formato/tamanho; chave NF-e validada por máscara.
+**Composição:** seletor de carga, **dados de remetente e destinatário** (nome/razão, CPF/CNPJ, telefone — atualizado pós-validação 2026-06-25, o campo único "carga/envio" era ambíguo), tipo (NF-e/NFC-e/DC), número/chave ou valor, upload (PDF/foto), **agendamento de recebimento** (dia + janela de 30 em 30 min, máx. 5 caminhões por janela). **Estados:** vazio (nenhum doc) · carregando (upload com barra) · erro (arquivo grande/inválido) · sucesso ("Documento enviado, aguardando conferência"). **Regras:** valida formato/tamanho; chave NF-e validada por máscara; janela cheia (5 caminhões) fica indisponível para novo agendamento.
 
 ### 10.2 TMS-NF-ADM (B.3) — Lançamento pelo ADM Notas (back-office)
 - **Persona:** ADM Notas. **Dispositivo:** Web. **Online/Offline:** online.
@@ -973,9 +981,8 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 ### 12.4 Pendências (🔶)
 - 🔶 Última milha agente→destinatário entra no sistema? (nova foto/assinatura) — B.9.
 - 🔶 Modelo da **Declaração de Conteúdo** + cláusula de exclusão (Lucas) — afeta TMS-NF.
-- 🔶 Modelo de **prestação de contas** do gerente (B.10) — fora desta entrega.
-- 🔶 Texto do **termo de aceite de veículos** (parte C) — fora desta entrega.
+- ✅ Modelo de **prestação de contas** do gerente (B.10) recebido em 29/jun/2026 — usar `docs/feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md` para refinar a tela.
+- 🔶 Texto do **termo de aceite de veículos** (parte C) — necessário para fechar o fluxo de veículos/máquinas do MVP.
 - 🔶 Regras de **preço/tamanho/trecho** no recebimento.
 - 🔶 Confirmar modelo/SO do **coletor/Palm** (app nativo vs. PWA).
 - 🔶 Foto na entrada da Portaria é recomendada; confirmar se vira obrigatória.
-

@@ -17,8 +17,8 @@ export function DeclaracaoTab() {
       <div className="space-y-4">
         <SectionHeader
           eyebrow="Prova legal · A.2"
-          title="Declaração de Conteúdo + assinatura"
-          description="Toda encomenda sem NF exige DC. O cliente assina em tela; o aceite carimba data/hora e dispositivo. O botão confirmar só habilita após a assinatura."
+          title="Declaração de Conteúdo / NF + assinatura"
+          description="Toda encomenda sem NF exige DC. Quando houver NF, ela é anexada junto ao despacho. O cliente assina em tela; o aceite carimba data/hora e dispositivo."
         />
 
         <TermoDC />
@@ -33,6 +33,7 @@ export function DeclaracaoTab() {
             <li>• <span className="font-medium">Carimbo de data/hora + dispositivo</span> no aceite.</li>
             <li>• <span className="font-medium">Reembolso limitado ao valor declarado.</span></li>
             <li>• DC vira PDF anexado à encomenda, disponível para auditoria/PF.</li>
+            <li>• Quando houver <span className="font-medium">NF</span>, ela fica anexada junto da DC/despacho.</li>
           </ul>
           <p className="mt-3"><Tag tone="warning">🔶 texto integral do termo pendente (Lucas)</Tag></p>
         </div>
@@ -65,6 +66,7 @@ function SimuladorAssinatura() {
 
             <div className="mt-3 surface-card p-3 text-[13px]">
               <ResumoLinha label="Conteúdo">{descricao}</ResumoLinha>
+              <ResumoLinha label="Documento">DC assinada ou NF anexada</ResumoLinha>
               <ResumoLinha label="Valor declarado">{brl(valor)}</ResumoLinha>
               <ResumoLinha label="Trecho"><span className="font-mono">{trecho}</span></ResumoLinha>
             </div>

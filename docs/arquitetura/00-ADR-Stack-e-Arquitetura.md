@@ -98,7 +98,7 @@ telemetria/     ponte com Firebase (resumo de posição → Postgres)  [isoláve
 audit/          trilha de auditoria imutável (transversal)
 ```
 
-**Fora do MVP** (módulos que entram nas fases seguintes, já com lugar reservado): `financeiro/` (completo), `veiculos/`, `pdv-fnb/`, `compras/`, `estoque/`.
+**Fora do MVP** (módulos que entram nas fases seguintes, já com lugar reservado): `financeiro/` (completo), `pdv-fnb/`, `compras/`, `estoque/`. Após a validação do cliente em 25/jun/2026, `veiculos/` passou a fazer parte do MVP.
 
 ---
 

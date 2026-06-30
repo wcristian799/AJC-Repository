@@ -7,6 +7,8 @@
 > - **PDV** (web/desktop no caixa do porto) — operador vende e despacha
 > - **Totem** (quiosque no porto) — autoatendimento
 > - **App Validação** (celular do bilheteiro, offline-first) — embarque
+>
+> **Atualização 30/jun/2026:** o FAQ 2026 foi recebido e registrado em `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`. Ele traz preços de passagem por destino/classe, formas atuais de pagamento e regras públicas de meia/isento para orientar o mock e a carga inicial do motor de preços.
 
 ## Índice de telas
 | Código | Tela | Dispositivo |
@@ -297,4 +299,4 @@ Continuação do fluxo (passos seguintes, tela cheia mobile):
 ## Dependências e pendências do módulo
 - **Consome:** Navegação-core (viagens, lotação, classes/cores por embarcação), Cadastros (preços de passagem; cliente), Financeiro mínimo (caixa).
 - **Alimenta:** TMS (despacho → volumes/etiqueta), Relatório de passageiros, conformidade regulatória (MP).
-- 🔶 Texto do **termo de aceite de embarque** (AJC); **cores de pulseira** por classe; **gateway de pagamento** e meios por canal; **tabela de preço de encomenda** (Lucas) — afeta VEN-09; provedor de **WhatsApp/SMS/e-mail** para QR e NPS.
+- 🔶 Texto do **termo de aceite de embarque** (AJC); **cores de pulseira** por classe; **gateway de pagamento** e meios por canal; **tabela de preço de encomenda** (Lucas) — afeta VEN-09; provedor de **WhatsApp/SMS/e-mail** para QR e NPS. Preços de passagem têm fonte inicial no FAQ 2026, com validação residual antes do backend definitivo.

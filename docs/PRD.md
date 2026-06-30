@@ -72,7 +72,8 @@ O objetivo não é só digitalizar: é **fechar as brechas de receita e blindar 
 - 🔶 Regras de **preço/tamanho/trechos** de encomenda no PDV — *Lucas.*
 - 🔶 Texto do **termo de aceite de embarque** — *AJC revisar.*
 - 🔶 Modelo de **declaração de conteúdo** + cláusula de exclusão de responsabilidade — *Lucas enviar.*
-- 🔶 Modelo atual em papel da **prestação de contas** do gerente — *digitalizar/melhorar.*
+- ✅ Modelo atual em papel da **prestação de contas** do gerente recebido em 2026-06-29 — *digitalizar/melhorar no front; ver `docs/feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md`.*
+- ✅ **FAQ 2026** recebido em 2026-06-30 — *traz paradas automáticas, trechos, preços de passagem, formas de pagamento e endereços dos portos; validar divergências internas de horário antes do backend definitivo; ver `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`.*
 - 🔶 Integração de **rastreio de NF/boleto no CNPJ** — *depende de API (a investigar).*
 - 🔶 Regras de **comissão de agentes** — diretoria define após o sistema gerar o relatório base.
 
@@ -111,7 +112,7 @@ O objetivo não é só digitalizar: é **fechar as brechas de receita e blindar 
 - **Segundo bipe** (conferente da balsa) para reconferência.
 - **Comprovante de entrega**: 2 fotos obrigatórias + assinatura do recebedor; protocolo digital em tela.
 - **Notificação de entrega** via WhatsApp/SMS a destinatário e remetente.
-- **Prestação de contas** da viagem para o gerente da embarcação (digitalizar modelo atual).
+- **Prestação de contas** da viagem para o gerente da embarcação (modelo real recebido em 2026-06-29; digitalizar/melhorar).
 - **Cadastro de paletes de terceiros** e **alocação de paletes** para conferência/transporte.
 
 ### RF-5 Veículos
@@ -163,11 +164,13 @@ O objetivo não é só digitalizar: é **fechar as brechas de receita e blindar 
 
 > Decisão do cliente: começar o aprofundamento por **TMS/Carga** e **Vendas/Passagens**.
 
-- **Fase 1 (núcleo antifraude + receita):** Cadastros essenciais + Navegação (embarcações/viagens) + Vendas de passagem com QR e validação + **Portal online público de venda de passagem com pagamento integrado (gateway + emissão fiscal)** + Encomendas com declaração de conteúdo + TMS (entrada de veículos, conferência bipada, etiqueta, entrega).
+- **Fase 1 (núcleo antifraude + receita):** Cadastros essenciais + Navegação (embarcações/viagens) + Vendas de passagem com QR e validação + **Portal online público de venda de passagem com pagamento integrado (gateway + emissão fiscal)** + Encomendas com declaração de conteúdo + TMS (entrada de veículos, conferência bipada, etiqueta, entrega) + **Veículos/Máquinas** (envio, checklist/fotos, etiqueta, bipe de subida/descida e entrega).
 - **Fase 2 (financeiro e inteligência):** Financeiro completo, caixas/tesouraria, compras/estoque, pagamento de agentes, BI por viagem/embarcação/cidade.
 - **Fase 3 (experiência e periféricos):** CRM avançado/cotações, PDV lanchonete/restaurante, rastreamento em tempo real, NPS, integração NF/boleto no CNPJ.
 
 > **Decisão (atualização de escopo):** o cliente confirmou que o **portal público de venda online com pagamento integrado** É parte do MVP (Fase 1), não item posterior. Isso eleva ao caminho crítico do MVP: (a) integração de **gateway de pagamento** (cartão/PIX), (b) **emissão fiscal** do bilhete, (c) **reserva/locação de assento com concorrência** (evitar venda dupla), (d) conta/área do cliente e recuperação de bilhete. Os itens (a) e (b) dependem de fornecedores externos com risco de prazo já sinalizado no quadro de riscos — precisam de spike/decisão de fornecedor cedo.
+>
+> **Decisão pós-validação (25/jun/2026):** Veículos/Máquinas também entram agora no MVP, conforme transcrição da validação do front.
 
 ## 10. Glossário
 

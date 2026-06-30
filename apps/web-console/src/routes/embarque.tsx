@@ -20,6 +20,7 @@ type Tela = "selecao" | "scanner";
 type Resultado =
   | { tipo: "valido"; bilhete: EmbarqueBilhete }
   | { tipo: "ja_validado"; bilhete: EmbarqueBilhete }
+  | { tipo: "vencido"; qr: string }
   | { tipo: "invalido"; qr: string };
 
 function Embarque() {
@@ -62,6 +63,10 @@ function Embarque() {
     const qualquer = EMBARQUE_LISTA.find((b) => validados[b.qr]);
     if (qualquer) return setResultado({ tipo: "ja_validado", bilhete: qualquer });
     setResultado({ tipo: "invalido", qr: "AJC-0000-??" });
+  }
+
+  function simularVencido() {
+    setResultado({ tipo: "vencido", qr: "AJC-EXP-0418" });
   }
 
   const filtrados = useMemo(() => {
@@ -210,13 +215,27 @@ function Embarque() {
                         <p className="font-mono text-xs text-muted-foreground">{resultado.qr} · não consta na lista</p>
                       </motion.div>
                     )}
+                    {resultado?.tipo === "vencido" && (
+                      <motion.div
+                        key="vencido"
+                        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
+                        className="flex flex-col items-center gap-2 text-[color:var(--danger)]"
+                      >
+                        <XCircle className="h-24 w-24" strokeWidth={1.4} />
+                        <p className="font-display text-2xl">QR vencido</p>
+                        <p className="font-mono text-xs text-muted-foreground">{resultado.qr} · validade expirada, entrada bloqueada</p>
+                      </motion.div>
+                    )}
                   </AnimatePresence>
                 </div>
 
                 {/* Controles */}
-                <div className="grid grid-cols-3 gap-px bg-[color:var(--hairline)]">
+                <div className="grid grid-cols-4 gap-px bg-[color:var(--hairline)]">
                   <button onClick={simularLeitura} className="flex flex-col items-center gap-1 bg-[color:var(--card)] py-4 text-[color:var(--brand)] transition-colors hover:bg-[color:color-mix(in_oklab,var(--brand)_8%,transparent)]">
                     <ScanLine className="h-5 w-5" /><span className="text-[10px]">Ler QR</span>
+                  </button>
+                  <button onClick={simularVencido} className="flex flex-col items-center gap-1 bg-[color:var(--card)] py-4 text-[color:var(--danger)] transition-colors hover:bg-[color:color-mix(in_oklab,var(--danger)_8%,transparent)]">
+                    <XCircle className="h-5 w-5" /><span className="text-[10px]">Vencido</span>
                   </button>
                   <button onClick={() => setBuscaManual(true)} className="flex flex-col items-center gap-1 bg-[color:var(--card)] py-4 text-foreground/70 transition-colors hover:bg-[color:var(--accent)]">
                     <Keyboard className="h-5 w-5" /><span className="text-[10px]">Busca manual</span>

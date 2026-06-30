@@ -36,9 +36,9 @@
 
 Stack: Ionic + Capacitor (React/TS). **Decisões de hardware do cliente (jun/2026):**
 - **Apps de campo rodam em CELULAR COMUM** (não coletor industrial). → elimina o risco do leitor laser Zebra/Honeywell; QR pela câmera resolve.
-- **Impressão térmica é feita pelo PC via USB** (não Bluetooth pelo celular). → elimina o risco do pareamento Bluetooth.
+- **Impressão térmica deve considerar Bluetooth**, conforme validação do cliente em 25/jun/2026.
 - **Aparelho da embarcação é um celular**.
-- Modelo da **impressora de etiqueta** ainda a confirmar (🔶) — define só o protocolo (ESC-POS vs ZPL), não a arquitetura.
+- Modelo da **impressora de etiqueta** ainda a confirmar (🔶) — define protocolo (ESC-POS vs ZPL) e compatibilidade Bluetooth.
 
 Resumo da maturidade e risco por necessidade:
 
@@ -47,22 +47,23 @@ Resumo da maturidade e risco por necessidade:
 | 1 | QR / código de barras (câmera do celular) | `@capacitor-mlkit/barcode-scanning` | Alta (~352k/mês, ativo) | **Baixo** |
 | 2 | Foto de conferência/entrega | `@capacitor/camera` (oficial) | Alta | Baixo (tratar cancel + process death) |
 | 3 | **GPS em background** (celular da embarcação) | `@capacitor-community/background-geolocation` (free) ou `@transistorsoft/...` (pago p/ release Android) | Média/Alta | **ALTO** (único risco alto) |
-| 4 | Impressão térmica / etiqueta | **PC + impressora USB** (não mobile) — impressão pelo sistema do SO / agente local no web-console/PDV | Alta (trivial no PC) | Baixo |
+| 4 | Impressão térmica / etiqueta | **Bluetooth** a partir do fluxo operacional definido; validar plugin/caminho por modelo de impressora | Média | Médio |
 | 5 | Assinatura em tela | `signature_pad` + `<canvas>` (sem plugin nativo) | Alta | Baixo |
 | 6 | SQLite offline | `@capacitor-community/sqlite` | Alta (~406k/mês) | Baixo |
 
 ### Único risco alto remanescente: GPS em background
 Nenhum plugin garante 100% de continuidade — iOS/Android e OEMs (Xiaomi, Samsung, Huawei) matam apps em background mesmo com notificação persistente. Pode ser preciso o plugin **pago** (transistorsoft) ou, no limite, um **foreground service nativo Android dedicado** + buffer offline com reenvio. **Não bloqueia o MVP** (rastreamento é fase posterior); precisa de spike antes de prometer rastreamento confiável.
 
-### Impressão pelo PC (USB) — implicação de arquitetura
-A etiqueta de carga e os recibos do PDV saem de uma **estação com PC + impressora térmica USB**, não do celular. Isso simplifica muito:
-- O app que dispara a impressão é o **web-console/PDV no PC** (não o app de campo no celular).
-- No fluxo de conferência: o celular bipa/confere; a **impressão da etiqueta** é acionada na estação (PC) — confirmar no detalhamento se a etiqueta sai no recebimento (estação) e o celular só relê. Ver impacto na UX do TMS (a tela de impressão B.5 vira ação de PC).
-- Impressão a partir do navegador no PC: via diálogo de impressão do SO ou um **agente de impressão local** (pequeno serviço que recebe o job e manda pro driver USB) para impressão silenciosa/direta. Definir no spike.
+### Impressão Bluetooth — implicação de arquitetura
+A etiqueta de carga/veículo e recibos operacionais devem considerar impressão térmica via **Bluetooth**, conforme transcrição de validação. Isso recoloca a impressão mobile no caminho técnico:
+- Confirmar modelo da impressora e linguagem suportada (ESC-POS, ZPL ou SDK proprietário).
+- Validar pareamento, reconexão, fila offline e reimpressão em celular comum.
+- Definir se a impressão parte do app de campo, do PDV mobile/tablet ou de ambos, conforme fluxo de operação.
+- Manter contingência operacional apenas se o hardware escolhido exigir, sem assumir isso como caminho principal.
 
 ### Spikes obrigatórios (reduzidos)
 1. **GPS background:** teste de **horas**, tela bloqueada, em celulares reais. Medir gaps, bateria, entrega ao servidor. Decidir free vs pago vs nativo custom.
-2. **Impressão PC/USB:** POC imprimindo etiqueta (QR/UUID) a partir do navegador no PC com a impressora — validar diálogo do SO vs agente local p/ impressão direta. Depende do **modelo da impressora** (🔶) para o protocolo.
+2. **Impressão Bluetooth:** POC imprimindo etiqueta (QR/UUID) a partir de celular comum, com pareamento/reconexão e fila offline. Depende do **modelo da impressora** (🔶) para protocolo e plugin.
 3. Foto sob process death no Android (recuperação via `appRestoredResult`) em celular de baixa RAM.
 
 ---
@@ -103,14 +104,14 @@ A etiqueta de carga e os recibos do PDV saem de uma **estação com PC + impress
 | Offline-sync = PowerSync (plano B: fila própria) | a confirmar no **spike** | É o 1º spike; define `libs/offline-sync` |
 | QR, foto, assinatura, SQLite (celular comum) | resolvido (plugins maduros) | Não |
 | GPS background (celular da embarcação) | **risco alto** — spike + talvez plugin pago/nativo | Não bloqueia MVP; bloqueia rastreamento (fase posterior) |
-| Impressão térmica (PC + USB) | resolvido (trivial no PC) | Não — confirmar só o modelo p/ protocolo |
+| Impressão térmica Bluetooth | precisa POC por modelo de impressora | Não bloqueia desenho de tela, mas bloqueia implementação real de impressão |
 | Hostinger VPS KVM 2 + Docker | resolvido | Não |
 | Backup diário + PITR | ação de setup | Antes de ir a produção |
 
 ### Próximas ações recomendadas (ordem)
 1. **Spike de offline-sync** (PowerSync vs fila própria) — antes de escrever o TMS.
 2. **Provisionar VPS KVM 2** + docker-compose base + backup diário.
-3. **Confirmar modelo da impressora de etiqueta** (🔶) — só para fechar o protocolo (ESC-POS/ZPL) e o spike de impressão PC/USB.
+3. **Confirmar modelo da impressora de etiqueta** (🔶) — fechar protocolo (ESC-POS/ZPL/SDK), compatibilidade Bluetooth e POC de impressão.
 4. Spike de **GPS background** roda em paralelo (só afeta o rastreamento, fase posterior).
 
 ---

@@ -15,12 +15,13 @@
 | **Navegação-core** | Embarcações + viagens/cronograma + status de viagem | Tudo é vinculado a uma viagem; dependência-raiz de TMS e Vendas |
 | **Cadastros** | Usuários/perfis, clientes, agentes, preços (passagem/carga) | Dados-mestre de todo o sistema |
 | **TMS / Carga** | Portaria, conferência bipada, etiqueta/UUID, paletes, 2º bipe, cross-docking, entrega com prova | 60% do faturamento e a maior brecha de controle |
+| **Veículos / Máquinas** | Envio por PDV/Comercial/Gerente do Porto, vistoria/checklist com fotos, etiqueta, bipe de subida/descida e checklist de entrega | Pedido explícito da validação do cliente; evita deixar fora um fluxo operacional que passa pelo porto e pela balsa |
 | **Vendas / Passagens** | Venda com QR, validação por pulseira, cortesia/gratuidade/contrato, relatório de passageiros, NPS básico | Receita de passageiros + conformidade regulatória (MP) |
 | **CRM** | Base de clientes, alocação a agentes, histórico, cotações | Sustenta a operação comercial e a futura comissão |
 | **Financeiro (mínimo)** | Apenas **caixa leve**: registrar a venda/despacho e o valor por caixa | Sem isso, a venda não "fecha" em lugar nenhum |
 
 ### 1.2 Fora do MVP (este documento detalha abaixo)
-Encomendas com tabela de preço · Financeiro completo · Veículos · PDV Lanchonete/Restaurante · Rastreamento em tempo real · Escalas avançadas · NPS analítico · Integrações externas.
+Encomendas com tabela de preço · Financeiro completo · Compras/DRE · PDV Lanchonete/Restaurante · Rastreamento em tempo real · Escalas avançadas · NPS analítico · Integrações externas.
 
 ---
 
@@ -46,10 +47,10 @@ São itens de alto valor que dependem do MVP rodando ou de insumos pendentes do 
   - **Pagamento de comissão de agentes** (depende das regras 🔶 da diretoria)
 - **Depende de:** CRM (lançamentos do agente), TMS (prestação de contas), Cadastros (fornecedores).
 
-### 2.3 Veículos
-- **Por que ficou fora:** fluxo mais simples e de menor volume; o veículo é vistoriado, embarca e desce.
-- **Entrega 2:** checklist digital de embarque (diagrama de avarias + fotos), termo de aceite de veículos, vistoria de desembarque com comparação lado a lado, pátio de veículos.
-- **Depende de:** texto do **termo de aceite de veículos (🔶)**, Navegação (viagem), Portaria (entrada).
+### 2.3 Compras / DRE
+- **Por que ficou fora:** foi reconhecido na validação como parte do ERP financeiro maior, não como bloqueio do core operacional.
+- **Entrega 2:** solicitação de compras, pedido de compras, três cotações, upload de comprovantes, controle de recebimento e pré-nota para contas a pagar.
+- **Depende de:** Financeiro completo, plano de contas/centro de custo e modelo de aprovação.
 
 ---
 
@@ -101,12 +102,13 @@ Fundação/Acesso ─┬─► Cadastros ─┬─► CRM
                  └─► Navegação ─┤            ├─► (Financeiro completo)
                     (core)      └─► TMS ─────┘
                                      │
-                                     └─► Veículos, Encomendas(preço)
+                                     └─► Encomendas(preço)
+                                     └─► Veículos/Máquinas (MVP)
 
 Tudo de Fase 2/3 pendura no que o MVP já entregou.
 ```
 - **Nada da Fase 2/3 pode começar antes** de Fundação + Cadastros + Navegação-core estarem de pé.
-- **Encomendas-preço, Financeiro-comissão e Veículos** são os primeiros a destravar assim que chegam os insumos 🔶.
+- **Encomendas-preço, Financeiro-comissão e Compras/DRE** são os primeiros a destravar assim que chegam os insumos 🔶.
 
 ---
 
@@ -117,7 +119,7 @@ Tudo de Fase 2/3 pendura no que o MVP já entregou.
 | Tabela de preços de encomendas | Lucas | Encomendas (Fase 2) |
 | Texto do termo de aceite de embarque | AJC | Refinamento do MVP (Vendas) |
 | Modelo de Declaração de Conteúdo + cláusula de exclusão | Lucas | Refinamento do MVP (Encomendas/TMS) |
-| Modelo de prestação de contas (papel) | AJC | Cruzamento financeiro (Fase 2) |
+| Modelo de prestação de contas (papel) | ✅ Recebido em 29/jun/2026 | Refinamento do front B.10 e cruzamento financeiro (Fase 2) |
 | Regras de comissão de agentes | Diretoria | Pagamento de agentes (Fase 2) |
 | Viabilidade da API de NF/boleto no CNPJ | Dev/AJC | Rastreio fiscal (Fase 2/3) |
 | Cores de pulseira por classe | AJC | Refinamento do MVP (Validação) |

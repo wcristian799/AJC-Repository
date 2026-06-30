@@ -7,6 +7,8 @@
 > **Fast-follow (fora desta entrega, citado onde toca):** rastreamento em tempo real (mapa/GPS/AIS), escala avançada de colaboradores com notificação WhatsApp, e ETA calculada por posição real. Onde o cálculo de situação depende de dado em tempo real, esta entrega usa **fonte manual** (apontamento de chegada/saída) — ver §8.
 >
 > **Por que este módulo é a dependência-raiz:** toda passagem, encomenda, carga e veículo é vinculada a uma **viagem**. Sem embarcação cadastrada e viagem aberta, TMS e Vendas não operam. Ver §9 (consumo por TMS e Vendas).
+>
+> **Atualização 30/jun/2026:** o FAQ 2026 foi recebido e registrado em `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`. Ele deve alimentar os templates de paradas de **Nova viagem** no front mockado. Antes do backend definitivo, validar divergências internas de horário do próprio FAQ.
 
 ---
 

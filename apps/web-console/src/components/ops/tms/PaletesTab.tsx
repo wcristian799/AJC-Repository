@@ -11,7 +11,7 @@ const STATUS_TONE: Record<PaleteStatus, "neutral" | "brand" | "warning"> = {
   em_transito: "warning",
 };
 const STATUS_LABEL: Record<PaleteStatus, string> = {
-  livre: "Livre",
+  livre: "Livre no porto",
   alocado: "Alocado",
   em_transito: "Em trânsito",
 };
@@ -29,7 +29,7 @@ export function PaletesTab() {
       <SectionHeader
         eyebrow="Operação · paletização"
         title="Paletes — cadastro e alocação"
-        description="Paletes próprios (AJC) e de terceiros. Em trânsito não pode realocar; palete já alocado a outra viagem gera erro."
+        description="Paletes próprios (AJC) e de terceiros. Palete alocado não realoca: só volta a ficar livre quando retorna/é liberado pela operação."
         actions={<PrimaryButton icon={Plus}>Cadastrar palete</PrimaryButton>}
       />
 
@@ -38,11 +38,25 @@ export function PaletesTab() {
         <FilterChip active={filtro === "livre"} onClick={() => setFiltro("livre")}>Livres</FilterChip>
         <FilterChip active={filtro === "alocado"} onClick={() => setFiltro("alocado")}>Alocados</FilterChip>
         <FilterChip active={filtro === "em_transito"} onClick={() => setFiltro("em_transito")}>Em trânsito</FilterChip>
-        <span className="mx-1 h-6 w-px bg-[color:var(--hairline)]" />
-        <FilterChip active={prop === "todos"} onClick={() => setProp("todos")}>Todos donos</FilterChip>
-        <FilterChip active={prop === "AJC"} onClick={() => setProp("AJC")}>AJC</FilterChip>
-        <FilterChip active={prop === "terceiro"} onClick={() => setProp("terceiro")}>Terceiros</FilterChip>
+        <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          Proprietário
+          <select
+            value={prop}
+            onChange={(e) => setProp(e.target.value as typeof prop)}
+            className="h-9 rounded-md bg-[color:var(--muted)] px-3 text-xs text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
+          >
+            <option value="todos">Todos em ordem alfabética</option>
+            <option value="AJC">AJC</option>
+            <option value="terceiro">Terceiros</option>
+          </select>
+        </label>
       </FilterBar>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <TipoPalete sigla="MP" titulo="Multi-palete" detalhe="Uma carga em vários paletes. Ao bipar, o app mostra os paletes vinculados." />
+        <TipoPalete sigla="PD" titulo="Palete dedicado" detalhe="Um palete fechado para uma única carga. Bipe movimenta a carga inteira." />
+        <TipoPalete sigla="PC" titulo="Palete compartilhado" detalhe="Várias NF/DC no mesmo palete. Pode ficar parcialmente completo." />
+      </div>
 
       <DataTable<Palete>
         rows={rows}
@@ -62,11 +76,29 @@ export function PaletesTab() {
             ? <span className="inline-flex items-center gap-1 text-xs"><MapPin className="h-3 w-3 text-muted-foreground" />{r.cidadeDestino}</span>
             : <span className="text-muted-foreground">—</span> },
           { key: "volumes", header: "Volumes", align: "right", render: (r) => <span className="font-mono text-xs">{r.volumes}</span> },
-          { key: "acao", header: "Ação", align: "right", render: (r) => r.status === "em_transito"
-            ? <span className="text-[11px] text-muted-foreground">bloqueado p/ realocar</span>
-            : <button className="text-[11px] font-medium text-[color:var(--brand)] story-link">{r.status === "livre" ? "Alocar" : "Realocar"}</button> },
+          { key: "tipo", header: "Tipo", render: (r) => <Tag tone={r.volumes > 12 ? "warning" : r.volumes > 0 ? "brand" : "neutral"}>{r.volumes > 12 ? "MP" : r.volumes > 0 ? "PC" : "PD"}</Tag> },
+          { key: "ocupacao", header: "Ocupação", render: (r) => r.status === "livre"
+            ? <StatusChip tone="success" size="sm">disponível</StatusChip>
+            : <StatusChip tone={r.volumes >= 10 ? "brand" : "warning"} size="sm">{r.volumes >= 10 ? "completo" : "parcial"}</StatusChip> },
+          { key: "acao", header: "Ação", align: "right", render: (r) => r.status === "livre"
+            ? <button className="text-[11px] font-medium text-[color:var(--brand)] story-link">Alocar</button>
+            : <span className="text-[11px] text-muted-foreground">bloqueado até retorno/liberação</span> },
         ]}
       />
+    </div>
+  );
+}
+
+function TipoPalete({ sigla, titulo, detalhe }: { sigla: string; titulo: string; detalhe: string }) {
+  return (
+    <div className="surface-card p-4">
+      <div className="flex items-center gap-2">
+        <span className="grid h-9 w-9 place-items-center rounded-lg bg-[color:color-mix(in_oklab,var(--brand)_12%,transparent)] font-mono text-sm font-semibold text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)]">
+          {sigla}
+        </span>
+        <p className="text-sm font-medium text-foreground">{titulo}</p>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">{detalhe}</p>
     </div>
   );
 }

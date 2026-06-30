@@ -2,6 +2,80 @@
 
 > Atualize ao fim de cada bloco de trabalho. Topo = mais recente. Uma sessão nova lê o `CLAUDE.md` e depois este arquivo para saber exatamente onde retomar.
 
+## Trabalho 2026-06-30 — Nova Viagem, Nova Carga e Prestação refinados no front
+- **O que foi feito:**
+  - `apps/web-console/src/routes/app.navegacao.tsx`: painel **Nova viagem** reescrito com os campos do Lucas — número auto, FerryBoat em lista (frota oficial F/B Amazonas II–VI + Paru), saída, paradas com **preenchimento automático via templates do FAQ 2026** (Belém→Almeirim, Belém→Santarém quarta/sexta, retorno de sábado), passageiros em rede (manual) e camarotes/classes condicionais à embarcação (matriz do Lucas). Chips de atenção sinalizam horários do PDF a validar.
+  - `apps/web-console/src/routes/app.tms.tsx`: painel **Nova carga** reescrito com os campos do Lucas — pedido = COD CLIENTE + NF/DC, UUID/QR e código de carga gerados pelo sistema, viagem/origem/destino, cliente da NF/DC ou manual, upload NF/DC, CIF/FOB, peso e valor, agendamento por janela. Adicionado helper `CargaField`.
+  - `apps/web-console/src/components/ops/tms/PrestacaoTab.tsx`: já reescrito para espelhar o modelo real (cabeçalho/caixa, À bordo, Cozinha/Lanchonete/Internet, Passagens — Agências, Fretes — Agências, Despesas, Redondas/Gratificações, Fechamento, Local/Data/Responsável, PDF).
+  - Portaria (`PortariaTab`): conferido — já possui tile "Foto (recomendada)" no registro de entrada de veículo de carga; obrigatoriedade segue pendente de confirmação do cliente.
+- **Verificação:** `bun run build` exit 0; rotas `/app/tms`, `/app/navegacao`, `/campo/portaria` respondem 200 no dev server.
+- **Checklist atualizado:** marcadas as tarefas de Nova Viagem (refino + templates FAQ), Nova Carga (refino) e Prestação (modelo real) e a conferência de foto na portaria em `docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md`.
+- **Próximo passo:** QA visual/navegação do core interno (abrir os painéis e validar leitura), depois atacar o Portal online (último item do MVP). Backend só depois do front aprovado. Validar com Lucas as divergências de horário do FAQ e as capacidades numéricas reais por classe/embarcação antes do cadastro definitivo.
+
+## Material recebido 2026-06-30 — FAQ 2026 de paradas, preços e portos
+- **Novo arquivo analisado:** `C:\Users\Administrador\Downloads\FAQ 2026.pdf`.
+- **Registro criado:** `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`.
+- **Pendências baixadas:** DOC FAQ das paradas automáticas; trechos/rotas públicas; preços de passagem por destino/classe; formas de pagamento atuais; regras públicas de meia/isento; endereços dos portos.
+- **Atenção:** o PDF tem divergências internas de horário (ex.: 17h vs 18h em saídas, chegada em Santarém com horário cravado vs "início da tarde"). Para front mockado é suficiente; para backend/cadastro definitivo, validar com Lucas antes de publicar tabela oficial.
+- **O que NÃO foi resolvido:** tabela de preço de encomendas, tabela/regra de preço de veículos/máquinas, capacidades numéricas reais por classe/embarcação, termo de embarque, cores de pulseira, gateway e BP-e.
+- **Impacto no front:** próxima IA deve refinar `/app/navegacao` usando os templates de rota/paradas do FAQ e pode refinar Cadastros/Vendas com preços reais de passagem do FAQ 2026. Não ligar backend agora.
+
+## Material recebido 2026-06-30 — campos de Nova Viagem e Nova Carga
+- **Novo material recebido do Lucas:** campos para Botão Nova Viagem, lista/classes de embarcações e Botão Nova Carga.
+- **Registro criado:** `docs/feedback/2026-06-30-lucas-campos-navegacao-tms.md`.
+- **Pendências baixadas:** campos detalhados de Nova Viagem; lista de embarcações; matriz de classes por embarcação; campos detalhados de Nova Carga.
+- **Atualização:** o DOC FAQ foi recebido depois e registrado em `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`; resta validar divergências internas de horário antes do backend definitivo.
+- **Ainda pendente dentro desse assunto:** capacidades numéricas reais por classe/embarcação, caso existam em tabela separada.
+- **Impacto no front:** próxima IA deve refinar `/app/navegacao` com Nova Viagem e matriz de embarcação/classes, e refinar `/app/tms`/Nova Carga com pedido/venda, UUID/QR, código de carga, viagem, origem/destino, cliente, upload NF/DC, peso e valor. Isso entra junto com os ajustes já pendentes de `PrestacaoTab` e foto na portaria.
+
+## Auditoria 2026-06-29 — transcrição bruta conferida
+- **Fonte auditada:** `C:\Users\Administrador\Desktop\texto.txrt.txt`.
+- **Registro criado:** `docs/feedback/2026-06-29-auditoria-transcricao-bruta-e-pendencias.md`.
+- **Resultado:** o consolidado `docs/feedback/2026-06-25-validacao-core-telas.md` cobre os pontos principais da reunião e do documento de pauta anexado ao fim da transcrição.
+- **Nuances adicionadas a partir do bruto:** apps internos provavelmente por instalação direta/fora da Play Store; portaria cita foto no registro de veículo de carga; regra financeira futura de carga: toda carga tem valor declarado/cobrado, nenhuma carga sobe sem etiqueta/cobrança, etiquetas geram cobrança, e foi citada comissão de 2% com relatório separado por viagem.
+- **Impacto:** nada disso bloqueia o front mockado. O próximo passo continua sendo `PrestacaoTab` pelo modelo real, QA visual e Portal por último.
+
+## Material recebido 2026-06-29 — certificado digital PFX da AJC
+- **Novo arquivo recebido:** `C:\Users\Administrador\Downloads\2866916_A__J__C__NAVEGACAO_LTDA_10736847000192 (1).pfx`.
+- **Registro criado:** `docs/feedback/2026-06-29-certificado-digital-ajc-pfx.md`.
+- **Pendência parcialmente resolvida:** o material de certificado digital para o fluxo fiscal/BP-e foi recebido. O nome do arquivo indica AJC Navegação LTDA / CNPJ `10.736.847/0001-92`.
+- **Cuidados obrigatórios:** não copiar o PFX para o repo, não commitar e não registrar senha em docs/código/chat. `.gitignore` agora bloqueia `*.pfx`, `*.p12`, `*.jks` e `*.keystore`.
+- **Ainda pendente:** senha do PFX, validade/cadeia/uso do certificado, confirmação de que serve para BP-e, credenciamento SEFAZ-PA, fornecedor/API fiscal, homologação/produção e desenho seguro de armazenamento em produção.
+- **Impacto no trabalho atual:** não muda o próximo passo imediato de front. Primeiro refinar Prestação de Contas pelo modelo real; depois QA/Portal. Para o Portal/backend fiscal, considerar que o certificado foi recebido, mas o fluxo BP-e ainda exige spike fiscal.
+
+## Material recebido 2026-06-29 — modelo real de prestação de contas
+- **Novo arquivo analisado:** `C:\Users\Administrador\Downloads\PRESTAÇÃO DE CONTAS GERENTES AM VI 24 09 (2).docx`.
+- **Registro criado:** `docs/feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md`.
+- **Pendência externa resolvida:** "modelo atual em papel da prestação de contas do gerente" agora foi recebido. Ele valida a estrutura real do formulário: cabeçalho com embarcação/viagem/período/caixa, receitas À bordo, cozinha por dia, lanchonete, internet, passagens por agências com comissão/saldo, fretes por agências, despesas, redondas/gratificações, fechamento com receita/despesa/saldo repassado e assinatura local/data/responsável.
+- **Reabertura pontual do front:** antes de considerar o core interno 100% pronto para QA final, ajustar `apps/web-console/src/components/ops/tms/PrestacaoTab.tsx` para espelhar esse modelo real. O checklist foi atualizado em `docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md`.
+- **O que NÃO mudou:** BP-e/gateway, preços de encomendas, declaração de conteúdo, termos, impressora Bluetooth, regras definitivas de comissão e provedores continuam pendências externas. Observação: o PFX foi recebido depois, mas BP-e ainda depende de senha/validade/credenciamento/fornecedor.
+
+## Implementação 2026-06-29 — core interno do front pós-validação aplicado
+- **SPEC/checklist criado e atualizado:** `docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md` agora quebra a rodada em SPEC, tarefas e detalhamento por tela/módulo.
+- **Core interno ajustado no front mockado:** `/app/inicio`, `/app/navegacao`, `/app/tms`, apps de campo simulados dentro do TMS, `/app/encomendas`, `/app/vendas`, `/pos`, `/embarque`, `/app/crm`, `/app/cadastros` e `/app/financeiro` receberam os pontos da reunião/transcrição: caixas separados, alerta cadastrável, calendário/nova viagem, conflito de escala, CIF/FOB, agenda 30 min/5 caminhões, MP/PD/PC, palete completo/parcial, reimpressão de etiqueta, prestação de contas detalhada, Veículos/Máquinas, portaria/recebimento/entrega, multipagamento, agente comercial, cortesias, manifesto, BP-e, QR usado/vencido, remetente/destinatário completos, cidade/UF, intertrecho, preços por cliente/destino e financeiro mínimo sem prometer conciliação/Compras/DRE agora.
+- **Verificação:** `bun run build` em `apps/web-console` passou com exit 0 depois das alterações.
+- **Próximo passo para qualquer agente/IA nova:** fazer QA visual e de navegação do front ajustado no navegador, corrigir eventuais quebras visuais/responsivas, e só então partir para o **Portal online** (último bloco do MVP) ou para o desenho do backend funcional por ordem de dependência. Não reabrir escopo: reunião/transcrição continua mandando.
+
+## Correção de escopo 2026-06-29 — reunião/transcrição manda
+- **Hierarquia corrigida:** a reunião/transcrição de validação do cliente (`docs/feedback/2026-06-25-validacao-core-telas.md`) é a fonte vigente da rodada atual. Se divergir de documento antigo, corrigir o documento antigo; não tratar como conflito.
+- **Veículos/Máquinas entram agora no MVP**, conforme pedido na reunião: envio por PDV/Comercial/Gerente do Porto, checklist/fotos, etiqueta, bipe de subida/descida e checklist de entrega.
+- **Impressão térmica deve considerar Bluetooth**, conforme transcrição. A decisão antiga de PC/USB foi superada para esta rodada; atualizar UX/arquitetura/implementação nessa direção.
+- **Permanece fora desta rodada:** Financeiro completo, Compras/DRE e ERP financeiro avançado. Portal online com pagamento continua no MVP, mas será trabalhado por último após o core interno.
+
+## Execução ativa 2026-06-29 — ajustar front pós-validação
+- **Status:** checklist do core interno estava concluído, mas o modelo real de prestação de contas recebido em 2026-06-29 reabriu um refinamento pontual em `PrestacaoTab`.
+- **Próximo passo para qualquer agente/IA nova:** abrir `docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md` e `docs/feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md`; ajustar primeiro a aba de Prestação de Contas no front.
+- **Ordem restante:** refinamento de Prestação de Contas pelo modelo real → QA visual/responsivo do core interno → Portal online por último → backend funcional por ordem de dependência.
+- **Natureza do trabalho:** front real mockado para aprovação; não ligar backend agora. Usar mocks, cards, tabelas, formulários e estados visuais suficientes para o cliente validar regra.
+- **Verificação:** ao final de cada bloco de front, rodar `bun run build` em `apps/web-console` e atualizar este STATUS + checklist da SPEC.
+
+## Retomada 2026-06-29 — entendimento pós-validação do cliente
+- **Contexto absorvido:** lidos `AGENTS.md`, `docs/STATUS.md`, PRD/SPEC, módulos 01..09, UX 00..05, roadmap pós-MVP, ADRs, Fase 0/modelo de dados, migrations/seed, estrutura do front `apps/web-console` e a reunião de feedback do cliente.
+- **Feedback do cliente consolidado:** novo doc em `docs/feedback/2026-06-25-validacao-core-telas.md`. Fontes brutas estavam em Downloads: `VALIDAÇÃO DO CORE DE TODAS AS TELAS 2.0.docx`, `parte1.txt`..`parte4.txt` e transcrições timestampadas.
+- **Direção atual:** antes de ligar backend, ajustar o front mockado com base na validação tela a tela do cliente. Sequência recomendada: TMS/Navegação → Veículos/Máquinas e apps de campo → Vendas/PDV/Passagens → Encomendas → CRM/Cadastros → deixar Financeiro/Compras/DRE como fase posterior.
+- **Portal online:** continua MVP, mas fica por último dentro da rodada do MVP. Antes de backend definitivo do portal, atualizar o modelo canônico/migrations: a Parte C de Vendas exige `Pedido`, `Reserva`, `Pagamento`, webhook e fiscal plugável, mas as migrations atuais ainda estão em `bilhete` + `caixa_movimento`.
+- **Atenção de escopo:** Veículos/Máquinas foram trazidos para agora pela reunião. Compras, DRE e Financeiro completo continuam posteriores.
+
 ## Deploy (Vercel)
 - **Front `apps/web-console` → Vercel.** Root Directory: `apps/web-console`. Install/Build com **Bun** (`vercel.json`). SSR via Nitro com preset **vercel** forçado em `vite.config.ts` (`nitro: { preset: "vercel" }`) — sem isso o wrapper do Lovable pula o plugin de deploy fora do ambiente Lovable e a saída fica só estática (404 na raiz). Saída gerada em `.vercel/output/` (Build Output API v3, função `__server.func`).
 - Autoria git do repo fixada localmente em `wcristian799 <wellington.cris799@gmail.com>` (antes ia como `dev@ajc.local`, não vinculado ao GitHub).
@@ -46,12 +120,15 @@
 - Para o FRONT (web-console): o Vite dev server roda no WSL e o navegador do Windows acessa — validar o forward nesse sentido (servidor no WSL→browser Windows costuma funcionar melhor que o inverso; testar no E5).
 
 ## Próximo passo imediato (retomada)
-1. **Front (`apps/web-console`) JÁ ADOTADO e telas mockadas prontas** — ver seção "Front web". Para rodar: `cd apps/web-console && export PATH="$HOME/.bun/bin:$PATH" && bun run dev` (porta 8080). Para mostrar ao dono/comercial: navegar por `/app/inicio` e `/portal`.
-2. **Revisão do dono nas telas** — coletar feedback do comercial sobre as telas mockadas antes de ligar backend. Ajustar conteúdo/fluxo conforme retorno.
-3. **Spike de pagamento + fiscal do portal** (pendência crítica do MVP): escolher gateway (Mercado Pago/Pagar.me/etc.) e mapear caminho do BP-e com Lucas/contador. Derriscar ANTES de implementar o portal funcional.
-4. **Banco JÁ VALIDADO no WSL2.** Numa máquina nova: instalar PG16+PostGIS no WSL e rodar `infra/apply-wsl.sh`.
-5. **Fase 2 (ligar back no front):** decidir Prisma vs TypeORM (E3-H1) ao iniciar dados de domínio; ligar módulos por ordem de dependência (cadastros→navegação→vendas→tms).
-6. **Pendências paralelas:** App Capacitor PoC (E6, lê QR), CI (E7), spike offline-sync PowerSync (E8).
+1. **Refinar Prestação de Contas no front** usando `docs/feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md` como referência do formulário real.
+2. **Refinar Nova Viagem e Nova Carga no front** usando `docs/feedback/2026-06-30-lucas-campos-navegacao-tms.md` e os templates de paradas/preços em `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`.
+3. **Conferir/ajustar Portaria** para exibir captura/anexo de foto no registro de veículo de carga.
+4. **Fazer QA visual/navegação do front ajustado** usando `docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md` como checklist de conferência.
+5. **Manter o front no padrão Crimson Prestige**: não refazer design system, não alterar o login cinematográfico e respeitar a separação `/app/*` vs `/campo/*`.
+6. **Portal online com pagamento = MVP, mas por último:** depois do QA do core interno, ajustar `/portal`; antes do backend definitivo, fazer spike de gateway + BP-e e atualizar modelo de dados (`Pedido`, `Reserva`, `Pagamento`, webhook, fiscal).
+7. **Depois dos ajustes de tela**, revisar docs de módulo/UX impactados e só então iniciar backend funcional por ordem de dependência.
+8. **Banco JÁ VALIDADO no WSL2.** Numa máquina nova: instalar PG16+PostGIS no WSL e rodar `infra/apply-wsl.sh`.
+9. **Pendências paralelas:** App Capacitor PoC (E6, lê QR), CI (E7), spike offline-sync PowerSync (E8).
 
 > Decisão técnica pendente registrada no E3-H1: **Prisma vs TypeORM** para o runner de migrations do back. As migrations atuais são SQL puro (não dependem dessa escolha). Decidir ao iniciar o E4.
 
@@ -59,28 +136,32 @@
 - **Etapa 1 — Discovery/Produto:** PRD + SPEC global + 9 módulos documentados (`docs/`, `docs/modulos/`).
 - **Etapa 2 — UX:** Fundação (design system/shell/acesso) + UX detalhada de TMS, Vendas, CRM, Cadastros, Navegação-core (`docs/ux/`). Telas com wireframes ASCII.
 - **Etapa 3 — Roadmap:** recorte do MVP e backlog pós-MVP (`docs/ROADMAP-Pos-MVP.md`).
-- **Etapa 4 — Arquitetura:** stack e repo definidos (ADR 00); spikes técnicos pesquisados — offline-sync (PowerSync), hardware (celular + impressão PC/USB), hospedagem (VPS Hostinger) (ADR 01).
+- **Etapa 4 — Arquitetura:** stack e repo definidos (ADR 00); spikes técnicos pesquisados — offline-sync (PowerSync), hardware (celular + impressão Bluetooth), hospedagem (VPS Hostinger) (ADR 01).
 - **Etapa 5 — Fase 0 (em curso):** regra de continuidade criada (`CLAUDE.md` + este arquivo). Construção do repo a seguir.
 
 ## Decisões recentes
 - **Escopo MVP atualizado (cliente):** o **portal público de venda de passagem online com pagamento integrado** ENTRA no MVP (Fase 1). Detalhado na Parte C do módulo Vendas/Passagens (`docs/modulos/02-Vendas-Passagens.md`). Isso adiciona ao caminho crítico: reserva de vaga com concorrência (sem overbooking), máquina de estados pedido/pagamento, gateway (webhook), área do cliente e gancho de emissão fiscal.
 - **Front anterior descartado:** todo o front da sessão (web-console + conceito IGARAPÉ + libs/ui) foi removido a pedido do cliente; o **UX vai enviar um design system** para nos basearmos. Decisões técnicas de stack (React+TS+Vite, rodar no WSL) seguem válidas; só o visual será refeito sobre o DS do UX.
-- Hardware simplificado: celular comum (não coletor industrial) + impressão térmica no PC via USB (não Bluetooth). Reduziu os riscos altos de 2 para 1 (só GPS background, que é fase posterior).
+- Hardware atualizado pela validação do cliente: celular comum (não coletor industrial) + impressão térmica via Bluetooth. GPS background segue como risco técnico paralelo.
 - Sequência confirmada com o cliente: Fase 0 → telas mockadas para aprovação comercial → MVP funcional → avançados.
 - Telas de aprovação serão front real mockado (reaproveitável), não protótipo descartável.
 
 ## Pendências do cliente (🔶) — não bloqueiam a Fase 0
-- **Emissão fiscal do bilhete (BP-e):** confirmar com Lucas/contador se é obrigatória no MVP do portal e qual o caminho (SEFAZ-PA, certificado, credenciamento, API/fornecedor). Ver §C.7.
+- **Emissão fiscal do bilhete (BP-e):** certificado PFX recebido em 29/jun/2026, mas ainda falta confirmar senha, validade/uso, credenciamento SEFAZ-PA e API/fornecedor. Ver §C.7 e `docs/feedback/2026-06-29-certificado-digital-ajc-pfx.md`.
 - **Gateway de pagamento:** definir fornecedor (Mercado Pago / Pagar.me / Stripe / PagBank), meios (cartão/PIX), taxas e exigências — **spike antes de construir o portal**.
 - Tabela de preço de encomendas (Lucas).
 - Textos: termo de aceite de embarque, declaração de conteúdo, termo de veículos.
 - Cores de pulseira por classe.
-- Modelo da impressora de etiqueta (define ESC-POS vs ZPL).
+- Modelo da impressora de etiqueta (define ESC-POS vs ZPL e compatibilidade Bluetooth).
 - Regras de comissão de agentes (diretoria).
 - Provedores: pagamento, WhatsApp/SMS.
+- **Ainda pendente do Lucas/AJC após 30/jun/2026:** validar divergências de horário do FAQ antes do cadastro definitivo; capacidades numéricas reais por classe/embarcação se houver tabela; campos de lançamento manual NF/DC se divergirem de Nova Carga; regra final de Etiquetar por volume; campos de cadastro de palete; tabela de preço de encomendas; regra/tabela de preço de veículos/máquinas; dados de cliente/cotação; fornecedores; plano de contas/centro de custo; DRE; fotos das embarcações.
+- **Resolvido em 2026-06-29:** modelo atual em papel da prestação de contas do gerente recebido e registrado em `docs/feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md`.
+- **Resolvido em 2026-06-30:** campos de Nova Viagem, lista/classes de embarcações e campos de Nova Carga recebidos e registrados em `docs/feedback/2026-06-30-lucas-campos-navegacao-tms.md`.
+- **Resolvido em 2026-06-30:** FAQ 2026 recebido e registrado em `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`, baixando DOC FAQ/paradas automáticas, preços de passagem, formas de pagamento atuais e endereços dos portos.
 
 ## Spikes técnicos a executar (ver ADR 01)
 - Offline-sync: PowerSync self-hosted vs fila própria (1º spike, antes do TMS).
-- **Pagamento + fiscal do portal:** escolher gateway e mapear o caminho do BP-e (depende da confirmação do Lucas/contador). Derriscar antes de construir o portal.
+- **Pagamento + fiscal do portal:** escolher gateway e mapear o caminho do BP-e. PFX recebido, mas ainda depende de senha/validade/credenciamento/fornecedor fiscal. Derriscar antes de construir o portal funcional.
 - GPS background em celular real (paralelo; afeta só rastreamento).
-- Impressão PC/USB com a impressora definida.
+- Impressão Bluetooth com a impressora definida.

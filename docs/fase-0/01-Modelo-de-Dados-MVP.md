@@ -1,8 +1,10 @@
 # Modelo de Dados Canônico — MVP (ERP/TMS AJC)
 
-> **Fonte da verdade para as migrations Postgres.** Consolida as entidades dispersas em pseudo-schema nos módulos (`docs/modulos/01..09`), no `SPEC.md` e no ADR de arquitetura. Cobre **apenas o MVP**: Fundação/Acesso, motor de config, cadastros, clientes/agentes, navegação-core, preços, TMS/carga, vendas/passagens, CRM, caixa mínimo e auditoria.
+> **Fonte da verdade para as migrations Postgres.** Consolida as entidades dispersas em pseudo-schema nos módulos (`docs/modulos/01..09`), no `SPEC.md` e no ADR de arquitetura. Cobre **apenas o MVP**: Fundação/Acesso, motor de config, cadastros, clientes/agentes, navegação-core, preços, TMS/carga, veículos/máquinas, vendas/passagens, CRM, caixa mínimo e auditoria.
 >
-> Fora de escopo (marcado com gancho onde houver): Financeiro completo, Veículos, PDV F&B, Encomenda-com-preço, rastreamento avançado. Onde algo depende de informação pendente do cliente, está marcado com 🔶 e **não bloqueia** a criação da tabela (a coluna existe, entra vazia/placeholder).
+> Fora de escopo (marcado com gancho onde houver): Financeiro completo, PDV F&B, Encomenda-com-preço, rastreamento avançado. Onde algo depende de informação pendente do cliente, está marcado com 🔶 e **não bloqueia** a criação da tabela (a coluna existe, entra vazia/placeholder).
+>
+> **Nota 2026-06-29:** a validação do cliente de 25/jun/2026 trouxe **Veículos/Máquinas para o MVP**. Este modelo/migrations ainda precisam ser atualizados antes do backend definitivo para materializar checklist, fotos, etiqueta, bipe de subida/descida e entrega de veículos.
 
 ---
 
@@ -66,7 +68,8 @@ CREATE TYPE tipo_registro_portaria AS ENUM ('veiculo_carga','veiculo_transporte'
 CREATE TYPE status_prestacao       AS ENUM ('rascunho','enviada','conferida');
 
 -- Vendas / Passagens
-CREATE TYPE classe_passagem        AS ENUM ('rede','rede_vip','camarote');
+-- Atualizado por material do Lucas em 30/jun/2026: classes reais por embarcação.
+CREATE TYPE classe_passagem        AS ENUM ('rede','rede_sala_vip','camarote','suite_comum','suite_comum_vip','suite_master','suite_master_vip','mega_suite');
 CREATE TYPE tipo_bilhete           AS ENUM ('online','pdv','totem','contrato','cortesia','gratuidade');
 CREATE TYPE status_bilhete         AS ENUM ('emitido','validado','usado','cancelado','reembolsado');
 CREATE TYPE tipo_gratuidade        AS ENUM ('idoso','pcd','crianca','outro');  -- 🔶 lista legal a confirmar
@@ -322,7 +325,7 @@ Três tipos de tabela: **passagem** (classe/subtipo/trecho), **carga** (tier = %
 | `nome` | varchar(120) | não | — | |
 | `tipo` | tipo_embarcacao | não | — | passeio_carga / carga |
 | `capacidade_carga` | numeric(10,3) | sim | — | kg ou m³ (definir unidade no seed) |
-| `capacidade_pax` | jsonb | sim | `'{}'` | `{rede:N, rede_vip:N, camarote:N}` por classe |
+| `capacidade_pax` | jsonb | sim | `'{}'` | capacidade por classe real da embarcação; ver `docs/feedback/2026-06-30-lucas-campos-navegacao-tms.md` |
 | `status` | status_embarcacao | não | `'ativa'` | ativa/manutencao/alugada — em manutenção não recebe viagem |
 | timestamps + `excluido_em` | | | | soft-delete |
 
@@ -579,7 +582,7 @@ Cross-docking: recebido+embarcado ───────────────�
 | `total_sistema` | numeric(12,2) | sim | — | calculado |
 | `divergencia` | numeric(12,2) | sim | — | declarado − sistema |
 | `status` | status_prestacao | não | `'rascunho'` | rascunho/enviada/conferida |
-| `itens` | jsonb | sim | `'[]'` | receitas/despesas lançadas (modelo em papel a digitalizar 🔶) |
+| `itens` | jsonb | sim | `'[]'` | receitas/despesas lançadas (modelo real recebido em 29/jun/2026; ver feedback de prestação de contas) |
 | `anexos` | jsonb | sim | `'[]'` | `[{url,hash}]` fotos/comprovantes no storage |
 | timestamps | | | | |
 
@@ -598,8 +601,8 @@ Cross-docking: recebido+embarcado ───────────────�
 | `viagem_id` | uuid | não | — | FK `viagem(id)` |
 | `cliente_id` | uuid | sim | — | FK `cliente(id)` (venda avulsa pode não ter) |
 | `passageiro_nome` | varchar(160) | sim | — | quando avulso |
-| `classe` | classe_passagem | não | — | rede/rede_vip/camarote |
-| `subtipo` | varchar(60) | sim | — | subtipo de camarote (Royal…) 🔶 |
+| `classe` | classe_passagem | não | — | rede/rede_sala_vip/camarote/suite_* conforme matriz recebida |
+| `subtipo` | varchar(60) | sim | — | manter apenas se houver variação comercial extra além das classes recebidas |
 | `tipo` | tipo_bilhete | não | — | online/pdv/totem/contrato/cortesia/gratuidade |
 | `item_preco_id` | uuid | sim | — | FK `item_preco(id)` — tarifa aplicada |
 | `preco_pago` | numeric(12,2) | sim | — | snapshot; 0 em cortesia/gratuidade |
@@ -714,7 +717,7 @@ Cross-docking: recebido+embarcado ───────────────�
 
 - Índice `(cliente_id)`, `(agente_id)`, `(status)`.
 
-> **Histórico de envios** (CRM B.4): *view/consulta derivada* de `carga` + `volume` + `caixa_movimento` por `cliente_id` (data, trecho, nº de volumes, preço praticado). Não é tabela própria — evita duplicação. Veículos/Encomenda-com-preço alimentam esse histórico em fase posterior.
+> **Histórico de envios** (CRM B.4): *view/consulta derivada* de `carga` + `volume` + `caixa_movimento` por `cliente_id` (data, trecho, nº de volumes, preço praticado). Não é tabela própria — evita duplicação. Veículos/Máquinas devem alimentar esse histórico no MVP assim que o modelo for atualizado; Encomenda-com-preço alimenta em fase posterior.
 
 ---
 
@@ -861,7 +864,7 @@ Respeita as FKs (pais antes de filhos). Cada bloco pode ser uma migration.
 ## 16. Notas de escopo (ganchos para fases posteriores)
 
 - **Financeiro completo:** contas a pagar/receber, conciliação bancária, faturamento de contrato/mensal, comissão fechada do agente. Ganchos: `fornecedor.dados_bancarios`, `prestacao_contas` (cruzamento), `caixa_movimento`, `agente.percentual_comissao`.
-- **Veículos (RF-5):** checklist de embarque, termo de aceite de veículos, cotação de veículo. Gancho: `cotacao.tipo='veiculo'`. Tabelas próprias entram depois.
+- **Veículos/Máquinas (RF-5):** agora é MVP pela validação do cliente. Atualizar o modelo antes do backend definitivo com tabelas próprias para checklist de embarque/entrega, fotos, etiqueta, bipe de subida/descida e termo de aceite. Gancho atual existente: `cotacao.tipo='veiculo'`.
 - **Encomenda-com-preço:** mecânica/tabela de preço P/M/G + percentual (🔶 Lucas). Ganchos: `item_preco.tamanho/percentual`, `cotacao.tipo='encomenda'`, despacho no PDV (`caixa_movimento.tipo='despacho_carga'` reaproveita `carga`/`volume`).
 - **PDV F&B, Compras, Estoque:** sem tabelas no MVP.
 - **Rastreamento avançado/telemetria MQTT:** `posicao_embarcacao` é o resumo; a fonte em tempo real (Firebase→MQTT) é externa e isolável.

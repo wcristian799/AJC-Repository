@@ -9,6 +9,7 @@ import {
 import { CountUp, ShimmerBar } from "@/components/ops/motion-bits";
 import {
   PASSAGENS, VIAGENS, CANAIS_VENDA, OCUPACAO_CLASSE,
+  AGENTES,
   CORTESIAS_EMITIDAS, CORTESIA_LIMITES, CORTESIA_LIMITE_PADRAO, CORTESIA_MOTIVOS, CORTESIA_CLASSES,
   tipoTarifaDaClasse, TIPO_TARIFA_LABEL,
   type CortesiaClasse, type CortesiaMotivoId, type TipoTarifa,
@@ -155,6 +156,26 @@ function Vendas() {
               { key: "receita", header: "Receita", align: "right", render: (r) => <span className="font-mono">{brl(r.receita)}</span> },
             ]}
           />
+
+          <div className="surface-card p-5">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-[color:var(--brand)]" />
+              <h3 className="font-display text-lg">Agente comercial · detalhado por agente</h3>
+              <StatusChip tone="brand">canal expandido</StatusChip>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {AGENTES.map((a, i) => (
+                <div key={a.id} className="rounded-lg bg-[color:var(--muted)] p-4 ring-1 ring-[color:var(--hairline)]">
+                  <p className="text-sm font-medium text-foreground">{a.nome}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{a.cidade} · {a.clientes} clientes</p>
+                  <div className="mt-3 flex items-end justify-between gap-2">
+                    <span className="font-mono text-lg text-[color:var(--brand)]">{brl(a.volumeMes)}</span>
+                    <span className="text-[10px] text-muted-foreground">{18 + i * 3} bilhetes</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -200,6 +221,20 @@ function Vendas() {
           <p className="mt-1 text-sm text-muted-foreground">
             Listagem de gratuidades e cortesias para entrega ao Ministério Público (filtro por período, tipo e viagem). Exportável em PDF/CSV.
           </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">BP-e / SEFAZ-PA</p>
+              <p className="mt-1 text-sm font-medium text-foreground">Obrigatório desde 2019</p>
+            </div>
+            <div className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">PDV</p>
+              <p className="mt-1 text-sm font-medium text-foreground">Emitir ou não no ato da venda</p>
+            </div>
+            <div className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Portal/app público</p>
+              <p className="mt-1 text-sm font-medium text-foreground">Emissão automática obrigatória</p>
+            </div>
+          </div>
           <div className="mt-5">
             <DataTable
               rows={PASSAGENS.filter((p) => p.classe === "Gratuidade" || p.classe === "Cortesia")}
@@ -226,6 +261,7 @@ function CortesiasTab() {
   const [viagemId, setViagemId] = useState<string>(viagensAtivas[0]?.id ?? VIAGENS[0].id);
   const [classe, setClasse] = useState<CortesiaClasse>(CORTESIA_CLASSES[0]);
   const [motivoId, setMotivoId] = useState<CortesiaMotivoId>(CORTESIA_MOTIVOS[0].id);
+  const [observacao, setObservacao] = useState("Beneficiário indicado pela diretoria · validar documento no embarque");
 
   const viagem = VIAGENS.find((v) => v.id === viagemId);
   const limite = limiteCortesia(viagemId);
@@ -269,7 +305,19 @@ function CortesiasTab() {
               {CORTESIA_MOTIVOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </label>
+          <label className="block sm:col-span-2">
+            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Observação / beneficiário</span>
+            <textarea
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              className="mt-1.5 min-h-20 w-full rounded-md bg-[color:var(--muted)] px-3 py-2 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
+            />
+          </label>
         </div>
+
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Categorias/motivos de cortesia serão cadastrados em Cadastros; aqui o operador seleciona e detalha o contexto.
+        </p>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <PrimaryButton icon={Plus} disabled={noLimite}>Gerar código</PrimaryButton>
@@ -306,6 +354,7 @@ function CortesiasTab() {
             { key: "viagem", header: "Viagem", render: (r) => <span className="font-mono text-xs">{VIAGENS.find((v) => v.id === r.viagemId)?.codigo}</span> },
             { key: "classe", header: "Classe", render: (r) => <Tag tone="warning">{r.classe}</Tag> },
             { key: "motivo", header: "Motivo", render: (r) => <span className="text-xs">{r.motivo}</span> },
+            { key: "observacao", header: "Observação", render: () => <span className="text-xs text-muted-foreground">{observacao}</span> },
             { key: "concedidoPor", header: "Concedido por", render: (r) => (
               <div>
                 <p className="text-xs font-medium">{r.concedidoPor}</p>
@@ -334,6 +383,10 @@ function ManifestoTab() {
     "h-10 rounded-md bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]";
 
   const rows = useMemo(() => PASSAGENS.filter((p) => p.viagemId === viagemId), [viagemId]);
+  const totaisEscala = useMemo(() => {
+    const escalas = viagem?.escalas.map((e) => e.cidade) ?? [];
+    return escalas.map((cidade, i) => ({ cidade, total: Math.max(1, Math.round(rows.length / Math.max(escalas.length, 1)) - (i % 2)) }));
+  }, [rows.length, viagem]);
 
   const totaisClasse = useMemo(() => {
     const m = new Map<string, number>();
@@ -412,12 +465,24 @@ function ManifestoTab() {
           </div>
         </div>
         <div className="surface-card brand-rail brand-rail-left p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Embarcados</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total geral da saída</p>
           <p className="big-numeric mt-3 text-3xl text-foreground">
             <CountUp to={embarcados} duration={1.4} /><span className="text-foreground/30">/{rows.length}</span>
           </p>
           <p className="mt-2 text-xs text-muted-foreground">{viagem?.codigo} · status de embarque</p>
           <div className="mt-4"><ShimmerBar pct={Math.round((embarcados / Math.max(rows.length, 1)) * 100)} tone="success" /></div>
+        </div>
+      </div>
+
+      <div className="surface-card p-5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total por cidade / escala</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+          {totaisEscala.map((e) => (
+            <div key={e.cidade} className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
+              <p className="font-mono text-lg text-foreground">{e.total}</p>
+              <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{e.cidade}</p>
+            </div>
+          ))}
         </div>
       </div>
 

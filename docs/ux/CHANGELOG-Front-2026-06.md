@@ -80,14 +80,16 @@ Concluída nesta sessão (ver seção 8). O `/campo` dá a visão real do app de
 ### Fora do MVP (decisões fechadas)
 - Navegação B.3 — rastreamento GPS tempo real (Fase 3).
 - Financeiro completo B.6–B.12 (Fase 2).
-- Módulo Veículos inteiro (fase posterior).
 - PDV Lanchonete/Restaurante (Fase 3).
+
+### Correção pós-validação do cliente (25/jun/2026)
+- Módulo Veículos/Máquinas não é mais fase posterior: entra agora no MVP conforme transcrição de validação.
 
 ### Pendências externas que destravam telas
 - 🔶 Tabela de preços de encomenda/carga (Lucas).
 - 🔶 Texto da Declaração de Conteúdo e termo de aceite de veículos (Lucas).
-- 🔶 Gateway de pagamento + emissão fiscal BP-e do portal (decisão + spike).
-- 🔶 Modelo de prestação de contas em papel para digitalizar.
+- 🔶 Gateway de pagamento + emissão fiscal BP-e do portal (PFX recebido em 29/jun/2026; ainda precisa senha/validade/credenciamento/fornecedor + spike).
+- ✅ Modelo de prestação de contas em papel recebido em 29/jun/2026; refinamento do `PrestacaoTab` pendente.
 
 ---
 

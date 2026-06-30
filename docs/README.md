@@ -39,7 +39,8 @@ Lista consolidada em [SPEC.md §7](./SPEC.md). Principais:
 - Tabela/mecânica de preços de **encomendas** (Lucas).
 - Texto do **termo de aceite de embarque** (AJC).
 - Modelo de **declaração de conteúdo** + cláusula de exclusão (Lucas).
-- Modelo de **prestação de contas** em papel para digitalizar.
+- Modelo de **prestação de contas** em papel recebido em 29/jun/2026; ver `feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md`.
+- FAQ 2026 recebido em 30/jun/2026; resolve paradas automáticas/preços de passagem/endereços de portos; ver `feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`.
 - Regras de **comissão de agentes** (diretoria).
 - Viabilidade da **API de rastreio NF/boleto no CNPJ**.
 - Especificação do **coletor/Palm** e da **impressora térmica**.

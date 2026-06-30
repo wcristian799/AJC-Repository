@@ -20,6 +20,10 @@ out-tsc/
 .env.*.local
 *.pem
 *.key
+*.pfx
+*.p12
+*.jks
+*.keystore
 
 # Testing
 coverage/

@@ -43,11 +43,18 @@ function Financeiro() {
         description="Porto, balsas, encomendas, agentes e lanchonetes consolidados. AP/AR e comissões — visão leve do MVP (núcleo é Fase 2)."
         actions={
           <>
-            <GhostButton>Conciliação</GhostButton>
-            <PrimaryButton icon={Plus}>Lançamento</PrimaryButton>
+            <GhostButton>Plano de contas 🔶</GhostButton>
+            <PrimaryButton icon={Plus}>Lançamento mínimo</PrimaryButton>
           </>
         }
       />
+
+      <div className="mt-4 surface-card p-4">
+        <p className="text-sm font-medium text-foreground">Recorte desta rodada</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Caixa leve, AP/AR e comissões mockadas para validação. Conciliação bancária, Compras e DRE ficam para a etapa financeira posterior.
+        </p>
+      </div>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPIStat index={0} label="Saldo consolidado" value={brl(saldo)} hint={`${CAIXAS.length} caixas`} icon={Wallet} />
@@ -101,7 +108,8 @@ function Financeiro() {
             <FilterChip active>Hoje</FilterChip>
             <FilterChip>Semana</FilterChip>
             <FilterChip>Mês</FilterChip>
-            <FilterChip>Intervalo</FilterChip>
+            <FilterChip>Personalizado</FilterChip>
+            <input type="date" className="h-9 rounded-md bg-[color:var(--muted)] px-2 text-xs text-foreground ring-1 ring-[color:var(--hairline)]" />
           </FilterBar>
           <DataTable
             rows={CONTAS_PAGAR}
@@ -122,7 +130,8 @@ function Financeiro() {
             <FilterChip active>Hoje</FilterChip>
             <FilterChip>Semana</FilterChip>
             <FilterChip>Mês</FilterChip>
-            <FilterChip>Intervalo</FilterChip>
+            <FilterChip>Personalizado</FilterChip>
+            <input type="date" className="h-9 rounded-md bg-[color:var(--muted)] px-2 text-xs text-foreground ring-1 ring-[color:var(--hairline)]" />
           </FilterBar>
           <DataTable
             rows={CONTAS_RECEBER}
@@ -148,14 +157,20 @@ function Financeiro() {
             </span>
           </div>
           <DataTable
-            rows={AGENTES}
+            rows={AGENTES.map((a, i) => ({ ...a, idx: i }))}
             columns={[
               { key: "nome", header: "Agente", render: (r) => <span className="font-medium">{r.nome}</span> },
               { key: "cidade", header: "Cidade" },
+              { key: "ar", header: "Conta a receber", render: (r) => <span className="font-mono text-xs">{r.idx % 2 === 0 ? "AR pago" : "AR em aberto"}</span> },
               { key: "volumeMes", header: "Captação", align: "right", render: (r) => <span className="font-mono">{brl(r.volumeMes)}</span> },
               { key: "comissaoPct", header: "%", align: "right", render: (r) => <span className="font-mono">{r.comissaoPct.toFixed(1)}%</span> },
               { key: "comissao", header: "Comissão est.", align: "right", render: (r) => <span className="font-mono text-[color:var(--brand)]">{brl((r.volumeMes * r.comissaoPct) / 100)}</span> },
-              { key: "status", header: "Fechamento", render: () => <StatusChip tone="info">aberta</StatusChip> },
+              { key: "status", header: "Status", render: (r) => {
+                const status = r.idx % 3 === 0 ? "pago" : r.idx % 2 === 0 ? "liberada" : "em aberto";
+                const tone = status === "pago" ? "success" : status === "liberada" ? "warning" : "info";
+                return <StatusChip tone={tone}>{status}</StatusChip>;
+              } },
+              { key: "datas", header: "Datas", render: (r) => <span className="text-[11px] text-muted-foreground">abriu 22/06 · {r.idx % 2 === 0 ? "liberou 25/06" : "aguarda AR"}</span> },
             ]}
           />
           <p className="text-center text-[11px] text-muted-foreground">

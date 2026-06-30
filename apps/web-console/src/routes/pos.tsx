@@ -46,6 +46,8 @@ function PosScreen() {
   const [destino, setDestino] = useState<Cidade>("STM");
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [pay, setPay] = useState<PayMethod>("credito");
+  const [pagamentos, setPagamentos] = useState<Record<PayMethod, number>>({ credito: 0, debito: 0, pix: 0, dinheiro: 0 });
+  const [emitirBpe, setEmitirBpe] = useState(true);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
   const [sheet, setSheet] = useState<null | "gratuidade" | "cortesia">(null);
@@ -56,6 +58,10 @@ function PosScreen() {
   const subtotal = linhas.reduce((a, l) => a + l.valor, 0);
   const isencoes = linhas.reduce((a, l) => a + (l.tipo !== "paga" ? l.precoCheio : 0), 0);
   const total = subtotal;
+  const totalPago = pagamentos.credito + pagamentos.debito + pagamentos.pix + pagamentos.dinheiro;
+  const faltaPagar = Math.max(0, total - totalPago);
+  const troco = Math.max(0, totalPago - total);
+  const podeCobrar = linhas.length > 0 && (total === 0 || totalPago >= total);
 
   function addPaga(classeId: VendaClasseId) {
     const c = VENDA_CLASSES.find((x) => x.id === classeId)!;
@@ -82,10 +88,11 @@ function PosScreen() {
 
   function limpar() {
     setLinhas([]);
+    setPagamentos({ credito: 0, debito: 0, pix: 0, dinheiro: 0 });
   }
 
   function cobrar() {
-    if (paying || linhas.length === 0) return;
+    if (paying || !podeCobrar) return;
     setPaying(true);
     window.setTimeout(() => {
       setPaid(true);
@@ -284,9 +291,47 @@ function PosScreen() {
               <PayBtn id="dinheiro" active={pay} onClick={setPay} icon={Banknote} label="Dinheiro" />
             </div>
 
+            <div className="mt-3 rounded-xl bg-[color:var(--card)] p-3 ring-1 ring-[color:var(--hairline)]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Multipagamento</p>
+                <button
+                  onClick={() => setPagamentos((p) => ({ ...p, [pay]: Math.max(0, faltaPagar || total) }))}
+                  className="text-[11px] font-medium text-[color:var(--brand)]"
+                >
+                  lançar saldo no método ativo
+                </button>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {(["credito", "debito", "pix", "dinheiro"] as PayMethod[]).map((m) => (
+                  <label key={m} className="block">
+                    <span className="text-[10px] capitalize text-muted-foreground">{m}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={pagamentos[m] || ""}
+                      onChange={(e) => setPagamentos((p) => ({ ...p, [m]: Number(e.target.value) }))}
+                      className="mt-1 h-9 w-full rounded-md bg-[color:var(--muted)] px-2 text-right font-mono text-xs text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">Informado: <span className="font-mono text-foreground">{brl(totalPago)}</span></span>
+                {troco > 0 ? <span className="font-mono text-[color:var(--success)]">Troco {brl(troco)}</span> : <span className="font-mono text-[color:var(--warning)]">Pendente {brl(faltaPagar)}</span>}
+              </div>
+            </div>
+
+            <label className="mt-3 flex items-center justify-between rounded-xl bg-[color:var(--card)] px-3 py-2.5 text-xs ring-1 ring-[color:var(--hairline)]">
+              <span>
+                <span className="block font-medium text-foreground">BP-e no ato da venda</span>
+                <span className="text-muted-foreground">PDV pode emitir ou não; portal/app público emite automático.</span>
+              </span>
+              <input type="checkbox" checked={emitirBpe} onChange={(e) => setEmitirBpe(e.target.checked)} className="h-4 w-4 accent-[color:var(--brand)]" />
+            </label>
+
             <button
               onClick={cobrar}
-              disabled={linhas.length === 0 || paying}
+              disabled={!podeCobrar || paying}
               className="group relative mt-3 flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl py-4 text-base font-medium text-primary-foreground shadow-[0_18px_40px_-12px_color-mix(in_oklab,var(--brand)_60%,transparent)] ring-1 ring-[color:var(--hairline-brand)] transition-shadow disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, var(--brand) 0%, var(--brand-soft) 100%)" }}
             >
@@ -302,7 +347,7 @@ function PosScreen() {
                   <motion.span key="paying" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative">Processando…</motion.span>
                 ) : (
                   <motion.span key="charge" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative inline-flex items-center gap-2">
-                    {total > 0 ? `Cobrar ${brl(total)}` : "Emitir isento"} <Printer className="h-4 w-4 opacity-80" />
+                    {total > 0 ? `Cobrar ${brl(total)}` : "Emitir isento"} {emitirBpe ? "· BP-e" : "· sem BP-e"} <Printer className="h-4 w-4 opacity-80" />
                   </motion.span>
                 )}
               </AnimatePresence>

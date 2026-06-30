@@ -128,6 +128,7 @@
 ## CAD-06 — Preços de passagem (com reajuste em massa)
 **Persona:** Price · **Dispositivo:** web.
 **Objetivo:** definir preços por classe/subtipo e trecho, com reajuste em massa seguro.
+> **Fonte inicial recebida:** FAQ 2026 (`docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`) traz preços de passagem por destino/classe para popular o mock e orientar a carga inicial versionada. Não hard-code no backend.
 
 ```
 ┌ Cadastros › Preços › Passagem ──────────── v.3 vigente ──┐
@@ -249,5 +250,5 @@
 
 ## Dependências e pendências do módulo
 - **Consumido por:** Vendas (preços), CRM (clientes/agentes), TMS (agente como recebedor), Navegação (escalas), Financeiro/Fase 2 (fornecedores, comissão).
-- 🔶 Valores de preço de encomenda (Lucas); regras de comissão de agentes (diretoria); provedor de WhatsApp (escala).
+- 🔶 Valores de preço de encomenda (Lucas); regras de comissão de agentes (diretoria); provedor de WhatsApp (escala). Preços de passagem têm fonte inicial no FAQ 2026, com validação residual de divergências/restrições antes do backend definitivo.
 - Matriz inicial de perfis × permissões a validar com a diretoria.

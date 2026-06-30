@@ -8,7 +8,7 @@ import {
 } from "@/components/ops/primitives";
 import {
   USUARIOS, MATRIZ_PERMISSOES, PERMISSOES, PRECOS_PASSAGEM, PRECOS_CARGA,
-  FORNECEDORES, COLABORADORES,
+  FORNECEDORES, COLABORADORES, CIDADES,
 } from "@/mocks/data";
 
 export const Route = createFileRoute("/app/cadastros")({
@@ -121,6 +121,16 @@ function Cadastros() {
       {tab === "precos_passagem" && (
         <div className="mt-5 space-y-4">
           <div className="surface-card flex flex-wrap items-center gap-3 p-4">
+            <span className="text-sm font-medium">Cobrança intertrecho</span>
+            <select className="h-9 rounded-md bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)]">
+              {CIDADES.map((c) => <option key={c.sigla}>Saindo de {c.nome}</option>)}
+            </select>
+            <select className="h-9 rounded-md bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)]">
+              {CIDADES.map((c) => <option key={c.sigla}>Indo para {c.nome}</option>)}
+            </select>
+            <span className="text-xs text-muted-foreground">Tabela final será repassada pelo Lucas.</span>
+          </div>
+          <div className="surface-card flex flex-wrap items-center gap-3 p-4">
             <Percent className="h-4 w-4 text-[color:var(--brand)]" />
             <span className="text-sm font-medium">Reajuste em massa</span>
             <span className="text-xs text-muted-foreground">aplica % a todos os trechos desta tabela.</span>
@@ -154,12 +164,18 @@ function Cadastros() {
       )}
 
       {tab === "precos_carga" && (
-        <div className="mt-5">
+        <div className="mt-5 space-y-4">
+          <div className="surface-card p-4">
+            <p className="text-sm font-medium text-foreground">Variação por cliente e cidade destino</p>
+            <p className="mt-1 text-xs text-muted-foreground">Tabela de carga pode ser amarrada a cliente específico e variar por destino/intertrecho.</p>
+          </div>
           <DataTable
-            rows={PRECOS_CARGA.map((p, i) => ({ id: String(i), ...p }))}
+            rows={PRECOS_CARGA.map((p, i) => ({ id: String(i), idx: i, ...p }))}
             columns={[
               { key: "tier", header: "Tier", render: (r) => <span className="font-mono font-semibold">{r.tier}</span> },
               { key: "descricao", header: "Descrição" },
+              { key: "cliente", header: "Cliente vinculado", render: (r) => <span className="text-xs text-muted-foreground">{r.idx % 2 === 0 ? "Tabela geral" : "Ferragens Amazônia"}</span> },
+              { key: "destino", header: "Destino", render: (r) => <span className="font-mono text-xs">{CIDADES[(r.idx + 2) % CIDADES.length].sigla}</span> },
               { key: "percentual", header: "% sobre declarado", align: "right", render: (r) => <span className="font-mono font-semibold">{r.percentual.toFixed(1)}%</span> },
             ]}
           />
@@ -195,9 +211,10 @@ function Cadastros() {
             <FilterChip>Atendimento</FilterChip>
           </FilterBar>
           <DataTable
-            rows={COLABORADORES}
+            rows={COLABORADORES.map((c, i) => ({ ...c, idx: i }))}
             columns={[
               { key: "nome", header: "Colaborador", render: (r) => <span className="font-medium">{r.nome}</span> },
+              { key: "cpf", header: "CPF", render: (r) => <span className="font-mono text-xs text-muted-foreground">{`000.000.00${r.idx}-0${r.idx}`}</span> },
               { key: "funcao", header: "Função", render: (r) => <span className="text-xs">{r.funcao}</span> },
               { key: "cidade", header: "Cidade" },
               { key: "whatsapp", header: "WhatsApp", render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.whatsapp}</span> },

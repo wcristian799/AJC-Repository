@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import {
-  Ship, Boxes, Ticket, TrendingUp, AlertTriangle, ArrowRight,
-  Activity, Radio, Anchor, Zap,
+  Ship, Boxes, TrendingUp, AlertTriangle, ArrowRight,
+  Activity, Radio, Anchor, BellPlus,
 } from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
 import {
@@ -30,6 +30,13 @@ function Inicio() {
   const passageirosAtivos = emCurso.reduce((s, v) => s + v.passageiros, 0);
   const volumesTransito = emCurso.reduce((s, v) => s + v.volumes, 0);
   const alertasCriticos = ALERTAS.filter((a) => a.severidade === "danger").length;
+
+  const caixasPorTipo = [
+    { tipo: "Porto", itens: CAIXAS.filter((c) => c.tipo === "porto") },
+    { tipo: "Embarcações", itens: CAIXAS.filter((c) => c.tipo === "embarcacao") },
+    { tipo: "Agentes", itens: CAIXAS.filter((c) => c.tipo === "agente") },
+    { tipo: "Apoio", itens: CAIXAS.filter((c) => !["porto", "embarcacao", "agente"].includes(c.tipo)) },
+  ].filter((g) => g.itens.length > 0);
 
   const tickerItems = [
     <>V-0418 cruzou GUR · <span className="text-foreground">02:42</span></>,
@@ -92,6 +99,7 @@ function Inicio() {
             >
               <PrimaryButton icon={Ship}>Nova viagem</PrimaryButton>
               <GhostButton icon={ArrowRight}>Relatório do dia</GhostButton>
+              <GhostButton icon={BellPlus}>Cadastrar alerta</GhostButton>
               <GhostButton icon={Radio}>Escuta operacional</GhostButton>
             </motion.div>
 
@@ -167,7 +175,7 @@ function Inicio() {
           <div className="flex items-center">
             <div className="flex items-center gap-2 border-r border-[color:var(--hairline)] px-4">
               <Activity className="h-3.5 w-3.5 text-[color:var(--brand)]" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/80">Feed ao vivo</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/80">Feed ao vivo · eventos da plataforma</span>
             </div>
             <div className="min-w-0 flex-1">
               <Ticker items={tickerItems} speed={55} />
@@ -268,7 +276,10 @@ function Inicio() {
                 <p className="mt-0.5 text-xs text-muted-foreground">{alertasCriticos} crítico(s) · ação imediata</p>
               </div>
             </div>
-            <Zap className="h-4 w-4 text-[color:var(--brand)]" />
+            <button className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)] hover:bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)]">
+              <BellPlus className="h-3.5 w-3.5" />
+              Cadastrar
+            </button>
           </div>
           <ul className="divide-y divide-[color:var(--hairline)]">
             {ALERTAS.map((a, i) => (
@@ -303,13 +314,25 @@ function Inicio() {
         <SectionHeader
           eyebrow="Tesouraria"
           title="Caixas em tempo real"
-          description="Porto, balsas, encomendas, agentes e lanchonetes consolidados."
+          description="Porto, embarcações, agentes e caixas de apoio separados por tipo operacional."
           actions={
             <Link to="/app/financeiro" className="text-xs font-medium text-[color:var(--brand)] hover:underline">
               Ir para Financeiro →
             </Link>
           }
         />
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {caixasPorTipo.map((grupo) => {
+            const totalGrupo = grupo.itens.reduce((s, c) => s + c.saldo, 0);
+            return (
+              <div key={grupo.tipo} className="surface-card p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{grupo.tipo}</p>
+                <p className="big-numeric mt-2 text-2xl text-foreground">R$ <CountUp to={totalGrupo} duration={1.2} /></p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{grupo.itens.length} caixa(s) neste tipo</p>
+              </div>
+            );
+          })}
+        </div>
         <div className="surface-card mt-4 grid grid-cols-2 gap-px overflow-hidden bg-[color:var(--hairline)] md:grid-cols-3 xl:grid-cols-4">
           {CAIXAS.map((c, i) => (
             <motion.div

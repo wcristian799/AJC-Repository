@@ -2,7 +2,7 @@
 
 > Canais: **Site, App, PDV (porto), Totem**. Núcleo: venda de passagem com **QR Code**, validação no embarque por **pulseira por classe**, e controle regulatório de **gratuidades/cortesias**. Inclui também a venda de despacho de encomendas no PDV (precificação detalhada no módulo Encomendas).
 >
-> **Escopo MVP:** o **portal público de venda online com pagamento integrado** faz parte do MVP (Fase 1) — detalhamento na **Parte C**. Emissão fiscal do bilhete (BP-e) é dependência em aberto (🔶 confirmar com Lucas/contador, ver §C.7).
+> **Escopo MVP:** o **portal público de venda online com pagamento integrado** faz parte do MVP (Fase 1) — detalhamento na **Parte C**. Emissão fiscal do bilhete (BP-e) é dependência parcial: PFX recebido em 29/jun/2026, mas ainda falta senha/validade/credenciamento/fornecedor fiscal (ver §C.7).
 
 ---
 
@@ -20,6 +20,14 @@
 | Contrato | Sim (faturada depois) | conforme classe | Consumida na viagem, faturada no fim do mês |
 
 > A cor da pulseira é configurável por classe. O app de validação exibe a cor correta após ler o QR.
+
+### A.1.1 Fonte operacional de preços — FAQ 2026
+
+- O FAQ 2026 recebido em 30/jun/2026 traz uma tabela inicial de preços de passagem por destino/classe para Prainha, Monte Alegre, Santarém, Breves, Gurupá, Almeirim e Porto de Moz.
+- Fonte detalhada: `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`.
+- Esses valores servem como referência visual e como insumo inicial do cadastro versionado de preços; no backend, devem entrar em `tabela_preco`/`item_preco`, com vigência e reajuste, nunca hard-coded.
+- O FAQ também confirma formas atuais de pagamento: dinheiro, PIX, crédito e débito, com parcelamento até 2x com acréscimo da máquina.
+- O FAQ informa regras públicas de meia/isento: 0 a 5 anos isento; 6 a 11 meia; estudante/ID Jovem/INTERPASS mediante central; idoso 60+ como meia no texto. Validar juridicamente antes de consolidar a regra final de gratuidade/meia no backend.
 
 ### A.2 Geração e validação de QR Code
 - Cada bilhete gera um **QR único** (token assinado, não sequencial e não adivinhável), vinculado a viagem + classe + passageiro.
@@ -84,7 +92,7 @@ NPS (id, viagem_id, cliente_id, nota, comentario, respondido_em)
 ### B.3 PDV de passagens (porto)
 **Persona:** Operador de caixa.
 - Busca rápida de viagem; seleção de classe; identificação do passageiro (CPF) ou venda avulsa.
-- Formas de pagamento; **impressão do QR**.
+- Formas de pagamento; **impressão do QR**. FAQ 2026 confirma dinheiro, PIX, crédito e débito; parcelamento até 2x com acréscimo.
 - Acesso a **cortesia** (inserir código) e **gratuidade** (selecionar tipo legal + comprovante).
 - Vínculo ao **caixa** do operador (integra Tesouraria/Financeiro).
 - Estados: esgotado; erro de impressão (reimprimir); offline (fila).
@@ -149,8 +157,8 @@ NPS (id, viagem_id, cliente_id, nota, comentario, respondido_em)
 - 🔶 Tabela/mecânica de preços de **encomendas** (Lucas) — afeta B.9.
 - Definição das **cores de pulseira** por classe.
 - Confirmar **gateway de pagamento** e meios (PIX/cartão) por canal.
-- Subtipos de **camarote** (ex.: Royal) e seus preços/atributos.
-- 🔶 **Emissão fiscal do bilhete (BP-e)** — confirmar com Lucas/contador se é obrigatória no MVP e qual o caminho (SeFAZ-PA, certificado, credenciamento). Ver Parte C §C.7.
+- Preços de passagem foram parcialmente resolvidos pelo FAQ 2026, mas subtipos/restrições por embarcação e divergências internas de horário/viagem ainda precisam validação antes do cadastro definitivo.
+- 🔶 **Emissão fiscal do bilhete (BP-e)** — PFX da AJC recebido em 29/jun/2026; ainda confirmar senha, validade/uso, obrigatoriedade por canal, credenciamento SEFAZ-PA e fornecedor/API. Ver Parte C §C.7.
 
 ---
 
@@ -205,9 +213,12 @@ Bilhete (após emitido): emitido → validado(embarcado) → usado | cancelado |
 - **Área "Minhas viagens":** bilhetes ativos e passados, **reenvio do QR**, status de embarque, comprovantes, 2ª via.
 - **Recuperação de senha** e **recuperação de bilhete** por e-mail/WhatsApp (cliente perde o e-mail com frequência).
 
-### C.7 Emissão fiscal do bilhete — 🔶 dependência em aberto
-- Passagem hidroviária normalmente exige documento fiscal próprio (**BP-e — Bilhete de Passagem eletrônico**), com transmissão à SEFAZ, possível **certificado digital** e **credenciamento**.
-- **Status:** a confirmar com **Lucas/contador** — se o BP-e é obrigatório já no MVP, qual o modelo atual da AJC, e se há API/fornecedor.
+### C.7 Emissão fiscal do bilhete — 🔶 dependência parcial
+- Passagem hidroviária normalmente exige documento fiscal próprio (**BP-e — Bilhete de Passagem eletrônico**), com transmissão à SEFAZ, possível **certificado digital** e **credenciamento**. Cliente informou que **BP-e é obrigatório desde 2019** (validação 2026-06-25).
+- **Regra por canal (atualizado pós-validação 2026-06-25):**
+  - **PDV (porto):** o operador escolhe **emitir ou não emitir BP-e no ato da venda**, usando o certificado digital.
+  - **Site/App público:** emissão **automática/obrigatória**.
+- **Status:** certificado digital PFX da AJC recebido em 29/jun/2026 (`docs/feedback/2026-06-29-certificado-digital-ajc-pfx.md`). Ainda confirmar senha do PFX, validade/cadeia/uso, obrigatoriedade por canal, credenciamento SEFAZ-PA e se há API/fornecedor fiscal.
 - **Arquitetura preparada:** o ponto de emissão fiscal é um **passo plugável** após `pago` (antes ou junto de `emitido`). Se a confirmação atrasar, o portal pode entregar o **QR de embarque** no MVP e a emissão fiscal pluga depois sem retrabalho do fluxo.
 
 ### C.8 Antifraude e segurança (mínimos do MVP)

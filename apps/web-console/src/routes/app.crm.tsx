@@ -66,12 +66,32 @@ function CRM() {
 
       {tab === "clientes" && (
         <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar por nome, CPF/CNPJ…" right={<PrimaryButton icon={Plus}>Novo cliente</PrimaryButton>}>
+          <FilterBar
+            searchPlaceholder="Buscar por nome, CPF/CNPJ…"
+            right={
+              <div className="flex flex-wrap items-center gap-2">
+                <select className="h-9 rounded-md bg-[color:var(--muted)] px-3 text-xs text-foreground ring-1 ring-[color:var(--hairline)]">
+                  <option>Cidade/UF · todas</option>
+                  {CIDADES.map((c) => <option key={c.sigla}>{c.nome}/PA</option>)}
+                  <option>Outro estado</option>
+                </select>
+                <PrimaryButton icon={Plus}>Novo cliente</PrimaryButton>
+              </div>
+            }
+          >
             <FilterChip active>Todos</FilterChip>
             <FilterChip>PF</FilterChip>
             <FilterChip>PJ</FilterChip>
             {CIDADES.slice(0, 4).map((c) => <FilterChip key={c.sigla}>{c.sigla}</FilterChip>)}
           </FilterBar>
+          <div className="surface-card p-4">
+            <p className="text-sm font-medium text-foreground">Cadastro rápido · campos aguardando Lucas</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              {["Nome/Razão social", "CPF/CNPJ", "Telefone", "Cidade/UF"].map((campo) => (
+                <div key={campo} className="rounded-md bg-[color:var(--muted)] px-3 py-2 text-xs text-muted-foreground ring-1 ring-[color:var(--hairline)]">{campo}</div>
+              ))}
+            </div>
+          </div>
           <DataTable
             rows={CLIENTES}
             onRowClick={(r) => setAberto(r)}
@@ -158,7 +178,7 @@ function CRM() {
             ]}
           />
           <p className="text-center text-[11px] text-muted-foreground">
-            Cotação não compromete vaga. Encomenda usa o motor de preços (🔶 Lucas); carga/veículo usam tabela pronta.
+            Cotação não compromete vaga. Campos finais da cotação vêm do Lucas; encomenda usa motor de preços (🔶 Lucas), carga/veículo usam tabela pronta.
           </p>
         </div>
       )}

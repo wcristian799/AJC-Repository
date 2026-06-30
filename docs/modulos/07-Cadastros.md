@@ -21,6 +21,7 @@
 
 ### A.2 Motor de preços
 - Três tabelas: **passagem** (por classe/subtipo/trecho), **encomenda** (P/M/G + percentual, por trecho 🔶), **carga** (tier = % de preço).
+- Para passagem, o FAQ 2026 recebido em 30/jun/2026 traz valores iniciais por destino/classe. Fonte: `docs/feedback/2026-06-30-faq-2026-paradas-precos-passagens.md`.
 - **Reajuste em massa ± X%:** aplica percentual a todas as categorias de uma tabela de uma vez (sobe/desce X%).
 - Histórico de versões de preço (auditoria de reajustes).
 
@@ -64,6 +65,7 @@ TabelaPreco (id, tipo[passagem|encomenda|carga], versao, vigente_desde)
 
 ### B.5 Cadastro de preços — passagem
 - Por classe (Rede/VIP/Camarote + subtipos) e trecho.
+- Insumo inicial: tabela do FAQ 2026 para Prainha, Monte Alegre, Santarém, Breves, Gurupá, Almeirim e Porto de Moz.
 - **Botão de reajuste em massa ± X%** (sobe/desce todas as categorias).
 - Pré-visualização do impacto antes de aplicar; histórico de versões.
 

@@ -18,7 +18,10 @@ import { PrecoDestaque, TermoDC, ResumoLinha } from "./shared";
 export function DespachoTab() {
   // Remetente / destinatário
   const [remetente, setRemetente] = useState(CLIENTES[0].nome);
+  const [remDoc, setRemDoc] = useState(CLIENTES[0].documento);
+  const [remContato, setRemContato] = useState("(91) 98888-1000");
   const [destinatario, setDestinatario] = useState("");
+  const [destDoc, setDestDoc] = useState("");
   const [destContato, setDestContato] = useState("");
   // Trecho / dimensionamento
   const [trecho, setTrecho] = useState(ENCOMENDA_TRECHOS[0]);
@@ -28,6 +31,7 @@ export function DespachoTab() {
   const [conteudo, setConteudo] = useState("");
   // Pagamento / DC
   const [quemPaga, setQuemPaga] = useState<EncomendaPagador>("remetente");
+  const [documentoTipo, setDocumentoTipo] = useState<"DC" | "NF">("DC");
   const [dcAssinada, setDcAssinada] = useState(false);
   const [offline] = useState(true);
   const [emitido, setEmitido] = useState(false);
@@ -42,7 +46,7 @@ export function DespachoTab() {
   const tamanhoSugerido = peso > 0 ? sugerirTamanhoPorPeso(peso) : null;
   const valorObrigatorioVazio = valorDeclarado <= 0;
 
-  const podeConfirmar = !!destinatario && !valorObrigatorioVazio && !pesoExcede && dcAssinada;
+  const podeConfirmar = !!remDoc && !!remContato && !!destinatario && !!destDoc && !!destContato && !valorObrigatorioVazio && !pesoExcede && dcAssinada;
 
   return (
     <div className="mt-5 space-y-4">
@@ -63,23 +67,43 @@ export function DespachoTab() {
             <label className="block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Cliente cadastrado</label>
             <select
               value={remetente}
-              onChange={(e) => setRemetente(e.target.value)}
+              onChange={(e) => {
+                const cliente = CLIENTES.find((c) => c.nome === e.target.value);
+                setRemetente(e.target.value);
+                setRemDoc(cliente?.documento ?? "");
+              }}
               className="mt-1 h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
             >
               {CLIENTES.map((c) => (
                 <option key={c.id} value={c.nome}>{c.nome} · {c.documento}</option>
               ))}
             </select>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="CPF/CNPJ do remetente">
+                <input value={remDoc} onChange={(e) => setRemDoc(e.target.value)} className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
+              </Field>
+              <Field label="Telefone do remetente">
+                <input value={remContato} onChange={(e) => setRemContato(e.target.value)} className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
+              </Field>
+            </div>
           </StepCard>
 
           {/* 2 · Destinatário */}
           <StepCard n={2} icon={UserCheck} title="Destinatário" hint="Nome + contato para notificação de entrega (WhatsApp/SMS).">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Field label="Nome do destinatário">
                 <input
                   value={destinatario}
                   onChange={(e) => setDestinatario(e.target.value)}
                   placeholder="Nome completo"
+                  className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
+                />
+              </Field>
+              <Field label="CPF/CNPJ">
+                <input
+                  value={destDoc}
+                  onChange={(e) => setDestDoc(e.target.value)}
+                  placeholder="CPF ou CNPJ"
                   className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
                 />
               </Field>
@@ -217,6 +241,21 @@ export function DespachoTab() {
 
           {/* 7 · DC */}
           <StepCard n={7} icon={FileSignature} title="Declaração de Conteúdo" hint="Abre o termo com cláusula de exclusão e assinatura em tela (aba dedicada).">
+            <div className="mb-3 grid grid-cols-2 gap-2">
+              {(["DC", "NF"] as const).map((tipo) => (
+                <button
+                  key={tipo}
+                  onClick={() => setDocumentoTipo(tipo)}
+                  className={`h-10 rounded-lg text-sm font-medium ring-1 transition-colors ${
+                    documentoTipo === tipo
+                      ? "bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-[color:var(--brand)] ring-[color:var(--hairline-brand)]"
+                      : "bg-[color:var(--muted)] text-foreground/80 ring-[color:var(--hairline)]"
+                  }`}
+                >
+                  {tipo === "DC" ? "Declaração de Conteúdo" : "Nota Fiscal"}
+                </button>
+              ))}
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 {dcAssinada
@@ -241,11 +280,17 @@ export function DespachoTab() {
             <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Resumo do despacho</p>
             <div className="mt-2">
               <ResumoLinha label="Remetente"><span className="truncate">{remetente}</span></ResumoLinha>
+              <ResumoLinha label="CPF/CNPJ remetente">{remDoc || <span className="text-muted-foreground">—</span>}</ResumoLinha>
+              <ResumoLinha label="Telefone remetente">{remContato || <span className="text-muted-foreground">—</span>}</ResumoLinha>
               <ResumoLinha label="Destinatário">{destinatario || <span className="text-muted-foreground">—</span>}</ResumoLinha>
+              <ResumoLinha label="CPF/CNPJ destinatário">{destDoc || <span className="text-muted-foreground">—</span>}</ResumoLinha>
+              <ResumoLinha label="Telefone destinatário">{destContato || <span className="text-muted-foreground">—</span>}</ResumoLinha>
               <ResumoLinha label="Trecho"><span className="font-mono">{trecho}</span></ResumoLinha>
               <ResumoLinha label="Tamanho / peso">{tamanho} · {peso || 0} kg</ResumoLinha>
               <ResumoLinha label="Valor declarado">{brl(valorDeclarado)}</ResumoLinha>
+              <ResumoLinha label="Documento">{documentoTipo}</ResumoLinha>
               <ResumoLinha label="Quem paga"><span className="capitalize">{quemPaga}</span></ResumoLinha>
+              <ResumoLinha label="Efeito financeiro">{quemPaga === "remetente" ? "entra no caixa" : "gera contas a receber"}</ResumoLinha>
               <ResumoLinha label="Frete cobrado"><span className="text-[color:var(--brand)]">{brl(resultado.preco)}</span></ResumoLinha>
             </div>
 
@@ -255,7 +300,7 @@ export function DespachoTab() {
               </PrimaryButton>
               {!podeConfirmar && (
                 <p className="text-[11px] text-muted-foreground">
-                  Para confirmar: destinatário, valor declarado, peso compatível e DC assinada.
+                  Para confirmar: remetente/destinatário completos, valor declarado, peso compatível e documento assinado/anexado.
                 </p>
               )}
               {emitido && (

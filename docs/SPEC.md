@@ -84,7 +84,7 @@ Consolidadas do cliente — ver também cada módulo:
 - Tabela/mecânica de preços de encomendas (Lucas).
 - Termo de aceite de embarque (AJC).
 - Modelo de declaração de conteúdo + cláusula de exclusão (Lucas).
-- Modelo de prestação de contas em papel (digitalizar).
+- Modelo de prestação de contas em papel recebido em 29/jun/2026; digitalizar/melhorar no front.
 - Termo de aceite de veículos.
 - Regras de comissão de agentes.
 - Viabilidade da API de rastreio NF/boleto no CNPJ.

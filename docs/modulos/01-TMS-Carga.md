@@ -71,8 +71,8 @@ recebido+embarcado ────────────────────�
 
 ### A.5 Integrações
 - **WhatsApp/SMS** (notificação de entrega a remetente e destinatário).
-- **Impressora de etiquetas** (térmica) para QR/UUID.
-- **Coletor/Palm** com câmera e leitor (app nativo ou PWA com acesso à câmera).
+- **Impressora de etiquetas** (térmica, **via Bluetooth**) para QR/UUID (atualizado pós-validação 2026-06-25).
+- **Celular comum** com câmera e leitor (app nativo Capacitor ou PWA com acesso à câmera) — hardware de campo é celular comum, não coletor industrial (atualizado pós-validação 2026-06-25).
 - **Balança** (no PDV de encomendas; ver módulo Vendas/Encomendas).
 - **GPS** do dispositivo para georreferência dos eventos.
 
@@ -119,9 +119,32 @@ recebido+embarcado ────────────────────�
 
 **Objetivo:** permitir que o cliente/agente suba a NF/DC antes ou no momento do envio.
 
-**Campos:** seleção da carga/envio relacionado; tipo de documento (NF-e / NFC-e / Declaração de Conteúdo); upload de arquivo (PDF/foto) ou número da chave de NF-e; valor.
+**Campos:** seleção da carga/envio relacionado; tipo de documento (NF-e / NFC-e / Declaração de Conteúdo); upload de arquivo (PDF/foto) ou número da chave de NF-e; valor. **Dados de remetente e destinatário** (cada um com nome completo ou razão social, CPF/CNPJ e telefone) — atualizado pós-validação 2026-06-25, o antigo campo único "carga/envio" estava ambíguo.
+
+**Agendamento de recebimento de carga** (atualizado pós-validação 2026-06-25): junto do upload da NF/DC, o cliente/agente agenda **dia** e **horário** de entrega no porto. Janelas de **30 em 30 minutos**, com no máximo **5 caminhões por janela**.
 
 **Estados:** *Vazio* (nenhum doc enviado) · *Carregando* (upload) · *Erro* (arquivo grande/ inválido) · *Sucesso* ("Documento enviado, aguardando conferência").
+
+---
+
+### B.2.1 Nova Carga
+**Persona:** ADM Notas, Comercial, Agente ou Operação. **Plataforma:** Web.
+
+**Fonte:** campos recebidos do Lucas em 30/jun/2026 (`docs/feedback/2026-06-30-lucas-campos-navegacao-tms.md`).
+
+**Objetivo:** abrir uma carga vinculada a uma viagem, NF/DC e cliente, gerando os identificadores que serão usados na rastreabilidade.
+
+**Campos/regras:**
+- Número do pedido e venda: `COD CLIENTE + NUMERO DE NF/DC`.
+- UUID de carga / QR Code: gerado automaticamente pelo sistema.
+- Código de carga: gerado automaticamente pelo sistema.
+- Selecionar viagem.
+- Origem.
+- Destino.
+- Cliente: puxar da NF/DC ou preencher manualmente.
+- Upload de nota/DC.
+- Peso: puxar da NF/DC ou preencher manualmente.
+- Valor de nota/DC: puxar da NF/DC ou preencher manualmente.
 
 ---
 
@@ -243,13 +266,14 @@ recebido+embarcado ────────────────────�
 ---
 
 ### B.10 Prestação de contas do gerente da embarcação
-**Persona:** Gerente da embarcação. **Plataforma:** Web/App. *(Digitalizar o modelo atual em papel — 🔶 pendente do cliente.)*
+**Persona:** Gerente da embarcação. **Plataforma:** Web/App. *(Modelo atual em papel recebido em 29/jun/2026 — digitalizar/melhorar; ver `docs/feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md`.)*
 
 **Objetivo:** consolidar o resultado financeiro/operacional da viagem e permitir o **cruzamento automático com o contas a receber**.
 
 **Componentes:**
 - Resumo da viagem: passageiros, encomendas, cargas, veículos.
 - Itens lançados pelo gerente (receitas/despesas da viagem) vs. itens do sistema.
+- Estrutura real do formulário: cabeçalho com embarcação/viagem/período/caixa; receitas À bordo; cozinha/lanchonete/internet; passagens por agências com comissão/saldo; fretes por agências; despesas; redondas/gratificações; fechamento com receita total, despesa total e saldo repassado; local/data e responsável.
 - **Divergência** destacada (declarado vs. sistema).
 - Anexos (fotos, comprovantes).
 - Status: rascunho → enviada → conferida.
@@ -283,7 +307,7 @@ recebido+embarcado ────────────────────�
 
 ## Pendências deste módulo
 - 🔶 Modelo de **declaração de conteúdo** + cláusula de exclusão de responsabilidade (Lucas).
-- 🔶 Modelo atual de **prestação de contas** em papel para digitalizar.
+- ✅ Modelo atual de **prestação de contas** em papel recebido em 29/jun/2026; refinamento do front pendente em B.10.
 - 🔶 Texto do **termo de aceite de veículos**.
 - 🔶 Regras de **preço/tamanho/trecho** que afetam a precificação da carga/encomenda no recebimento.
 - Confirmar especificação do **coletor/Palm** (modelo, SO) para decidir app nativo vs. PWA.

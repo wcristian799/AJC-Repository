@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ScanLine, Camera, PenLine } from "lucide-react";
-import { OfflineBanner, CounterBadge } from "@/components/ops/primitives";
+import { ScanLine, Camera, PenLine, Layers, PackageOpen, Car } from "lucide-react";
+import { OfflineBanner, CounterBadge, StatusChip, Tag } from "@/components/ops/primitives";
 import { PhoneFrame } from "./PhoneFrame";
 import { VIAGENS, EMBARCACOES } from "@/mocks/data";
 
 /** B.4/B.7 — App Conferente (coletor): conferência de embarque, 2º bipe e entrega. */
 export function ColetorTab() {
   const [screen, setScreen] = useState<"home" | "conf" | "entrega">("home");
+  const [modo, setModo] = useState<"palete" | "avulso" | "veiculo">("palete");
   const [count, setCount] = useState(0);
-  const total = 15;
+  const total = modo === "palete" ? 15 : modo === "avulso" ? 8 : 1;
   const viagem = VIAGENS.find((v) => v.status === "em_curso");
   const emb = EMBARCACOES.find((e) => e.id === viagem?.embarcacaoId);
 
@@ -33,8 +34,10 @@ export function ColetorTab() {
               </div>
 
               <div className="mt-6 space-y-2">
-                <BigSelectItem label="Conferência de embarque" hint="Bipar volumes da carga" onClick={() => { setScreen("conf"); setCount(0); }} />
-                <BigSelectItem label="2º bipe (cross-docking)" hint="Reconferir antes do desembarque" onClick={() => { setScreen("conf"); setCount(8); }} />
+                <BigSelectItem icon={Layers} label="Recebimento com palete" hint="Viagem → palete → NF/DC → quantidade → completo/parcial" onClick={() => { setModo("palete"); setScreen("conf"); setCount(0); }} />
+                <BigSelectItem icon={PackageOpen} label="Mercadoria avulsa / porão" hint="NF/DC → etiqueta todos os volumes → bipe volume a volume" onClick={() => { setModo("avulso"); setScreen("conf"); setCount(0); }} />
+                <BigSelectItem icon={Car} label="Veículo / máquina" hint="Checklist, fotos, etiqueta, bipe de subida e descida" onClick={() => { setModo("veiculo"); setScreen("conf"); setCount(0); }} />
+                <BigSelectItem label="2º bipe (cross-docking)" hint="Reconferir antes do desembarque" onClick={() => { setModo("palete"); setScreen("conf"); setCount(8); }} />
                 <BigSelectItem label="Entrega com prova" hint="Foto + assinatura" onClick={() => setScreen("entrega")} />
               </div>
             </motion.div>
@@ -53,8 +56,40 @@ export function ColetorTab() {
 
               <OfflineBanner pending={3} />
 
+              <div className="mt-3 rounded-2xl bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
+                {modo === "palete" && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Tag tone="warning">PC</Tag>
+                      <Tag tone="brand">MP</Tag>
+                      <Tag tone="neutral">PD</Tag>
+                      <StatusChip tone="warning" size="xs">parcialmente completo</StatusChip>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">Selecione viagem, palete e NF/DC. Informe volumes alocados e marque completo ou parcial.</p>
+                  </>
+                )}
+                {modo === "avulso" && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Tag tone="info">sem palete</Tag>
+                      <StatusChip tone="brand" size="xs">etiqueta volume a volume</StatusChip>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">Mercadoria de porão/avulsa: disponibiliza NF/DC, digita quantidade, imprime etiqueta em todos os volumes e bipa cada um.</p>
+                  </>
+                )}
+                {modo === "veiculo" && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Tag tone="brand">veículo/máquina</Tag>
+                      <StatusChip tone="warning" size="xs">checklist + fotos</StatusChip>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">Checklist de envio, etiqueta Bluetooth, bipe de subida na balsa e bipe de descida no destino.</p>
+                  </>
+                )}
+              </div>
+
               <div className="mt-4 flex-1">
-                <CounterBadge current={count} total={total} label="Volumes conferidos" />
+                <CounterBadge current={count} total={total} label={modo === "veiculo" ? "Etapas conferidas" : "Volumes conferidos"} />
               </div>
 
               <button
@@ -62,7 +97,7 @@ export function ColetorTab() {
                 className="mt-4 flex h-16 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-[color:var(--brand)] to-[color:var(--brand-soft)] text-base font-semibold text-primary-foreground shadow-[0_18px_40px_-12px_color-mix(in_oklab,var(--brand)_70%,transparent)] active:scale-[0.98]"
               >
                 <ScanLine className="h-6 w-6" />
-                Bipar volume
+                {modo === "veiculo" ? "Bipar veículo/máquina" : "Bipar volume"}
               </button>
             </motion.div>
           )}
@@ -105,7 +140,7 @@ export function ColetorTab() {
   );
 }
 
-function BigSelectItem({ label, hint, onClick }: { label: string; hint: string; onClick: () => void }) {
+function BigSelectItem({ label, hint, onClick, icon: Icon = ScanLine }: { label: string; hint: string; onClick: () => void; icon?: React.ComponentType<{ className?: string }> }) {
   return (
     <button
       onClick={onClick}

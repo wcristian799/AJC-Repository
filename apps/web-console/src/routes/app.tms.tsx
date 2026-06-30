@@ -4,6 +4,7 @@ import {
   Boxes, Smartphone, Plus,
   CheckCircle2, AlertTriangle, FileText, Layers,
   ClipboardCheck, Tag as TagIcon, Ship,
+  Car,
 } from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
 import {
@@ -15,13 +16,14 @@ import { PaletesTab } from "@/components/ops/tms/PaletesTab";
 import { PrestacaoTab } from "@/components/ops/tms/PrestacaoTab";
 import { EtiquetaTab } from "@/components/ops/tms/EtiquetaTab";
 import { ControleTab } from "@/components/ops/tms/ControleTab";
+import { VeiculosTab } from "@/components/ops/tms/VeiculosTab";
 
 export const Route = createFileRoute("/app/tms")({
   head: () => ({ meta: [{ title: "TMS / Carga · AJC Suite" }] }),
   component: TMS,
 });
 
-type Tab = "ctrl" | "notas" | "paletes" | "prestacao" | "etiqueta";
+type Tab = "ctrl" | "notas" | "paletes" | "prestacao" | "etiqueta" | "veiculos";
 
 type TabDef = { id: Tab; label: string; spec: string; icon: React.ComponentType<{ className?: string }> };
 
@@ -35,6 +37,7 @@ const TAB_GROUPS: { group: string; tabs: TabDef[] }[] = [
       { id: "notas",     label: "Notas & DC",          spec: "B.2/B.3", icon: FileText },
       { id: "paletes",   label: "Paletes",             spec: "B.6", icon: Layers },
       { id: "etiqueta",  label: "Etiqueta",            spec: "B.5", icon: TagIcon },
+      { id: "veiculos",  label: "Veículos/Máquinas",   spec: "RF-5", icon: Car },
       { id: "prestacao", label: "Prestação de contas", spec: "B.10", icon: ClipboardCheck },
     ],
   },
@@ -42,6 +45,7 @@ const TAB_GROUPS: { group: string; tabs: TabDef[] }[] = [
 
 function TMS() {
   const [tab, setTab] = useState<Tab>("ctrl");
+  const [showNovaCarga, setShowNovaCarga] = useState(false);
 
   const total = VOLUMES.length;
   const conferidos = VOLUMES.filter((v) => v.status !== "recebido").length;
@@ -63,7 +67,7 @@ function TMS() {
               <Smartphone className="h-4 w-4" strokeWidth={1.7} />
               Abrir app de campo
             </Link>
-            <PrimaryButton icon={Plus}>Nova carga</PrimaryButton>
+            <PrimaryButton icon={Plus} onClick={() => setShowNovaCarga((v) => !v)}>Nova carga</PrimaryButton>
           </>
         }
       />
@@ -74,6 +78,41 @@ function TMS() {
         <KPIStat index={2} label="Divergências" value={String(divergentes)} hint="bloqueia entrega" icon={AlertTriangle} />
         <KPIStat index={3} label="Entregues" value={String(entregues)} hint="com foto + assinatura" />
       </section>
+
+      {showNovaCarga && (
+        <section className="mt-6 surface-card brand-rail brand-rail-left p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Plus className="h-4 w-4 text-[color:var(--brand)]" />
+            <h3 className="font-display text-lg">Nova carga · fluxo mockado</h3>
+            <span className="rounded-full bg-[color:color-mix(in_oklab,var(--success)_14%,transparent)] px-2.5 py-1 text-[11px] text-[color:var(--success)] ring-1 ring-[color:color-mix(in_oklab,var(--success)_35%,transparent)]">campos Lucas (30/jun)</span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Pedido = COD CLIENTE + NF/DC. UUID/QR e código de carga gerados pelo sistema. Cliente, peso e valor podem ser puxados da NF/DC ou preenchidos manualmente.</p>
+
+          {/* Gerados pelo sistema */}
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <CargaField label="Número do pedido / venda" value="CLI-2041 · NF 18432" hint="COD CLIENTE + NF/DC" />
+            <CargaField label="UUID de carga / QR Code" value="a7f3-9c21-… · QR gerado" hint="auto" mono />
+            <CargaField label="Código de carga" value="CG-2026-0731" hint="auto" mono />
+          </div>
+
+          {/* Vínculo de viagem e trecho */}
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <CargaField label="Viagem" value="V-0418 · Belém → Santarém" hint="selecionar" />
+            <CargaField label="Origem" value="Belém (BEL)" />
+            <CargaField label="Destino" value="Santarém (STM)" />
+          </div>
+
+          {/* Cliente + NF/DC + valores */}
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <CargaField label="Cliente" value="Comercial Tapajós LTDA" hint="da NF/DC ou manual" />
+            <CargaField label="Upload de nota / DC" value="NF-18432.xml · anexado" hint="arquivo" />
+            <CargaField label="CIF / FOB" value="CIF" hint="quem paga o frete" />
+            <CargaField label="Peso" value="1.240 kg" hint="da NF/DC ou manual" mono />
+            <CargaField label="Valor da nota / DC" value="R$ 38.900,00" hint="da NF/DC ou manual" mono />
+            <CargaField label="Agendamento de recebimento" value="01/07 · janela 14:00–14:30" hint="máx 5 caminhões/janela" />
+          </div>
+        </section>
+      )}
 
       {/* Sub-navegação agrupada */}
       <nav className="mt-6 space-y-2">
@@ -106,7 +145,22 @@ function TMS() {
       {tab === "notas" && <NotasTab />}
       {tab === "paletes" && <PaletesTab />}
       {tab === "etiqueta" && <EtiquetaTab />}
+      {tab === "veiculos" && <VeiculosTab />}
       {tab === "prestacao" && <PrestacaoTab />}
     </AppShell>
+  );
+}
+
+function CargaField({ label, value, hint, mono }: { label: string; value: string; hint?: string; mono?: boolean }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+        {hint && <span className="text-[9px] text-muted-foreground/70">{hint}</span>}
+      </div>
+      <div className={`mt-1 flex min-h-10 items-center rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] ${mono ? "font-mono text-xs" : ""}`}>
+        {value}
+      </div>
+    </div>
   );
 }
