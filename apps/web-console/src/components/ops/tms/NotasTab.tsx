@@ -10,6 +10,7 @@ import {
   listTmsDocumentos,
   listTmsVolumes,
   printTmsEtiqueta,
+  type CidadeApi,
   type ClienteApi,
   type NavegacaoViagemApi,
   type TmsCargaApi,
@@ -52,6 +53,7 @@ const STATUS_TONE: Record<NotaDCStatus, "warning" | "success" | "danger"> = {
 /** B.2 upload cliente/agente + B.3 fila de lancamento ADM Notas. */
 export function NotasTab({
   cargas,
+  cidades,
   documentos: documentosApi,
   volumes,
   viagens,
@@ -61,6 +63,7 @@ export function NotasTab({
   onVolumesChange,
 }: {
   cargas?: TmsCargaApi[];
+  cidades?: CidadeApi[];
   documentos?: TmsDocumentoApi[];
   volumes?: TmsVolumeApi[];
   viagens?: NavegacaoViagemApi[];
@@ -239,8 +242,14 @@ export function NotasTab({
               <option value="DC">Declaracao de Conteudo</option>
             </FormSelect>
             <FormInput label="Numero NF/DC" value={manualForm.numero} onChange={(value) => setManualForm((prev) => ({ ...prev, numero: value }))} placeholder="NF/DC" />
-            <FormInput label="Origem" value={manualForm.cidadeOrigemSigla} onChange={(value) => setManualForm((prev) => ({ ...prev, cidadeOrigemSigla: value.toUpperCase() }))} maxLength={3} />
-            <FormInput label="Destino" value={manualForm.cidadeDestinoSigla} onChange={(value) => setManualForm((prev) => ({ ...prev, cidadeDestinoSigla: value.toUpperCase() }))} maxLength={3} />
+            <FormSelect label="Origem" value={manualForm.cidadeOrigemSigla} onChange={(value) => setManualForm((prev) => ({ ...prev, cidadeOrigemSigla: value }))}>
+              <option value="">Selecionar</option>
+              {(cidades ?? []).map((cidade) => <option key={`origem-${cidade.sigla}`} value={cidade.sigla}>{cidade.sigla} - {cidade.nome}</option>)}
+            </FormSelect>
+            <FormSelect label="Destino" value={manualForm.cidadeDestinoSigla} onChange={(value) => setManualForm((prev) => ({ ...prev, cidadeDestinoSigla: value }))}>
+              <option value="">Selecionar</option>
+              {(cidades ?? []).map((cidade) => <option key={`destino-${cidade.sigla}`} value={cidade.sigla}>{cidade.sigla} - {cidade.nome}</option>)}
+            </FormSelect>
             <FormInput label="Valor declarado" value={manualForm.valor} onChange={(value) => setManualForm((prev) => ({ ...prev, valor: value }))} inputMode="decimal" placeholder="0,00" />
             <FormInput label="Peso total" value={manualForm.pesoTotal} onChange={(value) => setManualForm((prev) => ({ ...prev, pesoTotal: value }))} inputMode="decimal" placeholder="kg" />
             <FormInput label="Volumes" value={manualForm.totalVolumes} onChange={(value) => setManualForm((prev) => ({ ...prev, totalVolumes: value }))} inputMode="numeric" />

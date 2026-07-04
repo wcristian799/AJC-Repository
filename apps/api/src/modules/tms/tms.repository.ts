@@ -101,6 +101,8 @@ export class TmsRepository {
       throw new BadRequestException('Migration 0019_documento_manual_avulso pendente no banco');
     }
     const totalVolumes = Math.max(1, input.totalVolumes ?? 1);
+    const cidadeOrigemSigla = await this.normalizeCidadeSigla(input.cidadeOrigemSigla, 'origem');
+    const cidadeDestinoSigla = await this.normalizeCidadeSigla(input.cidadeDestinoSigla, 'destino');
     if (input.clientUuid) {
       const existing = await this.db.one<{ id: string }>(
         'SELECT entidade_id AS id FROM audit_evento WHERE entidade = $1 AND client_uuid = $2 LIMIT 1',
@@ -124,8 +126,8 @@ export class TmsRepository {
           input.valor ?? null,
           input.clienteRemetenteId,
           userId,
-          input.cidadeOrigemSigla?.trim().toUpperCase() || null,
-          input.cidadeDestinoSigla?.trim().toUpperCase() || null,
+          cidadeOrigemSigla,
+          cidadeDestinoSigla,
           input.pesoTotal ?? null,
           totalVolumes,
           input.destinatarioNome?.trim() || null,
@@ -145,8 +147,8 @@ export class TmsRepository {
             tipo: input.tipo,
             numero: input.numero.trim(),
             clienteRemetenteId: input.clienteRemetenteId,
-            cidadeOrigemSigla: input.cidadeOrigemSigla?.trim().toUpperCase() || null,
-            cidadeDestinoSigla: input.cidadeDestinoSigla?.trim().toUpperCase() || null,
+            cidadeOrigemSigla,
+            cidadeDestinoSigla,
             valor: input.valor ?? null,
             pesoTotal: input.pesoTotal ?? null,
             totalVolumes,
@@ -264,6 +266,19 @@ export class TmsRepository {
       [['cidade_origem_sigla', 'cidade_destino_sigla', 'peso_total', 'total_volumes', 'destinatario_nome']],
     );
     return row?.ready === true;
+  }
+
+  private async normalizeCidadeSigla(value: string | undefined, fieldLabel: 'origem' | 'destino') {
+    const sigla = value?.trim().toUpperCase();
+    if (!sigla) return null;
+    const cidade = await this.db.one<{ sigla: string }>(
+      'SELECT sigla FROM cidade WHERE sigla = $1 AND ativo = true LIMIT 1',
+      [sigla],
+    );
+    if (!cidade) {
+      throw new BadRequestException(`Cidade de ${fieldLabel} invalida: ${sigla}`);
+    }
+    return cidade.sigla;
   }
 
   async listDeclaracoesConteudo(categoria?: 'carga' | 'encomenda') {

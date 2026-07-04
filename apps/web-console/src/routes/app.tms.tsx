@@ -18,6 +18,7 @@ import { ControleTab } from "@/components/ops/tms/ControleTab";
 import { VeiculosTab } from "@/components/ops/tms/VeiculosTab";
 import {
   AjcApiError,
+  type CidadeApi,
   type ClienteApi,
   type EmbarcacaoApi,
   type NavegacaoViagemApi,
@@ -29,6 +30,7 @@ import {
   type TmsVolumeApi,
   type VeiculoEnvioApi,
   createTmsCarga,
+  listCidades,
   listEmbarcacoes,
   listClientes,
   listNavegacaoViagens,
@@ -98,6 +100,7 @@ function TMS() {
   const [novaCargaError, setNovaCargaError] = useState<string | null>(null);
   const [data, setData] = useState<TmsData>({
     cargas: [],
+    cidades: [],
     documentos: [],
     volumes: [],
     paletes: [],
@@ -125,11 +128,13 @@ function TMS() {
       listNavegacaoViagens(),
       listEmbarcacoes(),
       listClientes(),
+      listCidades(),
     ])
-      .then(([cargas, documentos, volumes, paletes, portaria, entregas, veiculos, viagens, embarcacoes, clientes]) => {
+      .then(([cargas, documentos, volumes, paletes, portaria, entregas, veiculos, viagens, embarcacoes, clientes, cidades]) => {
         if (!active) return;
         setData({
           cargas: ensureArray(cargas),
+          cidades: ensureArray(cidades),
           documentos: ensureArray(documentos),
           volumes: ensureArray(volumes),
           paletes: ensureArray(paletes),
@@ -443,6 +448,7 @@ function TMS() {
       {tab === "notas" && (
         <NotasTab
           cargas={data.cargas}
+          cidades={data.cidades}
           documentos={data.documentos}
           volumes={data.volumes}
           viagens={data.viagens}
@@ -732,6 +738,7 @@ function ensureArray<T>(value: T[] | null | undefined): T[] {
 
 type TmsData = {
   cargas: TmsCargaApi[];
+  cidades: CidadeApi[];
   documentos: TmsDocumentoApi[];
   volumes: TmsVolumeApi[];
   paletes: TmsPaleteApi[];
