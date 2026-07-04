@@ -1,5 +1,13 @@
-# STATUS â€” DiÃ¡rio vivo do projeto AJC
+# STATUS — Diário vivo do projeto AJC
 
+## Trabalho 2026-07-04 - Correcao de Recebimento na Nova Carga
+- Contexto: o formulario de Nova Carga tinha sido ajustado com o rotulo Agente, mas a regra correta da tela aprovada e manter o campo como Recebimento e trocar apenas a opcao Direto para Agente.
+- O que foi feito: pps/web-console/src/routes/app.tms.tsx voltou o label do select para Recebimento, preservando Porto/balsa, e renomeou a opcao direto exibida no dropdown para Agente.
+- Verificacao: un run build em pps/web-console exit 0.
+## Trabalho 2026-07-04 - Cor do dropdown de cliente na Nova Carga
+- Contexto: o dropdown de busca de cliente em /app/tms estava abrindo sem contraste suficiente com o restante do modal, destoando do Crimson Prestige e dificultando a leitura visual da lista.
+- O que foi feito: ClienteSearchField em pps/web-console/src/routes/app.tms.tsx agora usa --surface-elev como fundo da lista, borda em --hairline-brand e hover com mistura suave de --brand, mantendo a cor dentro do design system oficial sem criar token novo.
+- Verificacao: un run build em pps/web-console exit 0.
 ## Trabalho 2026-07-04 - Nova Carga com modal de NF/DC
 - Contexto: o fluxo aprovado foi refinado para priorizar cliente no topo, abrir o dropdown apenas durante a busca e mover a selecao de NF/DC para modal, em vez de lista inline no formulario.
 - O que foi feito: /app/tms agora mostra cliente primeiro, abre resultados apenas quando ha digitacao, usa um acionador de NF/DC que abre modal por cliente selecionado, resume as notas escolhidas no formulario e preserva o numero do pedido pela primeira NF/DC selecionada. O campo Recebimento da tela foi renomeado para Agente.

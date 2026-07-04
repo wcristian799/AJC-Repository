@@ -366,9 +366,9 @@ function TMS() {
               documentosSelecionados={documentosSelecionados}
               onOpen={() => setShowDocumentosModal(true)}
             />
-            <FormSelect label="Agente" value={novaCargaForm.tipoRecebimento} onChange={(tipoRecebimento) => setNovaCargaForm((prev) => ({ ...prev, tipoRecebimento: tipoRecebimento as NovaCargaForm["tipoRecebimento"] }))}>
+            <FormSelect label="Recebimento" value={novaCargaForm.tipoRecebimento} onChange={(tipoRecebimento) => setNovaCargaForm((prev) => ({ ...prev, tipoRecebimento: tipoRecebimento as NovaCargaForm["tipoRecebimento"] }))}>
               <option value="porto_balsa">Porto/balsa</option>
-              <option value="direto">Direto</option>
+              <option value="direto">Agente</option>
             </FormSelect>
           </div>
 
@@ -534,13 +534,13 @@ function ClienteSearchField({
           className="h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/55 focus:border-[color:var(--brand)]"
         />
         {showResults && (
-          <div className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-auto rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] shadow-2xl">
+          <div className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-auto rounded-md border border-[color:var(--hairline-brand)] bg-[color:var(--surface-elev)] shadow-[0_24px_60px_-24px_color-mix(in_oklab,var(--brand)_45%,transparent)]">
             {clientes.slice(0, 10).map((cliente) => (
               <button
                 key={cliente.id}
                 type="button"
                 onClick={() => onSelect(cliente)}
-                className="block w-full border-b border-[color:var(--hairline)] px-3 py-2 text-left text-sm transition-colors last:border-b-0 hover:bg-[color:var(--accent)]"
+                className="block w-full border-b border-[color:var(--hairline)] px-3 py-2 text-left text-sm transition-colors last:border-b-0 hover:bg-[color:color-mix(in_oklab,var(--brand)_12%,var(--surface-elev))]"
               >
                 <span className="font-mono text-[11px] text-[color:var(--brand)]">{cliente.codigo}</span>
                 <span className="ml-2 font-medium text-foreground">{cliente.nome}</span>
