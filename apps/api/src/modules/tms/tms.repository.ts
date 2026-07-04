@@ -56,21 +56,32 @@ export class TmsRepository {
   }
 
   async listDocumentos() {
+    const hasManualFields = await this.hasDocumentoManualFields();
+    const manualOrigem = hasManualFields ? 'df.cidade_origem_sigla' : 'NULL::varchar';
+    const manualDestino = hasManualFields ? 'df.cidade_destino_sigla' : 'NULL::varchar';
+    const manualPeso = hasManualFields ? 'df.peso_total' : 'NULL::numeric';
+    const manualVolumes = hasManualFields ? 'df.total_volumes' : 'NULL::smallint';
+    const manualDestinatario = hasManualFields ? 'df.destinatario_nome' : 'NULL::varchar';
     const result = await this.db.query(
       `
       SELECT df.id, df.tipo::text, df.numero, df.valor, df.cliente_id, df.carga_id,
              df.arquivo_url, df.arquivo_hash, df.status::text, df.origem,
              df.criado_em, df.atualizado_em,
              c.codigo AS carga_codigo, c.numero_pedido, c.tipo_recebimento::text,
-             COALESCE(c.cidade_origem_sigla, df.cidade_origem_sigla) AS cidade_origem_sigla,
-             COALESCE(c.cidade_destino_sigla, df.cidade_destino_sigla) AS cidade_destino_sigla,
-             COALESCE(c.peso_total, df.peso_total) AS peso_total,
-             COALESCE(c.total_volumes, df.total_volumes) AS total_volumes,
-             COALESCE(c.destinatario_nome, df.destinatario_nome) AS destinatario_nome,
+             COALESCE(c.cidade_origem_sigla, ${manualOrigem}) AS cidade_origem_sigla,
+             COALESCE(c.cidade_destino_sigla, ${manualDestino}) AS cidade_destino_sigla,
+             COALESCE(c.peso_total, ${manualPeso}) AS peso_total,
+             COALESCE(CASE WHEN c.id IS NOT NULL THEN volume_count.total_volumes END, ${manualVolumes}) AS total_volumes,
+             COALESCE(c.destinatario_nome, ${manualDestinatario}) AS destinatario_nome,
              cli.nome AS cliente_nome,
              u.nome AS lancado_por_nome
       FROM documento_fiscal df
       LEFT JOIN carga c ON c.id = df.carga_id
+      LEFT JOIN LATERAL (
+        SELECT count(vol.id)::int AS total_volumes
+        FROM volume vol
+        WHERE vol.carga_id = c.id
+      ) volume_count ON true
       LEFT JOIN cliente cli ON cli.id = df.cliente_id
       LEFT JOIN usuario u ON u.id = df.lancado_por
       ORDER BY df.criado_em DESC
@@ -86,6 +97,9 @@ export class TmsRepository {
   }
 
   async createDocumentoManual(input: CreateDocumentoManualInput, userId: string) {
+    if (!(await this.hasDocumentoManualFields())) {
+      throw new BadRequestException('Migration 0019_documento_manual_avulso pendente no banco');
+    }
     const totalVolumes = Math.max(1, input.totalVolumes ?? 1);
     if (input.clientUuid) {
       const existing = await this.db.one<{ id: string }>(
@@ -195,21 +209,32 @@ export class TmsRepository {
   }
 
   private async findDocumento(documentoId: string) {
+    const hasManualFields = await this.hasDocumentoManualFields();
+    const manualOrigem = hasManualFields ? 'df.cidade_origem_sigla' : 'NULL::varchar';
+    const manualDestino = hasManualFields ? 'df.cidade_destino_sigla' : 'NULL::varchar';
+    const manualPeso = hasManualFields ? 'df.peso_total' : 'NULL::numeric';
+    const manualVolumes = hasManualFields ? 'df.total_volumes' : 'NULL::smallint';
+    const manualDestinatario = hasManualFields ? 'df.destinatario_nome' : 'NULL::varchar';
     const result = await this.db.query(
       `
       SELECT df.id, df.tipo::text, df.numero, df.valor, df.cliente_id, df.carga_id,
              df.arquivo_url, df.arquivo_hash, df.status::text, df.origem,
              df.criado_em, df.atualizado_em,
              c.codigo AS carga_codigo, c.numero_pedido, c.tipo_recebimento::text,
-             COALESCE(c.cidade_origem_sigla, df.cidade_origem_sigla) AS cidade_origem_sigla,
-             COALESCE(c.cidade_destino_sigla, df.cidade_destino_sigla) AS cidade_destino_sigla,
-             COALESCE(c.peso_total, df.peso_total) AS peso_total,
-             COALESCE(c.total_volumes, df.total_volumes) AS total_volumes,
-             COALESCE(c.destinatario_nome, df.destinatario_nome) AS destinatario_nome,
+             COALESCE(c.cidade_origem_sigla, ${manualOrigem}) AS cidade_origem_sigla,
+             COALESCE(c.cidade_destino_sigla, ${manualDestino}) AS cidade_destino_sigla,
+             COALESCE(c.peso_total, ${manualPeso}) AS peso_total,
+             COALESCE(CASE WHEN c.id IS NOT NULL THEN volume_count.total_volumes END, ${manualVolumes}) AS total_volumes,
+             COALESCE(c.destinatario_nome, ${manualDestinatario}) AS destinatario_nome,
              cli.nome AS cliente_nome,
              u.nome AS lancado_por_nome
       FROM documento_fiscal df
       LEFT JOIN carga c ON c.id = df.carga_id
+      LEFT JOIN LATERAL (
+        SELECT count(vol.id)::int AS total_volumes
+        FROM volume vol
+        WHERE vol.carga_id = c.id
+      ) volume_count ON true
       LEFT JOIN cliente cli ON cli.id = df.cliente_id
       LEFT JOIN usuario u ON u.id = df.lancado_por
       WHERE df.id = $1
@@ -225,6 +250,20 @@ export class TmsRepository {
       peso_total: row.peso_total === null ? null : Number(row.peso_total),
       total_volumes: row.total_volumes === null ? null : Number(row.total_volumes),
     };
+  }
+
+  private async hasDocumentoManualFields() {
+    const row = await this.db.one<{ ready: boolean }>(
+      `
+      SELECT count(*) = 5 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'documento_fiscal'
+        AND column_name = ANY($1::text[])
+      `,
+      [['cidade_origem_sigla', 'cidade_destino_sigla', 'peso_total', 'total_volumes', 'destinatario_nome']],
+    );
+    return row?.ready === true;
   }
 
   async listDeclaracoesConteudo(categoria?: 'carga' | 'encomenda') {
