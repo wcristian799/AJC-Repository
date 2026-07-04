@@ -64,6 +64,12 @@ export class CadastrosController {
     return this.repository.createEmbarcacao(body, user.sub);
   }
 
+  @Patch('embarcacoes/:id')
+  @RequirePermissions('cadastros.editar')
+  updateEmbarcacao(@Param('id') id: string, @Body() body: SaveEmbarcacaoInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.repository.updateEmbarcacao(id, body, user.sub);
+  }
+
   @Get('agentes')
   @RequirePermissions('crm.ver')
   listAgentes() {

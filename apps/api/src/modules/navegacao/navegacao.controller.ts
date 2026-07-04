@@ -1,10 +1,10 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { NavegacaoRepository } from './navegacao.repository';
-import { CreateViagemInput, NotifyEscalasInput } from './navegacao.types';
+import { CreateViagemInput, NotifyEscalasInput, UpdateViagemInput } from './navegacao.types';
 
 @UseGuards(AuthGuard)
 @Controller('navegacao')
@@ -32,6 +32,13 @@ export class NavegacaoController {
   createViagem(@Body() body: CreateViagemInput, @CurrentUser() user: AuthTokenPayload) {
     this.validateCreateViagem(body);
     return this.repository.createViagem(body, user.sub);
+  }
+
+  @Patch('viagens/:id')
+  @RequirePermissions('navegacao.editar')
+  updateViagem(@Param('id') id: string, @Body() body: UpdateViagemInput, @CurrentUser() user: AuthTokenPayload) {
+    this.validateUpdateViagem(body);
+    return this.repository.updateViagem(id, body, user.sub);
   }
 
   @Get('templates-rotas')
@@ -73,6 +80,22 @@ export class NavegacaoController {
     for (const escala of body.escalas) {
       if (typeof escala.cidadeSigla !== 'string' || escala.cidadeSigla.trim().length === 0) {
         throw new BadRequestException('cidadeSigla da escala obrigatoria');
+      }
+    }
+  }
+
+  private validateUpdateViagem(body: UpdateViagemInput): void {
+    if (!body || typeof body !== 'object') {
+      throw new BadRequestException('Payload invalido');
+    }
+    if ('escalas' in body) {
+      if (!Array.isArray(body.escalas) || body.escalas.length === 0) {
+        throw new BadRequestException('escalas obrigatorio');
+      }
+      for (const escala of body.escalas) {
+        if (typeof escala.cidadeSigla !== 'string' || escala.cidadeSigla.trim().length === 0) {
+          throw new BadRequestException('cidadeSigla da escala obrigatoria');
+        }
       }
     }
   }

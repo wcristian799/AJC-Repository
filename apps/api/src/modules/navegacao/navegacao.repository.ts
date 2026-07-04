@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { CreateViagemInput, NotifyEscalasInput } from './navegacao.types';
+import { CreateViagemInput, NotifyEscalasInput, UpdateViagemInput } from './navegacao.types';
 
 export interface ViagemDto {
   id: string;
@@ -369,6 +369,76 @@ export class NavegacaoRepository {
     return viagem;
   }
 
+  async updateViagem(id: string, input: UpdateViagemInput, userId: string): Promise<ViagemDto> {
+    const before = await this.findViagem(id);
+    if (!before) {
+      throw new BadRequestException('Viagem nao encontrada');
+    }
+
+    const capacidade = input.capacidadePaxDisponivel === undefined
+      ? before.capacidadePaxDisponivel
+      : sanitizeCapacidade(input.capacidadePaxDisponivel);
+    const escalas = input.escalas;
+
+    await this.db.tx(async (client) => {
+      await client.query(
+        `
+        UPDATE viagem
+        SET embarcacao_id = COALESCE($2::uuid, embarcacao_id),
+            origem_sigla = COALESCE($3, origem_sigla),
+            destino_sigla = $4,
+            data_hora_saida = COALESCE($5::timestamptz, data_hora_saida),
+            data_hora_retorno = $6::timestamptz,
+            status = COALESCE($7::status_viagem, status),
+            situacao = $8::situacao_viagem,
+            capacidade_pax_disponivel = $9::jsonb,
+            observacoes = $10,
+            atualizado_em = now()
+        WHERE id = $1::uuid
+        `,
+        [
+          id,
+          input.embarcacaoId ?? null,
+          emptyToNull(input.origemSigla),
+          input.destinoSigla === undefined ? before.destinoSigla : emptyToNull(input.destinoSigla),
+          input.dataHoraSaida ?? null,
+          input.dataHoraRetorno === undefined ? before.dataHoraRetorno : input.dataHoraRetorno,
+          input.status ?? null,
+          input.situacao === undefined ? before.situacao ?? null : input.situacao,
+          JSON.stringify(capacidade),
+          input.observacoes === undefined ? before.observacoes : emptyToNull(input.observacoes),
+        ],
+      );
+
+      if (escalas) {
+        await client.query('DELETE FROM viagem_escala WHERE viagem_id = $1::uuid', [id]);
+        for (const [index, escala] of escalas.entries()) {
+          await client.query(
+            `
+            INSERT INTO viagem_escala (viagem_id, cidade_sigla, ordem, data_hora_prevista, observacao)
+            VALUES ($1, $2, $3, $4, $5)
+            `,
+            [id, escala.cidadeSigla, index + 1, escala.dataHoraPrevista ?? null, escala.observacao ?? null],
+          );
+        }
+      }
+
+      await client.query(
+        `
+        INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_antes, dados_depois)
+        VALUES ($1, $2, 'atualizar', $3, $4::jsonb, $5::jsonb)
+        `,
+        ['viagem', id, userId, JSON.stringify(before), JSON.stringify(input)],
+      );
+    });
+
+    const viagem = await this.findViagem(id);
+    if (!viagem) {
+      throw new BadRequestException('Viagem atualizada mas nao encontrada');
+    }
+    return viagem;
+  }
+
   private async nextCodigo(): Promise<string> {
     const year = new Date().getFullYear();
     const row = await this.db.one<{ total: string }>(
@@ -382,4 +452,21 @@ export class NavegacaoRepository {
     const sequence = Number(row?.total ?? 0) + 1;
     return `V-${year}-${String(sequence).padStart(4, '0')}`;
   }
+}
+
+function emptyToNull(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function sanitizeCapacidade(input: Record<string, unknown>) {
+  const output: Record<string, number> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const normalizedKey = key.trim();
+    if (!normalizedKey) continue;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric < 0) throw new BadRequestException(`capacidade invalida para ${normalizedKey}`);
+    output[normalizedKey] = Math.floor(numeric);
+  }
+  return output;
 }

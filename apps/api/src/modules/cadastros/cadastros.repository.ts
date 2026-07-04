@@ -372,6 +372,41 @@ export class CadastrosRepository {
     return this.findEmbarcacao(row!.id);
   }
 
+  async updateEmbarcacao(id: string, input: SaveEmbarcacaoInput, userId: string): Promise<EmbarcacaoDto> {
+    const before = await this.findEmbarcacao(id);
+    const nome = input.nome?.trim() ?? before.nome;
+    if (!nome) throw new BadRequestException('nome obrigatorio');
+    const tipo = input.tipo ?? (before.tipo as 'passeio_carga' | 'carga');
+    if (!['passeio_carga', 'carga'].includes(tipo)) throw new BadRequestException('tipo de embarcacao invalido');
+    const status = input.status ?? (before.status as 'ativa' | 'manutencao' | 'alugada');
+    if (!['ativa', 'manutencao', 'alugada'].includes(status)) throw new BadRequestException('status de embarcacao invalido');
+    const duplicate = await this.db.one(
+      'SELECT id FROM embarcacao WHERE lower(nome) = lower($1) AND id <> $2::uuid AND excluido_em IS NULL LIMIT 1',
+      [nome, id],
+    );
+    if (duplicate) throw new BadRequestException('Embarcacao ja cadastrada');
+    const capacidadeCarga = input.capacidadeCarga === undefined ? before.capacidadeCarga : input.capacidadeCarga;
+    if (capacidadeCarga !== null && capacidadeCarga !== undefined && (!Number.isFinite(Number(capacidadeCarga)) || Number(capacidadeCarga) < 0)) {
+      throw new BadRequestException('capacidadeCarga invalida');
+    }
+    const capacidadePax = input.capacidadePax === undefined ? before.capacidadePax : sanitizeCapacidadePax(input.capacidadePax ?? {});
+    await this.db.query(
+      `
+      UPDATE embarcacao
+      SET nome = $2,
+          tipo = $3::tipo_embarcacao,
+          capacidade_carga = $4,
+          capacidade_pax = $5::jsonb,
+          status = $6::status_embarcacao,
+          atualizado_em = now()
+      WHERE id = $1::uuid AND excluido_em IS NULL
+      `,
+      [id, nome, tipo, capacidadeCarga ?? null, JSON.stringify(capacidadePax), status],
+    );
+    await this.audit('embarcacao', id, 'atualizar', userId, { before, after: { nome, tipo, status, capacidadeCarga, capacidadePax } });
+    return this.findEmbarcacao(id);
+  }
+
   async listAgentes(): Promise<AgenteDto[]> {
     const result = await this.db.query<{
       id: string;

@@ -213,6 +213,13 @@ export type CreateViagemApiInput = {
   escalas: Array<{ cidadeSigla: string; dataHoraPrevista?: string; observacao?: string }>;
 };
 
+export type UpdateViagemApiInput = Partial<Omit<CreateViagemApiInput, "clientUuid">> & {
+  status?: "planejada" | "em_curso" | "concluida" | "cancelada";
+  situacao?: "no_prazo" | "atencao" | "atrasado" | null;
+  dataHoraRetorno?: string | null;
+  observacoes?: string | null;
+};
+
 export function listNavegacaoViagens() {
   return request<NavegacaoViagemApi[]>("/navegacao/viagens", { auth: true });
 }
@@ -241,6 +248,14 @@ export function createNavegacaoViagem(input: CreateViagemApiInput) {
   });
 }
 
+export function updateNavegacaoViagem(id: string, input: UpdateViagemApiInput) {
+  return request<NavegacaoViagemApi>(`/navegacao/viagens/${id}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
 export function listEmbarcacoes() {
   return request<EmbarcacaoApi[]>("/cadastros/embarcacoes", { auth: true });
 }
@@ -248,6 +263,14 @@ export function listEmbarcacoes() {
 export function createEmbarcacao(input: SaveEmbarcacaoInput) {
   return request<EmbarcacaoApi>("/cadastros/embarcacoes", {
     method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateEmbarcacao(id: string, input: SaveEmbarcacaoInput) {
+  return request<EmbarcacaoApi>(`/cadastros/embarcacoes/${id}`, {
+    method: "PATCH",
     auth: true,
     body: JSON.stringify(input),
   });

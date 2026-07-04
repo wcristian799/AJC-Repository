@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Ship, Plus, CalendarRange, Send, AlertTriangle, Clock } from "lucide-react";
+import { Ship, Plus, CalendarRange, Send, AlertTriangle, Clock, X } from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
 import {
   SectionHeader, KPIStat, StatusChip, ViagemStatusChip, ViagemSituacaoChip,
@@ -16,6 +16,8 @@ import {
   createEmbarcacao,
   listEmbarcacoes,
   createNavegacaoViagem,
+  updateEmbarcacao,
+  updateNavegacaoViagem,
   listNavegacaoEscalasColaboradores,
   listNavegacaoTemplatesRotas,
   listNavegacaoViagens,
@@ -139,6 +141,8 @@ function Navegacao() {
   const [tab, setTab] = useState<Tab>("operacao");
   const [showNovaViagem, setShowNovaViagem] = useState(false);
   const [showNovaEmbarcacao, setShowNovaEmbarcacao] = useState(false);
+  const [viagemEditandoId, setViagemEditandoId] = useState<string | null>(null);
+  const [embarcacaoEditandoId, setEmbarcacaoEditandoId] = useState<string | null>(null);
   const [showCalendario, setShowCalendario] = useState(false);
   const [rotaSel, setRotaSel] = useState(ROTAS_FAQ[1].id);
   const [salvandoViagem, setSalvandoViagem] = useState(false);
@@ -151,6 +155,8 @@ function Navegacao() {
     embarcacaoId: "",
     dataHoraSaida: defaultDateTimeLocal(),
     dataHoraRetorno: "",
+    status: "planejada" as ViagemStatus,
+    situacao: "no_prazo" as ViagemSituacao,
     capacidade: {} as Record<string, string>,
   });
   const [embarcacaoForm, setEmbarcacaoForm] = useState({
@@ -241,6 +247,81 @@ function Navegacao() {
     setViagemForm((prev) => ({ ...prev, capacidade: { ...prev.capacidade, [key]: value } }));
   }
 
+  function abrirNovaViagem() {
+    setViagemEditandoId(null);
+    setViagemError(null);
+    setViagemForm((prev) => ({
+      ...prev,
+      dataHoraSaida: defaultDateTimeLocal(),
+      dataHoraRetorno: "",
+      status: "planejada",
+      situacao: "no_prazo",
+      capacidade: {},
+    }));
+    setShowNovaViagem(true);
+  }
+
+  function abrirEditarViagem(row: ViagemView) {
+    const original = viagensApi.find((viagem) => viagem.id === row.id);
+    if (!original) return;
+    setViagemEditandoId(original.id);
+    setViagemError(null);
+    setViagemForm({
+      embarcacaoId: original.embarcacaoId,
+      dataHoraSaida: toDateTimeLocalValue(new Date(original.dataHoraSaida)),
+      dataHoraRetorno: original.dataHoraRetorno ? toDateTimeLocalValue(new Date(original.dataHoraRetorno)) : "",
+      status: asViagemStatus(original.status),
+      situacao: asViagemSituacao(original.situacao) ?? "no_prazo",
+      capacidade: Object.fromEntries(Object.entries(original.capacidadePaxDisponivel ?? {}).map(([key, value]) => [key, String(value ?? "")])),
+    });
+    const matched = rotas.find((template) => template.origemSigla === original.origemSigla && template.destinoSigla === original.destinoSigla);
+    if (matched) setRotaSel(matched.id);
+    setShowNovaViagem(true);
+  }
+
+  function fecharViagemModal() {
+    setShowNovaViagem(false);
+    setViagemEditandoId(null);
+    setViagemError(null);
+  }
+
+  function abrirNovaEmbarcacao() {
+    setEmbarcacaoEditandoId(null);
+    setEmbarcacaoError(null);
+    setEmbarcacaoForm({
+      nome: "",
+      tipo: "passeio_carga",
+      status: "ativa",
+      capacidadeCarga: "",
+      capacidadePax: {},
+    });
+    setShowNovaEmbarcacao(true);
+  }
+
+  function abrirEditarEmbarcacao(row: EmbarcacaoApi) {
+    setEmbarcacaoEditandoId(row.id);
+    setEmbarcacaoError(null);
+    setEmbarcacaoForm({
+      nome: row.nome,
+      tipo: row.tipo === "carga" ? "carga" : "passeio_carga",
+      status: row.status === "manutencao" || row.status === "alugada" ? row.status : "ativa",
+      capacidadeCarga: row.capacidadeCarga === null || row.capacidadeCarga === undefined ? "" : String(row.capacidadeCarga),
+      capacidadePax: Object.fromEntries(Object.entries(row.capacidadePax ?? {}).map(([key, value]) => [key, String(value ?? "")])),
+    });
+    setShowNovaEmbarcacao(true);
+  }
+
+  function fecharEmbarcacaoModal() {
+    setShowNovaEmbarcacao(false);
+    setEmbarcacaoEditandoId(null);
+    setEmbarcacaoError(null);
+  }
+
+  function setEmbarcacaoCapacidade(label: string, value: string) {
+    const key = classeKeyFromLabel(label);
+    setEmbarcacaoForm((prev) => ({ ...prev, capacidadePax: { ...prev.capacidadePax, [key]: value } }));
+  }
+
   async function salvarNovaViagem() {
     if (salvandoViagem) return;
     const embarcacao = embarcacaoSelecionada;
@@ -264,27 +345,31 @@ function Navegacao() {
     setSalvandoViagem(true);
     setViagemError(null);
     try {
-      const nova = await createNavegacaoViagem({
+      const payload = {
         embarcacaoId: embarcacao.id,
         origemSigla: rota.origemSigla,
         destinoSigla: rota.destinoSigla,
         dataHoraSaida: toIsoFromDateTimeLocal(viagemForm.dataHoraSaida),
-        dataHoraRetorno: viagemForm.dataHoraRetorno ? toIsoFromDateTimeLocal(viagemForm.dataHoraRetorno) : undefined,
+        dataHoraRetorno: viagemForm.dataHoraRetorno ? toIsoFromDateTimeLocal(viagemForm.dataHoraRetorno) : null,
         capacidadePaxDisponivel: capacidade,
+        status: viagemForm.status,
+        situacao: viagemForm.situacao,
         observacoes: `Criada a partir do template FAQ: ${rota.rotulo}. Saida FAQ: ${rota.saida}`,
         escalas: rota.paradas.map((parada) => ({
           cidadeSigla: cidadeSiglaFromParada(parada) ?? rota.destinoSigla,
           observacao: parada,
         })),
-        clientUuid: crypto.randomUUID(),
-      });
-      setViagensApi((prev) => [nova, ...prev.filter((v) => v.id !== nova.id)]);
-      setShowNovaViagem(false);
+      };
+      const salva = viagemEditandoId
+        ? await updateNavegacaoViagem(viagemEditandoId, payload)
+        : await createNavegacaoViagem({ ...payload, dataHoraRetorno: payload.dataHoraRetorno ?? undefined, clientUuid: crypto.randomUUID() });
+      setViagensApi((prev) => [salva, ...prev.filter((v) => v.id !== salva.id)]);
+      fecharViagemModal();
       setTab("viagens");
       setViagemForm((prev) => ({ ...prev, capacidade: {} }));
     } catch (error) {
       console.error(error);
-      setViagemError(error instanceof Error ? error.message : "Falha ao criar viagem");
+      setViagemError(error instanceof Error ? error.message : "Falha ao salvar viagem");
     } finally {
       setSalvandoViagem(false);
     }
@@ -326,16 +411,19 @@ function Navegacao() {
     setSalvandoEmbarcacao(true);
     setEmbarcacaoError(null);
     try {
-      const nova = await createEmbarcacao({
+      const payload = {
         nome,
         tipo: embarcacaoForm.tipo,
         status: embarcacaoForm.status,
         capacidadeCarga: parseOptionalNumber(embarcacaoForm.capacidadeCarga),
         capacidadePax,
-      });
-      setEmbarcacoes((prev) => [nova, ...prev.filter((item) => item.id !== nova.id)].sort((a, b) => a.nome.localeCompare(b.nome)));
-      setViagemForm((prev) => ({ ...prev, embarcacaoId: prev.embarcacaoId || nova.id }));
-      setShowNovaEmbarcacao(false);
+      };
+      const salva = embarcacaoEditandoId
+        ? await updateEmbarcacao(embarcacaoEditandoId, payload)
+        : await createEmbarcacao(payload);
+      setEmbarcacoes((prev) => [salva, ...prev.filter((item) => item.id !== salva.id)].sort((a, b) => a.nome.localeCompare(b.nome)));
+      setViagemForm((prev) => ({ ...prev, embarcacaoId: prev.embarcacaoId || salva.id }));
+      fecharEmbarcacaoModal();
       setTab("embarcacoes");
       setEmbarcacaoForm({
         nome: "",
@@ -346,7 +434,7 @@ function Navegacao() {
       });
     } catch (error) {
       console.error(error);
-      setEmbarcacaoError(error instanceof Error ? error.message : "Falha ao criar embarcacao");
+      setEmbarcacaoError(error instanceof Error ? error.message : "Falha ao salvar embarcacao");
     } finally {
       setSalvandoEmbarcacao(false);
     }
@@ -361,7 +449,7 @@ function Navegacao() {
         actions={
           <>
             <GhostButton icon={CalendarRange} onClick={() => setShowCalendario((v) => !v)}>Calendário</GhostButton>
-            <PrimaryButton icon={Plus} onClick={() => setShowNovaViagem((v) => !v)}>Nova viagem</PrimaryButton>
+            <PrimaryButton icon={Plus} onClick={abrirNovaViagem}>Nova viagem</PrimaryButton>
           </>
         }
       />
@@ -380,13 +468,16 @@ function Navegacao() {
       )}
 
       {(showNovaViagem || showCalendario) && (
-        <section className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_1fr]">
+        <section className={showNovaViagem ? "fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm" : "mt-6 grid gap-4 xl:grid-cols-[1.1fr_1fr]"}>
           {showNovaViagem && (
-            <div className="surface-card brand-rail brand-rail-left p-5">
+            <div className="surface-card brand-rail brand-rail-left max-h-[92vh] w-full max-w-3xl overflow-y-auto p-5 shadow-2xl">
               <div className="flex items-center gap-2">
                 <Plus className="h-4 w-4 text-[color:var(--brand)]" />
-                <h3 className="font-display text-lg">Nova viagem</h3>
+                <h3 className="font-display text-lg">{viagemEditandoId ? "Editar viagem" : "Nova viagem"}</h3>
                 <StatusChip tone="success">campos Lucas + FAQ 2026</StatusChip>
+                <button className="ml-auto rounded-md p-2 text-muted-foreground transition-colors hover:bg-[color:var(--accent)] hover:text-foreground" onClick={fecharViagemModal} aria-label="Fechar">
+                  <X className="h-4 w-4" />
+                </button>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">Número gerado pelo sistema, FerryBoat em lista, saída, e paradas com preenchimento automático a partir do DOC FAQ. Camarotes/classes condicionais à embarcação.</p>
 
@@ -430,6 +521,31 @@ function Navegacao() {
                     onChange={(event) => setViagemForm((prev) => ({ ...prev, dataHoraRetorno: event.target.value }))}
                     className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
                   />
+                </label>
+                <label>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status</p>
+                  <select
+                    value={viagemForm.status}
+                    onChange={(event) => setViagemForm((prev) => ({ ...prev, status: event.target.value as ViagemStatus }))}
+                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                  >
+                    <option value="planejada">Planejada</option>
+                    <option value="em_curso">Em curso</option>
+                    <option value="concluida">Concluida</option>
+                    <option value="cancelada">Cancelada</option>
+                  </select>
+                </label>
+                <label>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Situacao</p>
+                  <select
+                    value={viagemForm.situacao}
+                    onChange={(event) => setViagemForm((prev) => ({ ...prev, situacao: event.target.value as ViagemSituacao }))}
+                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                  >
+                    <option value="no_prazo">No prazo</option>
+                    <option value="atencao">Atencao</option>
+                    <option value="atrasado">Atrasado</option>
+                  </select>
                 </label>
               </div>
 
@@ -477,9 +593,9 @@ function Navegacao() {
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <PrimaryButton icon={Plus} onClick={salvarNovaViagem} disabled={salvandoViagem || !embarcacaoSelecionada}>
-                  {salvandoViagem ? "Criando..." : "Criar viagem"}
+                  {salvandoViagem ? "Salvando..." : viagemEditandoId ? "Salvar viagem" : "Criar viagem"}
                 </PrimaryButton>
-                <GhostButton onClick={() => setShowNovaViagem(false)}>Cancelar</GhostButton>
+                <GhostButton onClick={fecharViagemModal}>Cancelar</GhostButton>
                 {viagemError && <span className="text-xs text-[color:var(--danger)]">{viagemError}</span>}
               </div>
             </div>
@@ -506,6 +622,100 @@ function Navegacao() {
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {showNovaEmbarcacao && (
+        <section className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="surface-card brand-rail brand-rail-left max-h-[92vh] w-full max-w-3xl overflow-y-auto p-5 shadow-2xl">
+            <div className="flex items-center gap-2">
+              <Ship className="h-4 w-4 text-[color:var(--brand)]" />
+              <h3 className="font-display text-lg">{embarcacaoEditandoId ? "Editar embarcação" : "Nova embarcação"}</h3>
+              <StatusChip tone="success">cadastro real</StatusChip>
+              <button className="ml-auto rounded-md p-2 text-muted-foreground transition-colors hover:bg-[color:var(--accent)] hover:text-foreground" onClick={fecharEmbarcacaoModal} aria-label="Fechar">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Frota vem de `GET /api/cadastros/embarcacoes`. Alterações salvam no banco e atualizam capacidades usadas em Nova Viagem.
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Nome</p>
+                <input
+                  value={embarcacaoForm.nome}
+                  onChange={(event) => setEmbarcacaoForm((prev) => ({ ...prev, nome: event.target.value }))}
+                  className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                  placeholder="F/B Amazonas VI"
+                />
+              </label>
+              <label>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tipo</p>
+                <select
+                  value={embarcacaoForm.tipo}
+                  onChange={(event) => setEmbarcacaoForm((prev) => ({ ...prev, tipo: event.target.value as "passeio_carga" | "carga" }))}
+                  className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                >
+                  <option value="passeio_carga">Passeio + carga</option>
+                  <option value="carga">Somente carga</option>
+                </select>
+              </label>
+              <label>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status</p>
+                <select
+                  value={embarcacaoForm.status}
+                  onChange={(event) => setEmbarcacaoForm((prev) => ({ ...prev, status: event.target.value as "ativa" | "manutencao" | "alugada" }))}
+                  className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                >
+                  <option value="ativa">Ativa</option>
+                  <option value="manutencao">Manutenção</option>
+                  <option value="alugada">Alugada</option>
+                </select>
+              </label>
+              <label>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Capacidade carga (t)</p>
+                <input
+                  value={embarcacaoForm.capacidadeCarga}
+                  onChange={(event) => setEmbarcacaoForm((prev) => ({ ...prev, capacidadeCarga: event.target.value }))}
+                  inputMode="decimal"
+                  className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                  placeholder="0"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Capacidade por classe</p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                {CLASSES_FORM_EMBARCACAO.map((classe) => {
+                  const key = classeKeyFromLabel(classe);
+                  return (
+                    <label key={classe}>
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{classe}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        inputMode="numeric"
+                        value={embarcacaoForm.capacidadePax[key] ?? ""}
+                        onChange={(event) => setEmbarcacaoCapacidade(classe, event.target.value)}
+                        className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                        placeholder="0"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <PrimaryButton icon={Plus} onClick={salvarNovaEmbarcacao} disabled={salvandoEmbarcacao}>
+                {salvandoEmbarcacao ? "Salvando..." : embarcacaoEditandoId ? "Salvar embarcação" : "Criar embarcação"}
+              </PrimaryButton>
+              <GhostButton onClick={fecharEmbarcacaoModal}>Cancelar</GhostButton>
+              {embarcacaoError && <span className="text-xs text-[color:var(--danger)]">{embarcacaoError}</span>}
+            </div>
+          </div>
         </section>
       )}
 
@@ -576,7 +786,7 @@ function Navegacao() {
             </header>
             <ul className="divide-y divide-[color:var(--hairline)]">
               {embarcacoes.map((e) => (
-                <li key={e.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <li key={e.id} onClick={() => abrirEditarEmbarcacao(e)} className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-[color:color-mix(in_oklab,var(--brand)_5%,transparent)]">
                   <div>
                     <p className="text-sm font-medium text-foreground">{e.nome}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">{e.tipo.replace("_", " + ")} · {lastTripLabel(viagens, e.id)}</p>
@@ -593,7 +803,7 @@ function Navegacao() {
 
       {tab === "viagens" && (
         <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar por código, embarcação, trecho…" right={<PrimaryButton icon={Plus} onClick={() => setShowNovaViagem((v) => !v)}>Nova viagem</PrimaryButton>}>
+          <FilterBar searchPlaceholder="Buscar por código, embarcação, trecho…" right={<PrimaryButton icon={Plus} onClick={abrirNovaViagem}>Nova viagem</PrimaryButton>}>
             <FilterChip active>Todas</FilterChip>
             <FilterChip>Em curso</FilterChip>
             <FilterChip>Planejadas</FilterChip>
@@ -601,6 +811,7 @@ function Navegacao() {
           </FilterBar>
           <DataTable
             rows={viagens}
+            onRowClick={abrirEditarViagem}
             columns={[
               { key: "codigo", header: "Código", render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.codigo}</span> },
               { key: "trecho", header: "Trecho", render: (r) => <span className="font-display text-sm">{r.origem} → {r.destino}</span> },
@@ -705,7 +916,7 @@ function Navegacao() {
 
       {tab === "embarcacoes" && (
         <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar embarcação…" right={<PrimaryButton icon={Plus} onClick={() => setShowNovaEmbarcacao((value) => !value)}>Nova embarcação</PrimaryButton>}>
+          <FilterBar searchPlaceholder="Buscar embarcação…" right={<PrimaryButton icon={Plus} onClick={abrirNovaEmbarcacao}>Nova embarcação</PrimaryButton>}>
             <FilterChip active>Todas</FilterChip>
             <FilterChip>Ativas</FilterChip>
             <FilterChip>Manutenção</FilterChip>
@@ -713,6 +924,7 @@ function Navegacao() {
           </FilterBar>
           <DataTable
             rows={embarcacoes}
+            onRowClick={abrirEditarEmbarcacao}
             columns={[
               { key: "nome", header: "Embarcação", render: (r) => <span className="font-medium">{r.nome}</span> },
               { key: "tipo", header: "Tipo", render: (r) => <span className="text-xs">{r.tipo === "carga" ? "Só carga" : "Passeio + carga"}</span> },

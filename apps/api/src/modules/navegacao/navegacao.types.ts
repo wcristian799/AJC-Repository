@@ -16,6 +16,19 @@ export interface CreateViagemInput {
   escalas: ViagemEscalaInput[];
 }
 
+export interface UpdateViagemInput {
+  embarcacaoId?: string;
+  origemSigla?: string;
+  destinoSigla?: string | null;
+  dataHoraSaida?: string;
+  dataHoraRetorno?: string | null;
+  status?: 'planejada' | 'em_curso' | 'concluida' | 'cancelada';
+  situacao?: 'no_prazo' | 'atencao' | 'atrasado' | null;
+  capacidadePaxDisponivel?: Record<string, unknown>;
+  observacoes?: string | null;
+  escalas?: ViagemEscalaInput[];
+}
+
 export interface NotifyEscalasInput {
   escalaIds?: string[];
   clientUuid?: string;
