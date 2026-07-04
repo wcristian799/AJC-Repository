@@ -1,5 +1,10 @@
 # STATUS — Diário vivo do projeto AJC
 
+## Trabalho 2026-07-04 - Nova Carga com modal de NF/DC
+- Contexto: o fluxo aprovado foi refinado para priorizar cliente no topo, abrir o dropdown apenas durante a busca e mover a selecao de NF/DC para modal, em vez de lista inline no formulario.
+- O que foi feito: /app/tms agora mostra cliente primeiro, abre resultados apenas quando ha digitacao, usa um acionador de NF/DC que abre modal por cliente selecionado, resume as notas escolhidas no formulario e preserva o numero do pedido pela primeira NF/DC selecionada. O campo Recebimento da tela foi renomeado para Agente.
+- Verificacao: un run build em pps/web-console exit 0.
+
 ## Trabalho 2026-07-04 - Nova Carga por cliente e NF/DC
 - Contexto: o dono confirmou a regra operacional do TMS: primeiro selecionar o cliente por busca interna, depois selecionar uma ou mais NF/DC conectadas a esse cliente; o numero do pedido/venda deve ser gerado como CODIGO_CLIENTE + tipo/numero da primeira nota selecionada, exemplo 10-nfe-122.
 - O que foi feito: /app/tms ja possui busca de cliente, lista NF/DC filtrada pelo cliente, selecao multipla de documentos, preenchimento automatico de tipo/numero/peso/valor a partir das notas selecionadas e preview do pedido a partir da primeira NF/DC. O backend POST /api/tms/cargas aceita documentoIds, valida que as notas pertencem ao cliente e ainda estao livres, vincula os documentos a carga e gera fallback de numero_pedido com cliente.codigo + tipo + numero.

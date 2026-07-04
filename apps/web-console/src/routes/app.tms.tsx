@@ -101,6 +101,7 @@ const TAB_GROUPS: { group: string; tabs: TabDef[] }[] = [
 function TMS() {
   const [tab, setTab] = useState<Tab>("ctrl");
   const [showNovaCarga, setShowNovaCarga] = useState(false);
+  const [showDocumentosModal, setShowDocumentosModal] = useState(false);
   const [novaCargaForm, setNovaCargaForm] = useState<NovaCargaForm>(initialNovaCargaForm);
   const [clienteBusca, setClienteBusca] = useState("");
   const [savingNovaCarga, setSavingNovaCarga] = useState(false);
@@ -256,6 +257,7 @@ function TMS() {
         cidadeDestinoSigla: prev.cidadeDestinoSigla,
       }));
       setClienteBusca("");
+      setShowDocumentosModal(false);
       setShowNovaCarga(false);
     } catch (err) {
       setNovaCargaError(err instanceof Error ? err.message : "Nao foi possivel criar a carga.");
@@ -346,6 +348,30 @@ function TMS() {
             <CargaField label="Codigo de carga" value={novaCargaPreview.codigo} hint="auto" mono />
           </div>
 
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <ClienteSearchField
+              busca={clienteBusca}
+              clientes={clientesFiltrados}
+              selecionado={clienteSelecionado}
+              onBuscaChange={(value) => {
+                setClienteBusca(value);
+                if (novaCargaForm.clienteRemetenteId) {
+                  setNovaCargaForm((prev) => ({ ...prev, clienteRemetenteId: "", documentoIds: [], numeroDocumento: "", valorDeclarado: "", pesoTotal: "" }));
+                }
+              }}
+              onSelect={selecionarCliente}
+            />
+            <DocumentoPickerTrigger
+              clienteSelecionado={clienteSelecionado}
+              documentosSelecionados={documentosSelecionados}
+              onOpen={() => setShowDocumentosModal(true)}
+            />
+            <FormSelect label="Agente" value={novaCargaForm.tipoRecebimento} onChange={(tipoRecebimento) => setNovaCargaForm((prev) => ({ ...prev, tipoRecebimento: tipoRecebimento as NovaCargaForm["tipoRecebimento"] }))}>
+              <option value="porto_balsa">Porto/balsa</option>
+              <option value="direto">Direto</option>
+            </FormSelect>
+          </div>
+
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <FormSelect
               label="Viagem"
@@ -372,31 +398,10 @@ function TMS() {
           </div>
 
           <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <ClienteSearchField
-              busca={clienteBusca}
-              clientes={clientesFiltrados}
-              selecionado={clienteSelecionado}
-              onBuscaChange={(value) => {
-                setClienteBusca(value);
-                if (novaCargaForm.clienteRemetenteId) {
-                  setNovaCargaForm((prev) => ({ ...prev, clienteRemetenteId: "", documentoIds: [], numeroDocumento: "", valorDeclarado: "", pesoTotal: "" }));
-                }
-              }}
-              onSelect={selecionarCliente}
-            />
             <FormInput label="Destinatario" value={novaCargaForm.destinatarioNome} onChange={(destinatarioNome) => setNovaCargaForm((prev) => ({ ...prev, destinatarioNome }))} placeholder="nome/empresa ou manual" />
-            <FormSelect label="Recebimento" value={novaCargaForm.tipoRecebimento} onChange={(tipoRecebimento) => setNovaCargaForm((prev) => ({ ...prev, tipoRecebimento: tipoRecebimento as NovaCargaForm["tipoRecebimento"] }))}>
-              <option value="porto_balsa">Porto/balsa</option>
-              <option value="direto">Direto</option>
-            </FormSelect>
+            <CargaField label="NF/DC selecionadas" value={documentosSelecionados.length ? documentosSelecionados.map((documento) => `${documento.tipo}-${documento.numero ?? "sem-numero"}`).join(", ") : "selecionar no modal"} />
+            <CargaField label="Primeira NF/DC do pedido" value={documentosSelecionados[0] ? `${documentosSelecionados[0].tipo}-${documentosSelecionados[0].numero ?? "sem-numero"}` : "aguardando selecao"} />
           </div>
-
-          <DocumentoClientePicker
-            documentos={documentosDoCliente}
-            selecionados={novaCargaForm.documentoIds}
-            clienteSelecionado={Boolean(novaCargaForm.clienteRemetenteId)}
-            onToggle={toggleDocumento}
-          />
 
           <div className="mt-3 grid gap-3 md:grid-cols-4">
             <FormSelect label="Documento" value={novaCargaForm.documentoTipo} onChange={(documentoTipo) => setNovaCargaForm((prev) => ({ ...prev, documentoTipo: documentoTipo as NovaCargaForm["documentoTipo"] }))}>
@@ -433,6 +438,16 @@ function TMS() {
         </form>
       )}
       {/* Sub-navegação agrupada */}
+      {showNovaCarga && showDocumentosModal && (
+        <DocumentoClienteModal
+          documentos={documentosDoCliente}
+          selecionados={novaCargaForm.documentoIds}
+          clienteSelecionado={Boolean(novaCargaForm.clienteRemetenteId)}
+          clienteLabel={clienteSelecionado ? `${clienteSelecionado.codigo} - ${clienteSelecionado.nome}` : null}
+          onToggle={toggleDocumento}
+          onClose={() => setShowDocumentosModal(false)}
+        />
+      )}
       <nav className="mt-6 space-y-2">
         {TAB_GROUPS.map((g) => (
           <div key={g.group} className="flex flex-wrap items-center gap-1.5">
@@ -506,7 +521,8 @@ function ClienteSearchField({
   onBuscaChange: (value: string) => void;
   onSelect: (cliente: ClienteApi) => void;
 }) {
-  const showResults = !selecionado || normalizeSearch(busca) !== normalizeSearch(`${selecionado.codigo} - ${selecionado.nome}`);
+  const buscaNormalizada = normalizeSearch(busca);
+  const showResults = buscaNormalizada.length > 0 && (!selecionado || buscaNormalizada !== normalizeSearch(`${selecionado.codigo} - ${selecionado.nome}`));
   return (
     <label className="block">
       <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Cliente</span>
@@ -541,55 +557,110 @@ function ClienteSearchField({
   );
 }
 
-function DocumentoClientePicker({
+function DocumentoPickerTrigger({
+  clienteSelecionado,
+  documentosSelecionados,
+  onOpen,
+}: {
+  clienteSelecionado: ClienteApi | null;
+  documentosSelecionados: TmsDocumentoApi[];
+  onOpen: () => void;
+}) {
+  const resumo = documentosSelecionados.length
+    ? documentosSelecionados.map((documento) => `${documento.tipo}-${documento.numero ?? "sem-numero"}`).join(", ")
+    : "Selecione as NF/DC em um modal";
+  return (
+    <div className="block">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">NF/DC</span>
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={!clienteSelecionado}
+        className={`mt-1 flex h-10 w-full items-center justify-between rounded-md border px-3 text-left text-sm transition-colors ${
+          clienteSelecionado
+            ? "border-[color:var(--hairline)] bg-[color:var(--muted)] text-foreground hover:border-[color:var(--brand)]"
+            : "cursor-not-allowed border-[color:var(--hairline)] bg-[color:var(--muted)]/60 text-muted-foreground"
+        }`}
+      >
+        <span className="truncate">{resumo}</span>
+        <span className="ml-3 text-[11px] text-[color:var(--brand)]">{documentosSelecionados.length || "0"} sel.</span>
+      </button>
+    </div>
+  );
+}
+
+function DocumentoClienteModal({
   documentos,
   selecionados,
   clienteSelecionado,
+  clienteLabel,
   onToggle,
+  onClose,
 }: {
   documentos: TmsDocumentoApi[];
   selecionados: string[];
   clienteSelecionado: boolean;
+  clienteLabel: string | null;
   onToggle: (documento: TmsDocumentoApi) => void;
+  onClose: () => void;
 }) {
   return (
-    <div className="mt-3 rounded-lg border border-[color:var(--hairline)] bg-[color:var(--muted)]/45 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">NF/DC do cliente</p>
-        <span className="text-[10px] text-muted-foreground">{selecionados.length} selecionada(s)</span>
-      </div>
-      {!clienteSelecionado && <p className="mt-2 text-xs text-muted-foreground">Selecione o cliente para carregar as notas conectadas a ele.</p>}
-      {clienteSelecionado && documentos.length === 0 && <p className="mt-2 text-xs text-muted-foreground">Nao ha NF/DC livre para este cliente.</p>}
-      {clienteSelecionado && documentos.length > 0 && (
-        <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {documentos.map((documento) => {
-            const checked = selecionados.includes(documento.id);
-            const disabled = Boolean(documento.carga_id);
-            return (
-              <button
-                key={documento.id}
-                type="button"
-                disabled={disabled}
-                onClick={() => onToggle(documento)}
-                className={`rounded-md border px-3 py-2 text-left transition-colors ${
-                  checked
-                    ? "border-[color:var(--brand)] bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-foreground"
-                    : "border-[color:var(--hairline)] bg-[color:var(--surface-elev)] text-foreground/85 hover:bg-[color:var(--accent)]"
-                } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
-              >
-                <span className="block font-mono text-xs">
-                  {documento.tipo}-{documento.numero ?? "sem-numero"}
-                </span>
-                <span className="mt-1 block text-[11px] text-muted-foreground">
-                  {documento.cidade_origem_sigla ?? "--"} -&gt; {documento.cidade_destino_sigla ?? "--"}
-                  {typeof documento.valor === "number" ? ` - ${formatCurrency(documento.valor)}` : ""}
-                </span>
-                {disabled && <span className="mt-1 block text-[10px] text-[color:var(--danger)]">ja vinculada a carga</span>}
-              </button>
-            );
-          })}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-8 backdrop-blur-sm">
+      <div className="w-full max-w-4xl rounded-2xl border border-[color:var(--hairline-brand)] bg-[color:var(--surface)] p-5 shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">NF/DC do cliente</p>
+            <h4 className="mt-1 font-display text-xl text-foreground">{clienteLabel ?? "Selecione um cliente antes"}</h4>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-muted-foreground">{selecionados.length} selecionada(s)</span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-[color:var(--surface-elev)] px-4 text-sm font-medium text-foreground/85 ring-1 ring-[color:var(--hairline)] transition-colors hover:bg-[color:var(--accent)]"
+            >
+              <X className="h-4 w-4" strokeWidth={1.7} />
+              Fechar
+            </button>
+          </div>
         </div>
-      )}
+        <div className="mt-4 rounded-lg border border-[color:var(--hairline)] bg-[color:var(--muted)]/45 p-3">
+          {!clienteSelecionado && <p className="text-xs text-muted-foreground">Selecione o cliente para carregar as notas conectadas a ele.</p>}
+          {clienteSelecionado && documentos.length === 0 && <p className="text-xs text-muted-foreground">Nao ha NF/DC livre para este cliente.</p>}
+          {clienteSelecionado && documentos.length > 0 && (
+            <div className="grid max-h-[55vh] gap-2 overflow-auto md:grid-cols-2 xl:grid-cols-3">
+              {documentos.map((documento) => {
+                const checked = selecionados.includes(documento.id);
+                const disabled = Boolean(documento.carga_id);
+                return (
+                  <button
+                    key={documento.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onToggle(documento)}
+                    className={`rounded-md border px-3 py-3 text-left transition-colors ${
+                      checked
+                        ? "border-[color:var(--brand)] bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-foreground"
+                        : "border-[color:var(--hairline)] bg-[color:var(--surface-elev)] text-foreground/85 hover:bg-[color:var(--accent)]"
+                    } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+                  >
+                    <span className="block font-mono text-xs">
+                      {documento.tipo}-{documento.numero ?? "sem-numero"}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      {documento.cidade_origem_sigla ?? "--"} -&gt; {documento.cidade_destino_sigla ?? "--"}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      {typeof documento.valor === "number" ? formatCurrency(documento.valor) : "sem valor"} · {documento.peso_total ?? "--"} kg
+                    </span>
+                    {disabled && <span className="mt-1 block text-[10px] text-[color:var(--danger)]">ja vinculada a carga</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
