@@ -655,6 +655,7 @@ export type CreateTmsCargaInput = CreateEncomendaInput & {
   categoria?: "carga" | "encomenda";
   tipoRecebimento?: "porto_balsa" | "direto";
   numeroPedido?: string;
+  documentoIds?: string[];
 };
 
 export type TmsVolumeApi = {

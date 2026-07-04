@@ -22,6 +22,7 @@ export interface CreateCargaInput {
   totalVolumes?: number;
   numeroDocumento?: string;
   numeroPedido?: string;
+  documentoIds?: string[];
   observacoes?: string;
   clientUuid?: string;
   documento?: DocumentoFiscalInput;

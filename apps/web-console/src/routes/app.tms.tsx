@@ -53,6 +53,7 @@ type TabDef = { id: Tab; label: string; spec: string; icon: React.ComponentType<
 type NovaCargaForm = {
   viagemId: string;
   clienteRemetenteId: string;
+  documentoIds: string[];
   destinatarioNome: string;
   cidadeOrigemSigla: string;
   cidadeDestinoSigla: string;
@@ -68,6 +69,7 @@ type NovaCargaForm = {
 const initialNovaCargaForm: NovaCargaForm = {
   viagemId: "",
   clienteRemetenteId: "",
+  documentoIds: [],
   destinatarioNome: "",
   cidadeOrigemSigla: "",
   cidadeDestinoSigla: "",
@@ -100,6 +102,7 @@ function TMS() {
   const [tab, setTab] = useState<Tab>("ctrl");
   const [showNovaCarga, setShowNovaCarga] = useState(false);
   const [novaCargaForm, setNovaCargaForm] = useState<NovaCargaForm>(initialNovaCargaForm);
+  const [clienteBusca, setClienteBusca] = useState("");
   const [savingNovaCarga, setSavingNovaCarga] = useState(false);
   const [novaCargaError, setNovaCargaError] = useState<string | null>(null);
   const [data, setData] = useState<TmsData>({
@@ -166,7 +169,7 @@ function TMS() {
       return {
         ...prev,
         viagemId: prev.viagemId || viagem?.id || "",
-        clienteRemetenteId: prev.clienteRemetenteId || data.clientes[0]?.id || "",
+        clienteRemetenteId: prev.clienteRemetenteId,
         cidadeOrigemSigla: prev.cidadeOrigemSigla || viagem?.origemSigla || "",
         cidadeDestinoSigla: prev.cidadeDestinoSigla || viagem?.destinoSigla || "",
       };
@@ -177,7 +180,19 @@ function TMS() {
   const conferidos = data.volumes.filter((v) => v.status !== "recebido").length;
   const divergentes = data.volumes.filter((v) => v.status === "divergente").length;
   const entregues = data.volumes.filter((v) => v.status === "entregue").length;
-  const novaCargaPreview = useMemo(() => buildNovaCargaPreview(data), [data]);
+  const clienteSelecionado = data.clientes.find((cliente) => cliente.id === novaCargaForm.clienteRemetenteId) ?? null;
+  const clientesFiltrados = useMemo(() => filterClientes(data.clientes, clienteBusca), [data.clientes, clienteBusca]);
+  const documentosDoCliente = useMemo(
+    () => data.documentos.filter((documento) => documento.cliente_id === novaCargaForm.clienteRemetenteId),
+    [data.documentos, novaCargaForm.clienteRemetenteId],
+  );
+  const documentosSelecionados = useMemo(
+    () => novaCargaForm.documentoIds
+      .map((id) => documentosDoCliente.find((documento) => documento.id === id))
+      .filter((documento): documento is TmsDocumentoApi => Boolean(documento)),
+    [documentosDoCliente, novaCargaForm.documentoIds],
+  );
+  const novaCargaPreview = useMemo(() => buildNovaCargaPreview(data, novaCargaForm, clienteSelecionado, documentosSelecionados), [data, novaCargaForm, clienteSelecionado, documentosSelecionados]);
 
   async function submitNovaCarga(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -188,6 +203,10 @@ function TMS() {
     }
     if (!novaCargaForm.clienteRemetenteId) {
       setNovaCargaError("Selecione o cliente remetente.");
+      return;
+    }
+    if (novaCargaForm.documentoIds.length === 0) {
+      setNovaCargaError("Selecione ao menos uma NF/DC vinculada ao cliente.");
       return;
     }
     if (!novaCargaForm.cidadeDestinoSigla.trim()) {
@@ -214,8 +233,10 @@ function TMS() {
         valorCobrado: parseMoney(novaCargaForm.valorCobrado),
         pesoTotal: parseMoney(novaCargaForm.pesoTotal),
         totalVolumes,
+        numeroPedido: novaCargaPreview.pedido,
+        documentoIds: novaCargaForm.documentoIds,
         numeroDocumento: novaCargaForm.numeroDocumento.trim() || undefined,
-        documento: novaCargaForm.numeroDocumento.trim()
+        documento: novaCargaForm.numeroDocumento.trim() && novaCargaForm.documentoIds.length === 0
           ? {
               tipo: novaCargaForm.documentoTipo,
               numero: novaCargaForm.numeroDocumento.trim(),
@@ -230,16 +251,51 @@ function TMS() {
       setNovaCargaForm((prev) => ({
         ...initialNovaCargaForm,
         viagemId: prev.viagemId,
-        clienteRemetenteId: prev.clienteRemetenteId,
+        clienteRemetenteId: "",
         cidadeOrigemSigla: prev.cidadeOrigemSigla,
         cidadeDestinoSigla: prev.cidadeDestinoSigla,
       }));
+      setClienteBusca("");
       setShowNovaCarga(false);
     } catch (err) {
       setNovaCargaError(err instanceof Error ? err.message : "Nao foi possivel criar a carga.");
     } finally {
       setSavingNovaCarga(false);
     }
+  }
+
+  function selecionarCliente(cliente: ClienteApi) {
+    setClienteBusca(`${cliente.codigo} - ${cliente.nome}`);
+    setNovaCargaForm((prev) => ({
+      ...prev,
+      clienteRemetenteId: cliente.id,
+      documentoIds: [],
+      numeroDocumento: "",
+      valorDeclarado: "",
+      pesoTotal: "",
+    }));
+  }
+
+  function toggleDocumento(documento: TmsDocumentoApi) {
+    if (documento.carga_id) return;
+    setNovaCargaForm((prev) => {
+      const exists = prev.documentoIds.includes(documento.id);
+      const documentoIds = exists ? prev.documentoIds.filter((id) => id !== documento.id) : [...prev.documentoIds, documento.id];
+      const selecionados = documentoIds
+        .map((id) => documentosDoCliente.find((item) => item.id === id))
+        .filter((item): item is TmsDocumentoApi => Boolean(item));
+      const primeiro = selecionados[0];
+      return {
+        ...prev,
+        documentoIds,
+        documentoTipo: normalizeDocumentoTipo(primeiro?.tipo ?? prev.documentoTipo),
+        numeroDocumento: primeiro?.numero ?? "",
+        valorDeclarado: selecionados.length ? formatDecimalInput(soma(selecionados.map((item) => item.valor))) : "",
+        pesoTotal: selecionados.length ? formatDecimalInput(soma(selecionados.map((item) => item.peso_total))) : "",
+        cidadeOrigemSigla: primeiro?.cidade_origem_sigla ?? prev.cidadeOrigemSigla,
+        cidadeDestinoSigla: primeiro?.cidade_destino_sigla ?? prev.cidadeDestinoSigla,
+      };
+    });
   }
 
   return (
@@ -316,18 +372,31 @@ function TMS() {
           </div>
 
           <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <FormSelect label="Cliente" value={novaCargaForm.clienteRemetenteId} onChange={(clienteRemetenteId) => setNovaCargaForm((prev) => ({ ...prev, clienteRemetenteId }))}>
-              <option value="">Selecionar cliente</option>
-              {data.clientes.map((cliente) => (
-                <option key={cliente.id} value={cliente.id}>{cliente.codigo} - {cliente.nome}</option>
-              ))}
-            </FormSelect>
+            <ClienteSearchField
+              busca={clienteBusca}
+              clientes={clientesFiltrados}
+              selecionado={clienteSelecionado}
+              onBuscaChange={(value) => {
+                setClienteBusca(value);
+                if (novaCargaForm.clienteRemetenteId) {
+                  setNovaCargaForm((prev) => ({ ...prev, clienteRemetenteId: "", documentoIds: [], numeroDocumento: "", valorDeclarado: "", pesoTotal: "" }));
+                }
+              }}
+              onSelect={selecionarCliente}
+            />
             <FormInput label="Destinatario" value={novaCargaForm.destinatarioNome} onChange={(destinatarioNome) => setNovaCargaForm((prev) => ({ ...prev, destinatarioNome }))} placeholder="nome/empresa ou manual" />
             <FormSelect label="Recebimento" value={novaCargaForm.tipoRecebimento} onChange={(tipoRecebimento) => setNovaCargaForm((prev) => ({ ...prev, tipoRecebimento: tipoRecebimento as NovaCargaForm["tipoRecebimento"] }))}>
               <option value="porto_balsa">Porto/balsa</option>
               <option value="direto">Direto</option>
             </FormSelect>
           </div>
+
+          <DocumentoClientePicker
+            documentos={documentosDoCliente}
+            selecionados={novaCargaForm.documentoIds}
+            clienteSelecionado={Boolean(novaCargaForm.clienteRemetenteId)}
+            onToggle={toggleDocumento}
+          />
 
           <div className="mt-3 grid gap-3 md:grid-cols-4">
             <FormSelect label="Documento" value={novaCargaForm.documentoTipo} onChange={(documentoTipo) => setNovaCargaForm((prev) => ({ ...prev, documentoTipo: documentoTipo as NovaCargaForm["documentoTipo"] }))}>
@@ -424,6 +493,107 @@ function TMS() {
   );
 }
 
+function ClienteSearchField({
+  busca,
+  clientes,
+  selecionado,
+  onBuscaChange,
+  onSelect,
+}: {
+  busca: string;
+  clientes: ClienteApi[];
+  selecionado: ClienteApi | null;
+  onBuscaChange: (value: string) => void;
+  onSelect: (cliente: ClienteApi) => void;
+}) {
+  const showResults = !selecionado || normalizeSearch(busca) !== normalizeSearch(`${selecionado.codigo} - ${selecionado.nome}`);
+  return (
+    <label className="block">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Cliente</span>
+      <div className="relative mt-1">
+        <input
+          value={busca}
+          onChange={(event) => onBuscaChange(event.target.value)}
+          placeholder="buscar por codigo, nome ou documento"
+          className="h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/55 focus:border-[color:var(--brand)]"
+        />
+        {showResults && (
+          <div className="absolute left-0 right-0 z-30 mt-1 max-h-64 overflow-auto rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] shadow-2xl">
+            {clientes.slice(0, 10).map((cliente) => (
+              <button
+                key={cliente.id}
+                type="button"
+                onClick={() => onSelect(cliente)}
+                className="block w-full border-b border-[color:var(--hairline)] px-3 py-2 text-left text-sm transition-colors last:border-b-0 hover:bg-[color:var(--accent)]"
+              >
+                <span className="font-mono text-[11px] text-[color:var(--brand)]">{cliente.codigo}</span>
+                <span className="ml-2 font-medium text-foreground">{cliente.nome}</span>
+                {cliente.cpfCnpj && <span className="mt-0.5 block text-[11px] text-muted-foreground">{cliente.cpfCnpj}</span>}
+              </button>
+            ))}
+            {clientes.length === 0 && (
+              <div className="px-3 py-2 text-xs text-muted-foreground">Nenhum cliente encontrado.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </label>
+  );
+}
+
+function DocumentoClientePicker({
+  documentos,
+  selecionados,
+  clienteSelecionado,
+  onToggle,
+}: {
+  documentos: TmsDocumentoApi[];
+  selecionados: string[];
+  clienteSelecionado: boolean;
+  onToggle: (documento: TmsDocumentoApi) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-lg border border-[color:var(--hairline)] bg-[color:var(--muted)]/45 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">NF/DC do cliente</p>
+        <span className="text-[10px] text-muted-foreground">{selecionados.length} selecionada(s)</span>
+      </div>
+      {!clienteSelecionado && <p className="mt-2 text-xs text-muted-foreground">Selecione o cliente para carregar as notas conectadas a ele.</p>}
+      {clienteSelecionado && documentos.length === 0 && <p className="mt-2 text-xs text-muted-foreground">Nao ha NF/DC livre para este cliente.</p>}
+      {clienteSelecionado && documentos.length > 0 && (
+        <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {documentos.map((documento) => {
+            const checked = selecionados.includes(documento.id);
+            const disabled = Boolean(documento.carga_id);
+            return (
+              <button
+                key={documento.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => onToggle(documento)}
+                className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                  checked
+                    ? "border-[color:var(--brand)] bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-foreground"
+                    : "border-[color:var(--hairline)] bg-[color:var(--surface-elev)] text-foreground/85 hover:bg-[color:var(--accent)]"
+                } ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+              >
+                <span className="block font-mono text-xs">
+                  {documento.tipo}-{documento.numero ?? "sem-numero"}
+                </span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  {documento.cidade_origem_sigla ?? "--"} -&gt; {documento.cidade_destino_sigla ?? "--"}
+                  {typeof documento.valor === "number" ? ` - ${formatCurrency(documento.valor)}` : ""}
+                </span>
+                {disabled && <span className="mt-1 block text-[10px] text-[color:var(--danger)]">ja vinculada a carga</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CargaField({ label, value, hint, mono }: { label: string; value: string; hint?: string; mono?: boolean }) {
   return (
     <div>
@@ -500,6 +670,36 @@ function parseMoney(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function filterClientes(clientes: ClienteApi[], query: string) {
+  const needle = normalizeSearch(query);
+  if (!needle) return clientes;
+  return clientes.filter((cliente) =>
+    [cliente.codigo, cliente.nome, cliente.cpfCnpj ?? ""].some((value) => normalizeSearch(value).includes(needle)),
+  );
+}
+
+function normalizeSearch(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function soma(values: Array<number | string | null | undefined>) {
+  const total = values.reduce((sum, value) => {
+    const numeric = typeof value === "string" ? Number(value) : value;
+    return Number.isFinite(numeric) ? sum + Number(numeric) : sum;
+  }, 0);
+  return total > 0 ? total : undefined;
+}
+
+function formatDecimalInput(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? String(value).replace(".", ",") : "";
+}
+
+function normalizeDocumentoTipo(tipo: string): NovaCargaForm["documentoTipo"] {
+  if (tipo === "NFCe") return "NFCe";
+  if (tipo === "DC") return "DC";
+  return "NFe";
+}
+
 function ensureArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
@@ -517,23 +717,43 @@ type TmsData = {
   clientes: ClienteApi[];
 };
 
-function buildNovaCargaPreview(data: TmsData) {
+function buildNovaCargaPreview(
+  data: TmsData,
+  form: NovaCargaForm,
+  cliente: ClienteApi | null,
+  documentosSelecionados: TmsDocumentoApi[],
+) {
   const carga = data.cargas[0];
   const volume = data.volumes.find((v) => v.carga_id === carga?.id) ?? data.volumes[0];
-  const viagem = data.viagens.find((v) => v.codigo === carga?.viagem_codigo) ?? data.viagens[0];
+  const viagem = data.viagens.find((v) => v.id === form.viagemId) ?? data.viagens.find((v) => v.codigo === carga?.viagem_codigo) ?? data.viagens[0];
+  const primeiroDocumento = documentosSelecionados[0];
   return {
-    pedido: carga?.numero_pedido ?? "gerado ao salvar",
+    pedido: buildPedidoVenda(cliente, primeiroDocumento, form),
     uuid: volume ? `${safeShortId(volume.uuid, volume.id)}... · QR gerado` : "gerado ao salvar",
     codigo: carga?.codigo ?? "gerado ao salvar",
-    viagem: viagem ? `${viagem.codigo ?? "sem codigo"} · ${viagem.origemSigla} → ${viagem.destinoSigla ?? "destino"}` : "selecionar viagem",
-    origem: carga?.cidade_origem_sigla ?? viagem?.origemSigla ?? "selecionar",
-    destino: carga?.cidade_destino_sigla ?? viagem?.destinoSigla ?? "selecionar",
-    cliente: carga?.remetente_nome ?? "NF/DC ou preenchimento manual",
-    documento: carga?.numero_pedido ? `${carga.numero_pedido} · vinculado` : "anexar NF/DC",
-    peso: carga?.peso_total ? `${carga.peso_total.toLocaleString("pt-BR")} kg` : "manual",
-    valor: carga?.valor_declarado ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(carga.valor_declarado) : "manual",
+    viagem: viagem ? `${viagem.codigo ?? "sem codigo"} · ${viagem.origemSigla} �  ${viagem.destinoSigla ?? "destino"}` : "selecionar viagem",
+    origem: form.cidadeOrigemSigla || carga?.cidade_origem_sigla || viagem?.origemSigla || "selecionar",
+    destino: form.cidadeDestinoSigla || carga?.cidade_destino_sigla || viagem?.destinoSigla || "selecionar",
+    cliente: cliente ? `${cliente.codigo} - ${cliente.nome}` : carga?.remetente_nome ?? "buscar cliente",
+    documento: documentosSelecionados.length
+      ? documentosSelecionados.map((documento) => `${documento.tipo}-${documento.numero ?? "sem-numero"}`).join(", ")
+      : "selecione NF/DC do cliente",
+    peso: form.pesoTotal ? `${form.pesoTotal} kg` : carga?.peso_total ? `${carga.peso_total.toLocaleString("pt-BR")} kg` : "manual",
+    valor: form.valorDeclarado ? formatCurrency(parseMoney(form.valorDeclarado) ?? 0) : carga?.valor_declarado ? formatCurrency(carga.valor_declarado) : "manual",
     agenda: data.portaria[0]?.entrada_em ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(data.portaria[0].entrada_em)) : "janela a definir",
   };
+}
+
+function buildPedidoVenda(cliente: ClienteApi | null, documento: TmsDocumentoApi | undefined, form: NovaCargaForm) {
+  if (!cliente) return "selecione cliente + NF/DC";
+  const numero = documento?.numero ?? form.numeroDocumento.trim();
+  if (!numero) return `${cliente.codigo}-NF/DC`;
+  const tipo = String(documento?.tipo ?? form.documentoTipo ?? "NFe").toLowerCase();
+  return `${cliente.codigo}-${tipo}-${numero}`;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
 function safeShortId(...values: Array<unknown>) {

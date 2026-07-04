@@ -192,7 +192,13 @@ export class TmsRepository {
     }
     const categoria = input.categoria ?? 'carga';
     const codigo = await this.nextCodigo(categoria === 'encomenda' ? 'ENC' : 'CG');
-    const numeroPedido = input.numeroPedido ?? (await this.buildPedido(input.clienteRemetenteId, input.documento?.numero ?? input.numeroDocumento));
+    const documentosSelecionados = await this.findDocumentosSelecionados(input.documentoIds, input.clienteRemetenteId);
+    const primeiroDocumento = documentosSelecionados[0];
+    const numeroPedido = input.numeroPedido ?? (await this.buildPedido(
+      input.clienteRemetenteId,
+      primeiroDocumento?.numero ?? input.documento?.numero ?? input.numeroDocumento,
+      primeiroDocumento?.tipo ?? input.documento?.tipo,
+    ));
 
     const cargaId = await this.db.tx(async (client) => {
       const inserted = await client.query<{ id: string }>(
@@ -250,6 +256,17 @@ export class TmsRepository {
           ],
         );
       }
+      if (documentosSelecionados.length) {
+        await client.query(
+          `
+          UPDATE documento_fiscal
+          SET carga_id = $2,
+              atualizado_em = now()
+          WHERE id = ANY($1::uuid[])
+          `,
+          [documentosSelecionados.map((documento) => documento.id), id],
+        );
+      }
       const pesoPorVolume = input.pesoTotal ? input.pesoTotal / totalVolumes : null;
       for (let i = 1; i <= totalVolumes; i++) {
         await client.query(
@@ -278,11 +295,14 @@ export class TmsRepository {
             cidadeOrigemSigla: input.cidadeOrigemSigla ?? null,
             cidadeDestinoSigla: input.cidadeDestinoSigla,
             totalVolumes,
-            documento: input.documento ? {
-              tipo: input.documento.tipo,
-              numero: input.documento.numero ?? input.numeroDocumento ?? null,
-              origem: input.documento.origem ?? 'manual',
-            } : null,
+            documentoIds: documentosSelecionados.map((documento) => documento.id),
+            documento: primeiroDocumento
+              ? { tipo: primeiroDocumento.tipo, numero: primeiroDocumento.numero, origem: primeiroDocumento.origem }
+              : input.documento ? {
+                tipo: input.documento.tipo,
+                numero: input.documento.numero ?? input.numeroDocumento ?? null,
+                origem: input.documento.origem ?? 'manual',
+              } : null,
           }),
           input.clientUuid ?? null,
         ],
@@ -858,12 +878,46 @@ export class TmsRepository {
     };
   }
 
-  private async buildPedido(clienteId: string, numeroDocumento?: string) {
+  private async findDocumentosSelecionados(documentoIds: string[] | undefined, clienteId: string) {
+    const ids = [...new Set((documentoIds ?? []).filter(Boolean))];
+    if (!ids.length) return [] as Array<{ id: string; tipo: string; numero: string | null; origem: string | null }>;
+    const result = await this.db.query<{ id: string; tipo: string; numero: string | null; cliente_id: string | null; carga_id: string | null; origem: string | null }>(
+      `
+      SELECT id, tipo::text, numero, cliente_id, carga_id, origem::text
+      FROM documento_fiscal
+      WHERE id = ANY($1::uuid[])
+      ORDER BY criado_em, id
+      `,
+      [ids],
+    );
+    if (result.rows.length !== ids.length) {
+      throw new BadRequestException('Documento selecionado nao encontrado');
+    }
+    const invalido = result.rows.find((documento) => documento.cliente_id !== clienteId);
+    if (invalido) {
+      throw new BadRequestException('Documento selecionado nao pertence ao cliente');
+    }
+    const vinculado = result.rows.find((documento) => documento.carga_id);
+    if (vinculado) {
+      throw new BadRequestException('Documento selecionado ja esta vinculado a uma carga');
+    }
+    return result.rows.map((documento) => ({
+      id: documento.id,
+      tipo: documento.tipo,
+      numero: documento.numero,
+      origem: documento.origem,
+    }));
+  }
+
+  private async buildPedido(clienteId: string, numeroDocumento?: string | null, tipoDocumento?: string | null) {
     const cliente = await this.db.one<{ codigo: string | null; cpf_cnpj: string | null; nome: string }>('SELECT codigo, cpf_cnpj, nome FROM cliente WHERE id = $1', [clienteId]);
     const code = cliente?.codigo
       ? cliente.codigo.toUpperCase()
       : (cliente?.cpf_cnpj ?? cliente?.nome ?? 'CLIENTE').replace(/\W/g, '').slice(-6).toUpperCase();
-    return `${code}-${numeroDocumento ?? 'SEM-DOC'}`;
+    const doc = numeroDocumento
+      ? `${tipoDocumento ? `${tipoDocumento.toLowerCase()}-` : ''}${numeroDocumento}`
+      : 'SEM-DOC';
+    return `${code}-${doc}`;
   }
 
   private async nextCodigo(prefix: string): Promise<string> {
