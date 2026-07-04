@@ -1,5 +1,15 @@
 # STATUS — Diário vivo do projeto AJC
 
+## Trabalho 2026-07-04 - Nova Carga derivada da NF/DC selecionada
+- Contexto: o formulario de Nova Carga ainda exibia e aceitava edicao manual de Documento, Numero NF/DC, Peso total, Volumes e Valor NF/DC, embora a regra operacional correta seja derivar essas informacoes das NF/DC escolhidas no modal.
+- O que foi feito: removidos esses campos da UI em pps/web-console/src/routes/app.tms.tsx; o payload agora deriva 
+umeroDocumento da primeira NF/DC selecionada, consolida alorDeclarado e pesoTotal a partir das NF/DC escolhidas e calcula 	otalVolumes pela quantidade selecionada. A exibicao de Primeira NF/DC do pedido e o 
+umero do pedido / venda ficaram explicitamente dinamicos pela primeira nota selecionada.
+- Verificacao: un run build em pps/web-console exit 0.
+## Trabalho 2026-07-04 - Remocao do badge Campos Lucas na Nova Carga
+- Contexto: o formulario de Nova Carga ainda exibia o badge campos Lucas (30/jun) no cabecalho, mas essa marcacao ja nao deve aparecer na tela.
+- O que foi feito: removido o badge do cabecalho de Nova carga em pps/web-console/src/routes/app.tms.tsx, sem alterar o restante do formulario.
+- Verificacao: un run build em pps/web-console exit 0.
 ## Trabalho 2026-07-04 - Correcao de Recebimento na Nova Carga
 - Contexto: o formulario de Nova Carga tinha sido ajustado com o rotulo Agente, mas a regra correta da tela aprovada e manter o campo como Recebimento e trocar apenas a opcao Direto para Agente.
 - O que foi feito: pps/web-console/src/routes/app.tms.tsx voltou o label do select para Recebimento, preservando Porto/balsa, e renomeou a opcao direto exibida no dropdown para Agente.
@@ -10,7 +20,7 @@
 - Verificacao: un run build em pps/web-console exit 0.
 ## Trabalho 2026-07-04 - Nova Carga com modal de NF/DC
 - Contexto: o fluxo aprovado foi refinado para priorizar cliente no topo, abrir o dropdown apenas durante a busca e mover a selecao de NF/DC para modal, em vez de lista inline no formulario.
-- O que foi feito: /app/tms agora mostra cliente primeiro, abre resultados apenas quando ha digitacao, usa um acionador de NF/DC que abre modal por cliente selecionado, resume as notas escolhidas no formulario e preserva o numero do pedido pela primeira NF/DC selecionada. O campo Recebimento da tela foi renomeado para Agente.
+- O que foi feito: /app/tms agora mostra cliente primeiro, abre resultados apenas quando ha digitacao, usa um acionador de NF/DC que abre modal por cliente selecionado, resume as notas escolhidas no formulario e preserva o numero do pedido pela primeira NF/DC selecionada. O campo Recebimento foi mantido e a opcao operacional do dropdown foi ajustada para Agente.
 - Verificacao: un run build em pps/web-console exit 0.
 
 ## Trabalho 2026-07-04 - Nova Carga por cliente e NF/DC

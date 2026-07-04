@@ -58,12 +58,7 @@ type NovaCargaForm = {
   cidadeOrigemSigla: string;
   cidadeDestinoSigla: string;
   tipoRecebimento: "porto_balsa" | "direto";
-  documentoTipo: "NFe" | "NFCe" | "DC";
-  numeroDocumento: string;
-  valorDeclarado: string;
   valorCobrado: string;
-  pesoTotal: string;
-  totalVolumes: string;
 };
 
 const initialNovaCargaForm: NovaCargaForm = {
@@ -74,12 +69,7 @@ const initialNovaCargaForm: NovaCargaForm = {
   cidadeOrigemSigla: "",
   cidadeDestinoSigla: "",
   tipoRecebimento: "porto_balsa",
-  documentoTipo: "NFe",
-  numeroDocumento: "",
-  valorDeclarado: "",
   valorCobrado: "",
-  pesoTotal: "",
-  totalVolumes: "1",
 };
 
 // Sub-navegação agrupada para manter o padrão visual com muitas telas.
@@ -193,6 +183,7 @@ function TMS() {
       .filter((documento): documento is TmsDocumentoApi => Boolean(documento)),
     [documentosDoCliente, novaCargaForm.documentoIds],
   );
+  const primeiroDocumentoSelecionado = documentosSelecionados[0];
   const novaCargaPreview = useMemo(() => buildNovaCargaPreview(data, novaCargaForm, clienteSelecionado, documentosSelecionados), [data, novaCargaForm, clienteSelecionado, documentosSelecionados]);
 
   async function submitNovaCarga(event: React.FormEvent<HTMLFormElement>) {
@@ -214,14 +205,11 @@ function TMS() {
       setNovaCargaError("Informe o destino.");
       return;
     }
-    const totalVolumes = Number.parseInt(novaCargaForm.totalVolumes, 10);
-    if (!Number.isFinite(totalVolumes) || totalVolumes < 1) {
-      setNovaCargaError("Volumes deve ser maior que zero.");
-      return;
-    }
-
     setSavingNovaCarga(true);
     try {
+      const valorDeclarado = soma(documentosSelecionados.map((documento) => documento.valor));
+      const pesoTotal = soma(documentosSelecionados.map((documento) => documento.peso_total));
+      const totalVolumes = Math.max(documentosSelecionados.length, 1);
       await createTmsCarga({
         categoria: "carga",
         viagemId: novaCargaForm.viagemId,
@@ -230,21 +218,13 @@ function TMS() {
         cidadeOrigemSigla: novaCargaForm.cidadeOrigemSigla.trim().toUpperCase() || undefined,
         cidadeDestinoSigla: novaCargaForm.cidadeDestinoSigla.trim().toUpperCase(),
         tipoRecebimento: novaCargaForm.tipoRecebimento,
-        valorDeclarado: parseMoney(novaCargaForm.valorDeclarado),
+        valorDeclarado: valorDeclarado,
         valorCobrado: parseMoney(novaCargaForm.valorCobrado),
-        pesoTotal: parseMoney(novaCargaForm.pesoTotal),
+        pesoTotal: pesoTotal,
         totalVolumes,
         numeroPedido: novaCargaPreview.pedido,
         documentoIds: novaCargaForm.documentoIds,
-        numeroDocumento: novaCargaForm.numeroDocumento.trim() || undefined,
-        documento: novaCargaForm.numeroDocumento.trim() && novaCargaForm.documentoIds.length === 0
-          ? {
-              tipo: novaCargaForm.documentoTipo,
-              numero: novaCargaForm.numeroDocumento.trim(),
-              valor: parseMoney(novaCargaForm.valorDeclarado),
-              origem: "manual",
-            }
-          : undefined,
+        numeroDocumento: primeiroDocumentoSelecionado?.numero ?? undefined,
         clientUuid: crypto.randomUUID(),
       });
       const [cargas, documentos, volumes] = await Promise.all([listTmsCargas(), listTmsDocumentos(), listTmsVolumes()]);
@@ -272,9 +252,6 @@ function TMS() {
       ...prev,
       clienteRemetenteId: cliente.id,
       documentoIds: [],
-      numeroDocumento: "",
-      valorDeclarado: "",
-      pesoTotal: "",
     }));
   }
 
@@ -290,10 +267,6 @@ function TMS() {
       return {
         ...prev,
         documentoIds,
-        documentoTipo: normalizeDocumentoTipo(primeiro?.tipo ?? prev.documentoTipo),
-        numeroDocumento: primeiro?.numero ?? "",
-        valorDeclarado: selecionados.length ? formatDecimalInput(soma(selecionados.map((item) => item.valor))) : "",
-        pesoTotal: selecionados.length ? formatDecimalInput(soma(selecionados.map((item) => item.peso_total))) : "",
         cidadeOrigemSigla: primeiro?.cidade_origem_sigla ?? prev.cidadeOrigemSigla,
         cidadeDestinoSigla: primeiro?.cidade_destino_sigla ?? prev.cidadeDestinoSigla,
       };
@@ -338,7 +311,6 @@ function TMS() {
           <div className="flex flex-wrap items-center gap-2">
             <Plus className="h-4 w-4 text-[color:var(--brand)]" />
             <h3 className="font-display text-lg">Nova carga</h3>
-            <span className="rounded-full bg-[color:color-mix(in_oklab,var(--success)_14%,transparent)] px-2.5 py-1 text-[11px] text-[color:var(--success)] ring-1 ring-[color:color-mix(in_oklab,var(--success)_35%,transparent)]">campos Lucas (30/jun)</span>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">Pedido = COD CLIENTE + NF/DC. UUID/QR e codigo de carga sao gerados pelo sistema. Cliente, peso e valor podem vir da NF/DC ou preenchimento manual.</p>
 
@@ -356,7 +328,7 @@ function TMS() {
               onBuscaChange={(value) => {
                 setClienteBusca(value);
                 if (novaCargaForm.clienteRemetenteId) {
-                  setNovaCargaForm((prev) => ({ ...prev, clienteRemetenteId: "", documentoIds: [], numeroDocumento: "", valorDeclarado: "", pesoTotal: "" }));
+                  setNovaCargaForm((prev) => ({ ...prev, clienteRemetenteId: "", documentoIds: [] }));
                 }
               }}
               onSelect={selecionarCliente}
@@ -400,22 +372,15 @@ function TMS() {
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <FormInput label="Destinatario" value={novaCargaForm.destinatarioNome} onChange={(destinatarioNome) => setNovaCargaForm((prev) => ({ ...prev, destinatarioNome }))} placeholder="nome/empresa ou manual" />
             <CargaField label="NF/DC selecionadas" value={documentosSelecionados.length ? documentosSelecionados.map((documento) => `${documento.tipo}-${documento.numero ?? "sem-numero"}`).join(", ") : "selecionar no modal"} />
-            <CargaField label="Primeira NF/DC do pedido" value={documentosSelecionados[0] ? `${documentosSelecionados[0].tipo}-${documentosSelecionados[0].numero ?? "sem-numero"}` : "aguardando selecao"} />
-          </div>
-
-          <div className="mt-3 grid gap-3 md:grid-cols-4">
-            <FormSelect label="Documento" value={novaCargaForm.documentoTipo} onChange={(documentoTipo) => setNovaCargaForm((prev) => ({ ...prev, documentoTipo: documentoTipo as NovaCargaForm["documentoTipo"] }))}>
-              <option value="NFe">NF-e</option>
-              <option value="NFCe">NFC-e</option>
-              <option value="DC">DC</option>
-            </FormSelect>
-            <FormInput label="Numero NF/DC" value={novaCargaForm.numeroDocumento} onChange={(numeroDocumento) => setNovaCargaForm((prev) => ({ ...prev, numeroDocumento }))} placeholder="18432" />
-            <FormInput label="Peso total" value={novaCargaForm.pesoTotal} onChange={(pesoTotal) => setNovaCargaForm((prev) => ({ ...prev, pesoTotal }))} placeholder="1240" inputMode="decimal" />
-            <FormInput label="Volumes" value={novaCargaForm.totalVolumes} onChange={(totalVolumes) => setNovaCargaForm((prev) => ({ ...prev, totalVolumes }))} placeholder="1" inputMode="numeric" />
+            <CargaField label="Primeira NF/DC do pedido" value={primeiroDocumentoSelecionado ? `${primeiroDocumentoSelecionado.tipo}-${primeiroDocumentoSelecionado.numero ?? "sem-numero"}` : "aguardando selecao"} />
           </div>
 
           <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <FormInput label="Valor NF/DC" value={novaCargaForm.valorDeclarado} onChange={(valorDeclarado) => setNovaCargaForm((prev) => ({ ...prev, valorDeclarado }))} placeholder="38900,00" inputMode="decimal" />
+            <CargaField
+              label="Resumo NF/DC"
+              value={primeiroDocumentoSelecionado ? `${primeiroDocumentoSelecionado.tipo}-${primeiroDocumentoSelecionado.numero ?? "sem-numero"} · ${documentosSelecionados.length} selecionada(s)` : "selecione NF/DC no modal"}
+              hint="primeira NF define o pedido"
+            />
             <FormInput label="Frete cobrado" value={novaCargaForm.valorCobrado} onChange={(valorCobrado) => setNovaCargaForm((prev) => ({ ...prev, valorCobrado }))} placeholder="1200,00" inputMode="decimal" />
             <CargaField label="Agendamento de recebimento" value={novaCargaPreview.agenda} hint="max 5 caminhoes/janela" />
           </div>
@@ -761,16 +726,6 @@ function soma(values: Array<number | string | null | undefined>) {
   return total > 0 ? total : undefined;
 }
 
-function formatDecimalInput(value: number | undefined) {
-  return typeof value === "number" && Number.isFinite(value) ? String(value).replace(".", ",") : "";
-}
-
-function normalizeDocumentoTipo(tipo: string): NovaCargaForm["documentoTipo"] {
-  if (tipo === "NFCe") return "NFCe";
-  if (tipo === "DC") return "DC";
-  return "NFe";
-}
-
 function ensureArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
@@ -798,6 +753,8 @@ function buildNovaCargaPreview(
   const volume = data.volumes.find((v) => v.carga_id === carga?.id) ?? data.volumes[0];
   const viagem = data.viagens.find((v) => v.id === form.viagemId) ?? data.viagens.find((v) => v.codigo === carga?.viagem_codigo) ?? data.viagens[0];
   const primeiroDocumento = documentosSelecionados[0];
+  const pesoSelecionado = soma(documentosSelecionados.map((documento) => documento.peso_total));
+  const valorSelecionado = soma(documentosSelecionados.map((documento) => documento.valor));
   return {
     pedido: buildPedidoVenda(cliente, primeiroDocumento, form),
     uuid: volume ? safeShortId(volume.uuid, volume.id) + "... - QR gerado" : "gerado ao salvar",
@@ -809,17 +766,17 @@ function buildNovaCargaPreview(
     documento: documentosSelecionados.length
       ? documentosSelecionados.map((documento) => `${documento.tipo}-${documento.numero ?? "sem-numero"}`).join(", ")
       : "selecione NF/DC do cliente",
-    peso: form.pesoTotal ? `${form.pesoTotal} kg` : carga?.peso_total ? `${carga.peso_total.toLocaleString("pt-BR")} kg` : "manual",
-    valor: form.valorDeclarado ? formatCurrency(parseMoney(form.valorDeclarado) ?? 0) : carga?.valor_declarado ? formatCurrency(carga.valor_declarado) : "manual",
+    peso: typeof pesoSelecionado === "number" ? `${pesoSelecionado.toLocaleString("pt-BR")} kg` : carga?.peso_total ? `${carga.peso_total.toLocaleString("pt-BR")} kg` : "aguardando NF/DC",
+    valor: typeof valorSelecionado === "number" ? formatCurrency(valorSelecionado) : carga?.valor_declarado ? formatCurrency(carga.valor_declarado) : "aguardando NF/DC",
     agenda: data.portaria[0]?.entrada_em ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(data.portaria[0].entrada_em)) : "janela a definir",
   };
 }
 
 function buildPedidoVenda(cliente: ClienteApi | null, documento: TmsDocumentoApi | undefined, form: NovaCargaForm) {
   if (!cliente) return "selecione cliente + NF/DC";
-  const numero = documento?.numero ?? form.numeroDocumento.trim();
+  const numero = documento?.numero?.trim();
   if (!numero) return `${cliente.codigo}-NF/DC`;
-  const tipo = String(documento?.tipo ?? form.documentoTipo ?? "NFe").toLowerCase();
+  const tipo = String(documento?.tipo ?? "NFe").toLowerCase();
   return `${cliente.codigo}-${tipo}-${numero}`;
 }
 
