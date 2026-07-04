@@ -31,6 +31,7 @@ type Tab = "clientes" | "agentes" | "alocacao" | "cotacoes";
 
 type UiCliente = {
   id: string;
+  codigo: string;
   tipo: string;
   nome: string;
   documento: string;
@@ -268,6 +269,7 @@ function CRM() {
       return;
     }
     downloadCsv("ajc-crm-clientes.csv", clientes.map((c) => ({
+      codigo: c.codigo,
       tipo: c.tipo,
       nome: c.nome,
       documento: c.documento,
@@ -360,7 +362,7 @@ function CRM() {
               { key: "nome", header: "Cliente", render: (r) => (
                 <div>
                   <p className="font-medium">{r.nome}</p>
-                  <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{r.documento}</p>
+                  <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{r.codigo} · {r.documento}</p>
                 </div>
               ) },
               { key: "tipo", header: "Tipo", render: (r) => <Tag tone={r.tipo === "PJ" ? "brand" : "neutral"}>{r.tipo}</Tag> },
@@ -428,7 +430,7 @@ function CRM() {
             <div className="mt-3 grid gap-2 md:grid-cols-6">
               <select value={novaCotacao.clienteId} onChange={(e) => setNovaCotacao((c) => ({ ...c, clienteId: e.target.value }))} className="h-10 rounded-md bg-[color:var(--muted)] px-3 text-xs text-foreground ring-1 ring-[color:var(--hairline)] md:col-span-2">
                 <option value="">Cliente</option>
-                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.codigo} - {cliente.nome}</option>)}
               </select>
               <select value={novaCotacao.tipo} onChange={(e) => setNovaCotacao((c) => ({ ...c, tipo: e.target.value as typeof c.tipo }))} className="h-10 rounded-md bg-[color:var(--muted)] px-3 text-xs text-foreground ring-1 ring-[color:var(--hairline)]">
                 <option value="carga">Carga</option>
@@ -520,6 +522,7 @@ function mapCotacao(c: CrmCotacaoApi): UiCotacao {
 function mapCliente(c: ClienteApi): UiCliente {
   return {
     id: c.id,
+    codigo: c.codigo,
     tipo: c.tipo,
     nome: c.nome,
     documento: c.cpfCnpj ?? "-",
@@ -593,7 +596,7 @@ function ClienteDrawer({
               <div>
                 <span className="champagne-eyebrow">Ficha 360º</span>
                 <h3 className="mt-1 font-display text-2xl text-foreground">{cliente.nome}</h3>
-                <p className="mt-0.5 font-mono text-xs text-muted-foreground">{cliente.documento}</p>
+                <p className="mt-0.5 font-mono text-xs text-muted-foreground">{cliente.codigo} · {cliente.documento}</p>
               </div>
               <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-[color:var(--accent)] hover:text-foreground">
                 <X className="h-4 w-4" />

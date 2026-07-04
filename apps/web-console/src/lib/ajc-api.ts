@@ -330,6 +330,7 @@ export type AgenteApi = {
 
 export type ClienteApi = {
   id: string;
+  codigo: string;
   tipo: "PF" | "PJ" | string;
   nome: string;
   cpfCnpj: string | null;

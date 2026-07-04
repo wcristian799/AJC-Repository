@@ -319,7 +319,7 @@ function TMS() {
             <FormSelect label="Cliente" value={novaCargaForm.clienteRemetenteId} onChange={(clienteRemetenteId) => setNovaCargaForm((prev) => ({ ...prev, clienteRemetenteId }))}>
               <option value="">Selecionar cliente</option>
               {data.clientes.map((cliente) => (
-                <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>
+                <option key={cliente.id} value={cliente.id}>{cliente.codigo} - {cliente.nome}</option>
               ))}
             </FormSelect>
             <FormInput label="Destinatario" value={novaCargaForm.destinatarioNome} onChange={(destinatarioNome) => setNovaCargaForm((prev) => ({ ...prev, destinatarioNome }))} placeholder="nome/empresa ou manual" />

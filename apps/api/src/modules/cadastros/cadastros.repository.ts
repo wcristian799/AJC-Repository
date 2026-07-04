@@ -30,6 +30,7 @@ export interface AgenteDto {
 
 export interface ClienteDto {
   id: string;
+  codigo: string;
   tipo: string;
   nome: string;
   cpfCnpj: string | null;
@@ -434,6 +435,7 @@ export class CadastrosRepository {
   async listClientes(): Promise<ClienteDto[]> {
     const result = await this.db.query<{
       id: string;
+      codigo: string;
       tipo: string;
       nome: string;
       cpf_cnpj: string | null;
@@ -442,15 +444,16 @@ export class CadastrosRepository {
       contatos: unknown[] | null;
     }>(
       `
-      SELECT id, tipo::text, nome, cpf_cnpj, cidade_sigla, agente_id, contatos
+      SELECT id, codigo, tipo::text, nome, cpf_cnpj, cidade_sigla, agente_id, contatos
       FROM cliente
       WHERE excluido_em IS NULL
-      ORDER BY nome
+      ORDER BY codigo, nome
       LIMIT 500
       `,
     );
     return result.rows.map((row) => ({
       id: row.id,
+      codigo: row.codigo,
       tipo: row.tipo,
       nome: row.nome,
       cpfCnpj: row.cpf_cnpj,
@@ -544,6 +547,7 @@ export class CadastrosRepository {
   private async findCliente(id: string): Promise<ClienteDto> {
     const row = await this.db.one<{
       id: string;
+      codigo: string;
       tipo: string;
       nome: string;
       cpf_cnpj: string | null;
@@ -552,7 +556,7 @@ export class CadastrosRepository {
       contatos: unknown[] | null;
     }>(
       `
-      SELECT id, tipo::text, nome, cpf_cnpj, cidade_sigla, agente_id, contatos
+      SELECT id, codigo, tipo::text, nome, cpf_cnpj, cidade_sigla, agente_id, contatos
       FROM cliente
       WHERE id = $1 AND excluido_em IS NULL
       `,
@@ -561,6 +565,7 @@ export class CadastrosRepository {
     if (!row) throw new NotFoundException('Cliente nao encontrado');
     return {
       id: row.id,
+      codigo: row.codigo,
       tipo: row.tipo,
       nome: row.nome,
       cpfCnpj: row.cpf_cnpj,

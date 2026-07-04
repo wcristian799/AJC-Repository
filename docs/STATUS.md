@@ -1,4 +1,9 @@
 # STATUS — Diário vivo do projeto AJC
+## Trabalho 2026-07-04 - Codigo unico de cliente
+- Contexto: cada cliente precisa ter codigo unico de cadastro visivel para operacao e usado no TMS como COD CLIENTE do numero de pedido.
+- O que foi feito: migration 0018 adiciona cliente.codigo com sequencia/default CLI-ANO-NNNN, backfill dos clientes existentes e indice unico; API de cadastros retorna codigo; CRM mostra codigo na lista, ficha 360, export e selects; TMS mostra codigo no select de cliente e usa cliente.codigo ao gerar numero_pedido.
+- Proximo passo: aplicar migrations no banco de producao/Coolify antes de depender do campo no front publicado.
+
 ## Trabalho 2026-07-04 - Hotfix TMS volume sem UUID
 - Contexto: /app/tms caia em runtime com TypeError ao tentar executar slice em volume.uuid ausente vindo da API/seed.
 - O que foi feito: app.tms normaliza respostas de listagem para arrays e usa safeShortId(volume.uuid, volume.id) no preview de Nova Carga, impedindo crash da rota por dado incompleto.

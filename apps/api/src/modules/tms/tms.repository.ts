@@ -859,8 +859,10 @@ export class TmsRepository {
   }
 
   private async buildPedido(clienteId: string, numeroDocumento?: string) {
-    const cliente = await this.db.one<{ cpf_cnpj: string | null; nome: string }>('SELECT cpf_cnpj, nome FROM cliente WHERE id = $1', [clienteId]);
-    const code = (cliente?.cpf_cnpj ?? cliente?.nome ?? 'CLIENTE').replace(/\W/g, '').slice(-6).toUpperCase();
+    const cliente = await this.db.one<{ codigo: string | null; cpf_cnpj: string | null; nome: string }>('SELECT codigo, cpf_cnpj, nome FROM cliente WHERE id = $1', [clienteId]);
+    const code = cliente?.codigo
+      ? cliente.codigo.toUpperCase()
+      : (cliente?.cpf_cnpj ?? cliente?.nome ?? 'CLIENTE').replace(/\W/g, '').slice(-6).toUpperCase();
     return `${code}-${numeroDocumento ?? 'SEM-DOC'}`;
   }
 
