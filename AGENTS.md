@@ -54,6 +54,7 @@ Sistema de gestão (ERP + TMS) para a **AJC**, empresa de transporte fluvial no 
 - QR real fechado em 03/jul/2026: apps/web-console usa dependencia qrcode e componente RealQR para bilhetes em /cliente, /portal, /totem, PIX stub e etiquetas; qr_token/UUID reais viram SVG escaneavel, sem alterar gateway/BP-e/Bluetooth reais.
 - Comprovante de bilhete fechado em 03/jul/2026: /cliente e /portal agora executam Baixar/Compartilhar com dados reais do bilhete/pedido, HTML imprimivel com QR Code real via qrcode, fallback de download/clipboard/share; sem novo backend porque usa contratos existentes.
 - Deploy backend Coolify preparado em 03/jul/2026: `Dockerfile` multi-stage na raiz, `.dockerignore`, `apps/api/.env.coolify.example` e `docs/deploy/Coolify-Backend-API.md`; API prevista em `https://apiajc.byteintelligence.com.br`, front em `https://ajcmvp.vercel.app`, CORS por `CORS_ORIGINS`, healthcheck `/api/health`.
+- Deploy Coolify corrigido em 04/jul/2026: usar `docker-compose.coolify.yml` para subir stack completa (`postgres` PostGIS + `api` + `worker` pg-boss). O `Dockerfile` continua sendo a imagem de API/worker; dominio `apiajc.byteintelligence.com.br` aponta para servico `api:3000`.
 
 ## Único risco alto em aberto
 - **GPS em background no celular** (rastreamento da embarcação) — não bloqueia o MVP; spike em paralelo. Pode exigir plugin pago ou serviço nativo Android.

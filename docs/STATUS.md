@@ -1,5 +1,10 @@
 # STATUS — Diário vivo do projeto AJC
-## Trabalho 2026-07-03 - Docker do backend para Coolify
+## Trabalho 2026-07-04 - Compose Coolify com PostGIS e worker pg-boss
+- **Contexto:** o `Dockerfile` da API nao subia banco nem worker; para Coolify, a stack completa precisa de Postgres/PostGIS, API e processo separado de fila.
+- **O que foi feito:** criado `docker-compose.coolify.yml` com `postgres` (`postgis/postgis:16-3.4` + volume persistente), `api` (`Dockerfile`, porta interna 3000) e `worker` (`node apps/api/dist/apps/api/src/worker.js`) na mesma rede interna. `apps/api/.env.coolify.example` e `docs/deploy/Coolify-Backend-API.md` foram atualizados para orientar o deploy via Docker Compose.
+- **Escopo tecnico real:** NestJS/PostgreSQL/PostGIS/Nx estao no repo; pg-boss existe como worker separado e agora entra no deploy. Firebase GPS e apps Ionic/Capacitor continuam fase futura/spike, nao foram implementados no MVP web atual. Integracoes externas seguem stub ate fornecedores/credenciais.
+- **Verificacao:** `npm run build --workspace apps/api` exit 0 e `apps/api/dist/apps/api/src/worker.js` existe no build.
+- **Proximo passo recomendado:** no Coolify, criar Application do tipo Docker Compose usando `docker-compose.coolify.yml`, apontar o dominio `apiajc.byteintelligence.com.br` para o servico `api:3000`, configurar secrets e rodar migrations/seed apos o primeiro deploy.## Trabalho 2026-07-03 - Docker do backend para Coolify
 - **Contexto:** o backend sera publicado no Coolify em `https://apiajc.byteintelligence.com.br`, enquanto o front aprovado esta em `https://ajcmvp.vercel.app`.
 - **O que foi feito:** criado `Dockerfile` multi-stage na raiz, `.dockerignore`, `apps/api/.env.coolify.example` e `docs/deploy/Coolify-Backend-API.md`. A imagem roda `node apps/api/dist/apps/api/src/main.js`, expoe `3000`, inclui migrations/seeds para exec manual no container e possui healthcheck em `/api/health` validando `status=ok`.
 - **Backend/CORS:** `apps/api/src/main.ts` agora le `CORS_ORIGINS`; fallback inclui `https://ajcmvp.vercel.app`, `https://apiajc.byteintelligence.com.br` e localhost para dev. `trust proxy` foi habilitado para rodar atras do proxy do Coolify.

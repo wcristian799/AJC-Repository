@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ajc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no Coolify}
+      POSTGRES_DB: ${POSTGRES_DB:-ajc}
+    volumes:
+      - ajc_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-ajc} -d $${POSTGRES_DB:-ajc}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ajc_internal
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ajc}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ajc}
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no Coolify}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?defina JWT_REFRESH_SECRET no Coolify}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://ajcmvp.vercel.app}
+      PAYMENT_GATEWAY_MODE: ${PAYMENT_GATEWAY_MODE:-stub}
+      BPE_MODE: ${BPE_MODE:-stub}
+      WHATSAPP_MODE: ${WHATSAPP_MODE:-stub}
+      BLUETOOTH_PRINT_MODE: ${BLUETOOTH_PRINT_MODE:-stub}
+    expose:
+      - "3000"
+    networks:
+      - ajc_internal
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["node", "apps/api/dist/apps/api/src/worker.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ajc}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ajc}
+    networks:
+      - ajc_internal
+
+volumes:
+  ajc_postgres_data:
+
+networks:
+  ajc_internal:

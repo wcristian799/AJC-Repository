@@ -3,11 +3,23 @@
 Dominio da API: `https://apiajc.byteintelligence.com.br`
 Front aprovado: `https://ajcmvp.vercel.app`
 
-## Build
+## Caminho recomendado no Coolify
 
-Use o `Dockerfile` da raiz do repositorio.
+Use **Docker Compose** apontando para:
 
-Porta interna do container: `3000`.
+```text
+docker-compose.coolify.yml
+```
+
+Esse compose sobe:
+
+- `postgres`: PostgreSQL 16 + PostGIS.
+- `api`: NestJS em `:3000`.
+- `worker`: processo separado `pg-boss`, usando a mesma imagem da API.
+
+O `Dockerfile` da raiz continua sendo usado pelo compose para construir `api` e `worker`.
+
+No dominio do Coolify, aponte `https://apiajc.byteintelligence.com.br` para o servico `api`, porta interna `3000`.
 
 ## Variaveis de ambiente
 
@@ -17,7 +29,10 @@ Obrigatorias:
 
 - `NODE_ENV=production`
 - `API_PORT=3000`
-- `DATABASE_URL=postgresql://...`
+- `POSTGRES_USER=ajc`
+- `POSTGRES_PASSWORD=...`
+- `POSTGRES_DB=ajc`
+- `DATABASE_URL=postgresql://ajc:SENHA@postgres:5432/ajc`
 - `JWT_SECRET=...`
 - `JWT_REFRESH_SECRET=...`
 - `CORS_ORIGINS=https://ajcmvp.vercel.app`
@@ -33,6 +48,8 @@ Enquanto nao houver fornecedor/credenciais reais:
 
 O backend usa SQL puro e runner `schema_migrations`, sem ORM.
 
+No deploy com `docker-compose.coolify.yml`, o banco sobe no servico `postgres` com imagem `postgis/postgis:16-3.4` e volume persistente `ajc_postgres_data`.
+
 Para aplicar migrations dentro do container:
 
 ```bash
@@ -46,6 +63,22 @@ node infra/seed/run.mjs
 ```
 
 Ambos usam `DATABASE_URL`.
+
+## Fila pg-boss
+
+O worker sobe como servico separado:
+
+```text
+worker
+```
+
+Comando:
+
+```bash
+node apps/api/dist/apps/api/src/worker.js
+```
+
+Ele usa a mesma `DATABASE_URL` e inicializa o schema `pgboss`. As integracoes externas reais ainda continuam em stub ate existirem fornecedores/credenciais.
 
 ## Healthcheck
 
