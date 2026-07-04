@@ -10,6 +10,7 @@ import {
 } from "motion/react";
 import { ArrowRight, Check } from "lucide-react";
 import { BrandMark } from "@/components/ops/BrandMark";
+import { AjcApiError, loginAjc } from "@/lib/ajc-api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -34,6 +35,7 @@ function LoginPage() {
   const [phase, setPhase] = useState<"intro" | "form" | "submitting" | "done">("intro");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   // intro → form
   useEffect(() => {
@@ -41,14 +43,19 @@ function LoginPage() {
     return () => clearTimeout(t);
   }, []);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (phase !== "form") return;
+    setError(null);
     setPhase("submitting");
-    setTimeout(() => {
+    try {
+      await loginAjc({ login: email, password, dispositivo: "web-console" });
       setPhase("done");
       setTimeout(() => navigate({ to: "/app/inicio" }), 700);
-    }, 1100);
+    } catch (err) {
+      setError(err instanceof AjcApiError ? err.message : "Nao foi possivel entrar agora.");
+      setPhase("form");
+    }
   }
 
   return (
@@ -144,6 +151,7 @@ function LoginPage() {
                 setEmail={setEmail}
                 setPassword={setPassword}
                 onSubmit={submit}
+                error={error}
               />
             </motion.div>
           )}
@@ -249,6 +257,7 @@ function FormPanel({
   setEmail,
   setPassword,
   onSubmit,
+  error,
 }: {
   phase: "form" | "submitting" | "done" | "intro";
   email: string;
@@ -256,6 +265,7 @@ function FormPanel({
   setEmail: (v: string) => void;
   setPassword: (v: string) => void;
   onSubmit: (e: React.FormEvent) => void;
+  error?: string | null;
 }) {
   const loading = phase === "submitting";
   const done = phase === "done";
@@ -288,11 +298,11 @@ function FormPanel({
           <form onSubmit={onSubmit} className="mt-7 space-y-5">
             <LineField
               id="email"
-              label="E-MAIL"
-              type="email"
+              label="LOGIN"
+              type="text"
               value={email}
               onChange={setEmail}
-              autoComplete="email"
+              autoComplete="username"
             />
             <LineField
               id="password"
@@ -315,6 +325,12 @@ function FormPanel({
                 Esqueci minha senha
               </a>
             </div>
+
+            {error && (
+              <p className="rounded-md border border-[color:var(--danger)]/30 bg-[color:var(--danger)]/10 px-3 py-2 text-[12px] text-ivory/75">
+                {error}
+              </p>
+            )}
 
             <MagneticButton loading={loading} done={done} />
           </form>

@@ -3,10 +3,8 @@ import { motion } from "motion/react";
 import { Percent, Tag as TagIcon, ShieldAlert, AlertTriangle } from "lucide-react";
 import { CountUp } from "@/components/ops/motion-bits";
 import { Tag } from "@/components/ops/primitives";
-import {
-  DC_CLAUSULAS, DC_TERMO_PLACEHOLDER, ENCOMENDA_LIMITE_FIXO,
-  type PrecoEncomendaResultado,
-} from "@/mocks/data";
+import { DC_CLAUSULAS, DC_TERMO_PLACEHOLDER } from "./pricing";
+import type { PrecoEncomendaResultado } from "./types";
 
 /**
  * Preço em destaque (campo "gigante") — deixa ÓBVIO se a cobrança é FIXA (P/M/G)
@@ -17,10 +15,26 @@ export function PrecoDestaque({
   trecho,
   tamanho,
 }: {
-  resultado: PrecoEncomendaResultado;
+  resultado: PrecoEncomendaResultado | null;
   trecho: string;
   tamanho: string;
 }) {
+  if (!resultado) {
+    return (
+      <div className="relative overflow-hidden rounded-2xl bg-[color:color-mix(in_oklab,var(--danger)_8%,transparent)] p-5 ring-1 ring-[color:color-mix(in_oklab,var(--danger)_30%,transparent)]">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            Preco da encomenda
+          </p>
+          <Tag tone="danger">configuracao obrigatoria</Tag>
+        </div>
+        <p className="mt-3 text-sm font-medium text-[color:var(--danger)]">Tabela de encomendas indisponivel para cobranca.</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Publique `tamanhos_encomenda.limiteFixo` e a tabela ativa de precos de encomenda no backend para liberar despacho/cotacao.
+        </p>
+      </div>
+    );
+  }
   const percentual = resultado.modo === "percentual";
   const tone = percentual ? "var(--warning)" : "var(--brand)";
   return (
@@ -51,8 +65,8 @@ export function PrecoDestaque({
 
       <p className="mt-2 text-xs text-muted-foreground">
         {percentual
-          ? `Acima de R$ ${ENCOMENDA_LIMITE_FIXO.toLocaleString("pt-BR")} de valor declarado → ${resultado.percentual?.toLocaleString("pt-BR")}% sobre o valor declarado (independe do tamanho).`
-          : `Até R$ ${ENCOMENDA_LIMITE_FIXO.toLocaleString("pt-BR")} de valor declarado → preço fixo por tamanho no trecho ${trecho}.`}
+          ? `Acima de R$ ${resultado.limiteFixo.toLocaleString("pt-BR")} de valor declarado → ${resultado.percentual?.toLocaleString("pt-BR")}% sobre o valor declarado (independe do tamanho).`
+          : `Até R$ ${resultado.limiteFixo.toLocaleString("pt-BR")} de valor declarado → preço fixo por tamanho no trecho ${trecho}.`}
       </p>
 
       {percentual && (
@@ -61,7 +75,7 @@ export function PrecoDestaque({
           Caixa pequena pode conter alto valor — cobrança proporcional ao declarado.
         </p>
       )}
-      <p className="mt-2 inline-flex items-center"><Tag tone="warning">🔶 valores da tabela pendentes (Lucas)</Tag></p>
+      <p className="mt-2 inline-flex items-center"><Tag tone="brand">tabela versionada</Tag></p>
     </motion.div>
   );
 }

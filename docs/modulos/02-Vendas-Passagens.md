@@ -215,10 +215,11 @@ Bilhete (após emitido): emitido → validado(embarcado) → usado | cancelado |
 
 ### C.7 Emissão fiscal do bilhete — 🔶 dependência parcial
 - Passagem hidroviária normalmente exige documento fiscal próprio (**BP-e — Bilhete de Passagem eletrônico**), com transmissão à SEFAZ, possível **certificado digital** e **credenciamento**. Cliente informou que **BP-e é obrigatório desde 2019** (validação 2026-06-25).
-- **Regra por canal (atualizado pós-validação 2026-06-25):**
-  - **PDV (porto):** o operador escolhe **emitir ou não emitir BP-e no ato da venda**, usando o certificado digital.
-  - **Site/App público:** emissão **automática/obrigatória**.
-- **Status:** certificado digital PFX da AJC recebido em 29/jun/2026 (`docs/feedback/2026-06-29-certificado-digital-ajc-pfx.md`). Ainda confirmar senha do PFX, validade/cadeia/uso, obrigatoriedade por canal, credenciamento SEFAZ-PA e se há API/fornecedor fiscal.
+- **Regra por canal (3 níveis — decisão do cliente):**
+  - **Nível 1 — PDV manual:** operador no porto escolhe emitir ou não emitir BP-e no ato da venda, usando o certificado digital.
+  - **Nível 2 — Site/App público (automático-obrigatório):** portal online e área do cliente emitem BP-e automaticamente após pagamento confirmado.
+  - **Nível 3 — App do agente (opcional):** conferente/porteiro pode emitir BP-e via app de campo se necessário, mas é opcional (não bloqueia operação).
+- **Status:** certificado digital PFX da AJC recebido em 29/jun/2026 (`docs/feedback/2026-06-29-certificado-digital-ajc-pfx.md`). Ainda confirmar senha do PFX, validade/cadeia/uso, credenciamento SEFAZ-PA e se há API/fornecedor fiscal.
 - **Arquitetura preparada:** o ponto de emissão fiscal é um **passo plugável** após `pago` (antes ou junto de `emitido`). Se a confirmação atrasar, o portal pode entregar o **QR de embarque** no MVP e a emissão fiscal pluga depois sem retrabalho do fluxo.
 
 ### C.8 Antifraude e segurança (mínimos do MVP)

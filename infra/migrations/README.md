@@ -16,6 +16,14 @@ conforme a §15 do modelo.
 | `0005_tms.sql` | `palete`, `carga`, `carga_recebimento`, `volume`, `evento_volume`, `palete_viagem`, `documento_fiscal`, `declaracao_conteudo`, `registro_portaria`, `entrega_comprovante`, `entrega_volume`, `prestacao_contas` | §8 |
 | `0006_vendas_caixa_crm_audit.sql` | `caixa`, `bilhete`, `caixa_movimento`, `cortesia`, `gratuidade`, `termo_aceite`, `nps`, `cotacao`, `audit_evento` | §9, §10, §11 |
 | `0007_constraints_adiadas.sql` | FKs circulares: `item_preco→embarcacao`, `bilhete→caixa_movimento` | §15 nota † |
+| `0008_schema_migrations_e_classes_8.sql` | tabela `schema_migrations`, ajuste do enum `classe_passagem` para as 8 classes reais recebidas do Lucas | feedback 30/jun |
+| `0009_veiculos_maquinas.sql` | schema MVP de Veículos/Máquinas: envio, fotos/checklist e eventos/bipes append-only | validação 25/jun |
+| `0010_navegacao_operacional.sql` | ajustes para o front aprovado: `viagem.codigo`, destino, capacidade disponível por classe, `client_uuid`, observação de escala e `status_viagem.cancelada` | Fase 2 |
+| `0011_tms_operacional.sql` | ajustes para Nova Carga/Encomendas: `carga.codigo`, pedido, categoria, origem, peso total e origem do documento fiscal | Fase 2 |
+| `0012_vendas_caixa_operacional.sql` | snapshots operacionais de bilhete/caixa para PDV, manifesto, area do cliente e app de embarque | Fase 2 |
+| `0013_portal_pedido_pagamento_fiscal.sql` | Pedido, Reserva, Pagamento/Webhook stub e Documento Fiscal stub para portal online MVP | Fase 2 |
+| `0014_prestacao_contas_operacional.sql` | unicidade operacional de prestação de contas por viagem/gerente | Fase 2 |
+| `0015_financeiro_titulos_minimos.sql` | títulos AP/AR mínimos para o caixa financeiro do MVP, sem antecipar Compras/DRE | Fase 2 |
 
 ## Convenções aplicadas (§1.1)
 
@@ -39,7 +47,25 @@ Rodar a suíte novamente sobre um banco já migrado não deve gerar erro.
 
 ## Como aplicar
 
-Pré-requisito: imagem `postgis/postgis` (traz PostGIS + btree_gist). Postgres puro não tem PostGIS.
+Pré-requisito: PostgreSQL 16 + PostGIS + btree_gist. Nesta máquina, o banco roda nativo no WSL2; **não usar Docker Desktop**.
+
+O caminho atual é o runner Node com controle em `schema_migrations`:
+
+```bash
+cd infra/migrations
+DATABASE_URL=postgresql://ajc:ajc_dev@localhost:5432/ajc node run.mjs --status
+DATABASE_URL=postgresql://ajc:ajc_dev@localhost:5432/ajc node run.mjs
+```
+
+Como o `pg` está instalado em `apps/api`, o runner ancora a resolução por padrão nesse pacote. Se o layout mudar, use `PG_REQUIRE_BASE`.
+
+```bash
+PG_REQUIRE_BASE=/caminho/para/package-com-pg \
+DATABASE_URL=postgresql://ajc:ajc_dev@localhost:5432/ajc \
+node run.mjs --status
+```
+
+O loop manual com `psql` continua útil apenas para diagnóstico ou bootstrap controlado:
 
 ```bash
 # Variáveis de conexão
@@ -62,9 +88,7 @@ for f in $(ls -1 infra/migrations/*.sql | sort); do
 done
 ```
 
-> Ainda não há tabela de controle de versão de migration (ex.: `schema_migrations`).
-> Como os arquivos são idempotentes, reaplicar é seguro. Um runner dedicado
-> (node-pg-migrate / Flyway) pode ser adotado quando o time decidir — fora do escopo deste passo.
+> Desde `0008`, existe controle em `schema_migrations`. As migrations 0001-0008 foram registradas via `--baseline` porque já estavam aplicadas manualmente no banco de dev. Novas migrations devem ser aplicadas pelo runner.
 
 ## Auditoria imutável (produção)
 

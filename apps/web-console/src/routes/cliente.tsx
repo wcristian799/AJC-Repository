@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+﻿import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Ticket, CalendarDays, MapPin, Ship, ChevronRight, Download, Share2,
@@ -8,25 +8,113 @@ import {
 import { BrandMark } from "@/components/ops/BrandMark";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { brl, StatusChip } from "@/components/ops/primitives";
-import { CLIENTE_BILHETES, PULSEIRA_POR_CLASSE, type ClienteBilhete } from "@/mocks/data";
+import { RealQR } from "@/components/ops/RealQR";
+import { baixarComprovanteBilhete, compartilharComprovanteBilhete } from "@/lib/bilhete-comprovante";
+import { listClienteBilhetes, type PortalBilheteApi } from "@/lib/ajc-api";
 
 export const Route = createFileRoute("/cliente")({
-  head: () => ({ meta: [{ title: "Minhas viagens · AJC Ferry Boat" }] }),
+  head: () => ({ meta: [{ title: "Minhas viagens Â· AJC Ferry Boat" }] }),
   component: ClienteArea,
 });
 
 const easeOut = [0.16, 1, 0.3, 1] as const;
 
 type Aba = "ativo" | "passado";
+type ClienteBilhete = {
+  id: string;
+  qr: string;
+  trecho: string;
+  origem: string;
+  destino: string;
+  data: string;
+  hora: string;
+  embarcacao: string;
+  classe: string;
+  assento?: string;
+  passageiro: string;
+  valor: number;
+  status: "emitido" | "validado" | "usado" | "cancelado";
+  quando: Aba;
+};
+
+const PULSEIRA_POR_CLASSE: Record<string, { cor: string; hex: string }> = {
+  Rede: { cor: "pendente", hex: "var(--brand)" },
+  "Rede VIP": { cor: "pendente", hex: "var(--brand)" },
+  "Camarote Royal": { cor: "pendente", hex: "var(--brand)" },
+  Cortesia: { cor: "pendente", hex: "var(--warning)" },
+  Gratuidade: { cor: "pendente", hex: "var(--success)" },
+};
+
+function mapClienteBilhete(row: PortalBilheteApi): ClienteBilhete {
+  const saida = row.data_hora_saida ? new Date(row.data_hora_saida) : null;
+  const origem = row.origem_sigla ?? "BEL";
+  const destino = row.destino_sigla ?? "STM";
+  const classeNome = {
+    rede: "Rede",
+    rede_sala_vip: "Rede VIP",
+    camarote: "Camarote Royal",
+    suite_comum: "Camarote Royal",
+    suite_comum_vip: "Camarote Royal",
+    suite_master: "Camarote Royal",
+    suite_master_vip: "Camarote Royal",
+    mega_suite: "Camarote Royal",
+  }[row.classe] ?? row.classe;
+  const status = ["emitido", "validado", "usado", "cancelado"].includes(row.status) ? row.status as ClienteBilhete["status"] : "emitido";
+  const quando = saida && saida.getTime() < Date.now() ? "passado" : "ativo";
+
+  return {
+    id: row.id,
+    qr: row.qr_token,
+    trecho: `${origem} â†’ ${destino}`,
+    origem,
+    destino,
+    data: saida ? saida.toLocaleDateString("pt-BR") : "A confirmar",
+    hora: saida ? saida.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "A confirmar",
+    embarcacao: row.embarcacao_nome ?? "AJC Ferry Boat",
+    classe: classeNome,
+    assento: row.assento ?? undefined,
+    passageiro: row.passageiro_nome,
+    valor: row.preco_pago ?? 0,
+    status,
+    quando,
+  };
+}
 
 function ClienteArea() {
   const [aba, setAba] = useState<Aba>("ativo");
   const [aberto, setAberto] = useState<ClienteBilhete | null>(null);
+  const [documento, setDocumento] = useState("");
+  const [email, setEmail] = useState("");
+  const [bilhetes, setBilhetes] = useState<ClienteBilhete[]>([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
-  const lista = useMemo(() => CLIENTE_BILHETES.filter((b) => b.quando === aba), [aba]);
-  const ativos = CLIENTE_BILHETES.filter((b) => b.quando === "ativo").length;
-  const passageiro = CLIENTE_BILHETES[0]?.passageiro ?? "Cliente AJC";
+  useEffect(() => {
+    const doc = window.localStorage.getItem("ajc.portal.documento") ?? "";
+    const mail = window.localStorage.getItem("ajc.portal.email") ?? "";
+    setDocumento(doc);
+    setEmail(mail);
+    if (doc || mail) void buscarBilhetes(doc, mail);
+  }, []);
 
+  async function buscarBilhetes(doc = documento, mail = email) {
+    if (!doc && !mail) return;
+    setCarregando(true);
+    setErro(null);
+    try {
+      const rows = await listClienteBilhetes({ documento: doc || undefined, email: mail || undefined });
+      setBilhetes(rows.map(mapClienteBilhete));
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Nao foi possivel carregar seus bilhetes.");
+      setBilhetes([]);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  const lista = useMemo(() => bilhetes.filter((b) => b.quando === aba), [aba, bilhetes]);
+  const ativos = bilhetes.filter((b) => b.quando === "ativo").length;
+  const passageiro = bilhetes[0]?.passageiro ?? "Cliente AJC";
   return (
     <main className="min-h-screen bg-[color:var(--background)]">
       <header className="hairline-b sticky top-0 z-20 bg-[color:var(--background)]/90 backdrop-blur-md">
@@ -45,11 +133,38 @@ function ClienteArea() {
       </header>
 
       <section className="mx-auto max-w-md px-5 pb-24 pt-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--brand)]">Área do cliente</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[color:var(--brand)]">Ãrea do cliente</p>
         <h1 className="mt-1 font-display text-3xl">Minhas viagens</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {ativos > 0 ? `${ativos} ${ativos === 1 ? "bilhete ativo" : "bilhetes ativos"} · QR pronto para embarcar` : "Nenhuma viagem ativa no momento"}
+          {ativos > 0 ? `${ativos} ${ativos === 1 ? "bilhete ativo" : "bilhetes ativos"} Â· QR pronto para embarcar` : "Nenhuma viagem ativa no momento"}
         </p>
+
+        <div className="surface-card mt-5 space-y-3 p-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Buscar bilhetes</p>
+          <div className="grid grid-cols-1 gap-2">
+            <input
+              value={documento}
+              onChange={(e) => setDocumento(e.target.value)}
+              placeholder="CPF/CNPJ usado na compra"
+              className="h-10 rounded-md bg-[color:var(--muted)] px-3 text-sm ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
+            />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="E-mail usado na compra"
+              type="email"
+              className="h-10 rounded-md bg-[color:var(--muted)] px-3 text-sm ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
+            />
+          </div>
+          <button
+            onClick={() => void buscarBilhetes()}
+            disabled={carregando || (!documento && !email)}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--brand)] text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            {carregando ? "Consultando..." : "Consultar meus bilhetes"}
+          </button>
+          {erro && <p className="text-xs text-[color:var(--danger)]">{erro}</p>}
+        </div>
 
         {/* Abas */}
         <div className="mt-5 inline-flex rounded-full bg-[color:var(--muted)] p-1 ring-1 ring-[color:var(--hairline)]">
@@ -60,7 +175,7 @@ function ClienteArea() {
               className={`relative rounded-full px-5 py-1.5 text-sm font-medium transition-colors ${aba === a ? "text-primary-foreground" : "text-muted-foreground"}`}
             >
               {aba === a && <motion.span layoutId="cliente-aba" className="absolute inset-0 rounded-full bg-[color:var(--brand)]" />}
-              <span className="relative">{a === "ativo" ? "Próximas" : "Histórico"}</span>
+              <span className="relative">{a === "ativo" ? "PrÃ³ximas" : "HistÃ³rico"}</span>
             </button>
           ))}
         </div>
@@ -78,7 +193,7 @@ function ClienteArea() {
                 </span>
                 <p className="font-display text-base">Nada por aqui ainda</p>
                 <p className="text-xs text-muted-foreground">
-                  {aba === "ativo" ? "Compre uma passagem para ver seu bilhete aqui." : "Suas viagens concluídas aparecerão neste histórico."}
+                  {aba === "ativo" ? "Compre uma passagem para ver seu bilhete aqui." : "Suas viagens concluÃ­das aparecerÃ£o neste histÃ³rico."}
                 </p>
               </motion.div>
             ) : lista.map((b, i) => (
@@ -96,7 +211,7 @@ function ClienteArea() {
                     <Ship className="h-4 w-4 shrink-0 text-[color:var(--brand)]" />
                     <span className="truncate font-display text-lg">{b.trecho}</span>
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{b.data} · {b.hora} · {b.classe}{b.assento ? ` · ${b.assento}` : ""}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{b.data} Â· {b.hora} Â· {b.classe}{b.assento ? ` Â· ${b.assento}` : ""}</p>
                   <div className="mt-2"><BilheteStatus status={b.status} /></div>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -130,7 +245,7 @@ function BilheteStatus({ status }: { status: ClienteBilhete["status"] }) {
   const map = {
     emitido: { tone: "brand" as const, label: "Pronto para embarque", Icon: Clock },
     validado: { tone: "info" as const, label: "Validado", Icon: CheckCircle2 },
-    usado: { tone: "neutral" as const, label: "Concluída", Icon: CheckCircle2 },
+    usado: { tone: "neutral" as const, label: "ConcluÃ­da", Icon: CheckCircle2 },
     cancelado: { tone: "danger" as const, label: "Cancelada", Icon: XCircle },
   }[status];
   return <StatusChip tone={map.tone}><map.Icon className="h-3 w-3" /> {map.label}</StatusChip>;
@@ -139,6 +254,7 @@ function BilheteStatus({ status }: { status: ClienteBilhete["status"] }) {
 function BilheteSheet({ bilhete, onClose }: { bilhete: ClienteBilhete; onClose: () => void }) {
   const pulseira = PULSEIRA_POR_CLASSE[bilhete.classe];
   const ativo = bilhete.quando === "ativo";
+  const comprovante = toClienteComprovante(bilhete);
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -154,7 +270,7 @@ function BilheteSheet({ bilhete, onClose }: { bilhete: ClienteBilhete; onClose: 
         <div className="sticky top-0 flex items-center justify-between bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)] px-5 py-4 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <BrandMark size={22} />
-            <span className="font-display text-sm">Bilhete eletrônico</span>
+            <span className="font-display text-sm">Bilhete eletrÃ´nico</span>
           </div>
           <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-[color:var(--accent)]" aria-label="Fechar">
             <X className="h-4 w-4" />
@@ -164,20 +280,20 @@ function BilheteSheet({ bilhete, onClose }: { bilhete: ClienteBilhete; onClose: 
         <div className="px-5 pb-8 pt-2">
           <div className="grid place-items-center py-5">
             <div className={`rounded-2xl bg-white p-4 shadow-[0_18px_50px_-20px_rgba(0,0,0,0.5)] ${ativo ? "" : "opacity-50 grayscale"}`}>
-              <ClienteQR seed={bilhete.qr} size={200} />
+              <RealQR value={bilhete.qr} size={200} label="QR do bilhete" />
             </div>
             <code className="mt-3 font-mono text-xs tracking-widest text-foreground/80">{bilhete.qr}</code>
-            {!ativo && <p className="mt-1 text-[11px] text-muted-foreground">Viagem concluída · QR inativo</p>}
+            {!ativo && <p className="mt-1 text-[11px] text-muted-foreground">Viagem concluÃ­da Â· QR inativo</p>}
           </div>
 
           <div className="mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1" style={{ background: `color-mix(in oklab, ${pulseira?.hex} 14%, transparent)`, borderColor: pulseira?.hex }}>
             <span className="h-3 w-3 rounded-full" style={{ background: pulseira?.hex }} />
-            <span className="text-xs font-semibold" style={{ color: pulseira?.hex }}>Pulseira {pulseira?.nome} · {bilhete.classe}</span>
+            <span className="text-xs font-semibold" style={{ color: pulseira?.hex }}>Pulseira {pulseira?.nome} Â· {bilhete.classe}</span>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-[color:var(--muted)]/50 p-4">
             <Detalhe icon={MapPin} label="Trecho" value={bilhete.trecho} />
-            <Detalhe icon={Ship} label="Embarcação" value={bilhete.embarcacao} />
+            <Detalhe icon={Ship} label="EmbarcaÃ§Ã£o" value={bilhete.embarcacao} />
             <Detalhe icon={CalendarDays} label="Data" value={bilhete.data} />
             <Detalhe icon={Clock} label="Embarque" value={bilhete.hora} />
             <Detalhe icon={Ticket} label="Passageiro" value={bilhete.passageiro} />
@@ -186,10 +302,10 @@ function BilheteSheet({ bilhete, onClose }: { bilhete: ClienteBilhete; onClose: 
 
           {ativo && (
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <button className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium ring-1 ring-[color:var(--hairline)] transition-colors hover:bg-[color:var(--accent)]">
+              <button onClick={() => void baixarComprovanteBilhete(comprovante)} className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium ring-1 ring-[color:var(--hairline)] transition-colors hover:bg-[color:var(--accent)]">
                 <Download className="h-4 w-4" /> Baixar
               </button>
-              <button className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium ring-1 ring-[color:var(--hairline)] transition-colors hover:bg-[color:var(--accent)]">
+              <button onClick={() => void compartilharComprovanteBilhete(comprovante)} className="flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium ring-1 ring-[color:var(--hairline)] transition-colors hover:bg-[color:var(--accent)]">
                 <Share2 className="h-4 w-4" /> Compartilhar
               </button>
             </div>
@@ -200,6 +316,20 @@ function BilheteSheet({ bilhete, onClose }: { bilhete: ClienteBilhete; onClose: 
   );
 }
 
+function toClienteComprovante(bilhete: ClienteBilhete) {
+  return {
+    codigo: bilhete.qr,
+    passageiro: bilhete.passageiro,
+    trecho: bilhete.trecho,
+    embarcacao: bilhete.embarcacao,
+    data: bilhete.data,
+    hora: bilhete.hora,
+    classe: bilhete.classe,
+    valor: brl(bilhete.valor),
+    assento: bilhete.assento ?? null,
+  };
+}
+
 function Detalhe({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -208,57 +338,5 @@ function Detalhe({ icon: Icon, label, value }: { icon: React.ComponentType<{ cla
       </p>
       <p className="mt-0.5 truncate text-sm font-medium">{value}</p>
     </div>
-  );
-}
-
-/* ============ QR fake — grid SVG determinístico ============ */
-function ClienteQR({ seed, size = 200 }: { seed: string; size?: number }) {
-  const cells = 25;
-  const modules = useMemo(() => {
-    let h = 1779033703 ^ seed.length;
-    for (let i = 0; i < seed.length; i++) {
-      h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
-      h = (h << 13) | (h >>> 19);
-    }
-    let a = h >>> 0;
-    const rand = () => {
-      a |= 0; a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-    const grid: boolean[][] = [];
-    for (let r = 0; r < cells; r++) {
-      const row: boolean[] = [];
-      for (let c = 0; c < cells; c++) row.push(rand() > 0.5);
-      grid.push(row);
-    }
-    return grid;
-  }, [seed]);
-
-  const unit = size / cells;
-  const isFinder = (r: number, c: number) => {
-    const inBox = (br: number, bc: number) => r >= br && r < br + 7 && c >= bc && c < bc + 7;
-    return inBox(0, 0) || inBox(0, cells - 7) || inBox(cells - 7, 0);
-  };
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="QR do bilhete" shapeRendering="crispEdges">
-      <rect width={size} height={size} fill="#ffffff" />
-      {modules.map((row, r) =>
-        row.map((on, c) =>
-          on && !isFinder(r, c) ? (
-            <rect key={`${r}-${c}`} x={c * unit} y={r * unit} width={unit} height={unit} fill="#0a0a0a" />
-          ) : null
-        )
-      )}
-      {[[0, 0], [0, cells - 7], [cells - 7, 0]].map(([br, bc], i) => (
-        <g key={i}>
-          <rect x={bc * unit} y={br * unit} width={unit * 7} height={unit * 7} fill="#0a0a0a" />
-          <rect x={(bc + 1) * unit} y={(br + 1) * unit} width={unit * 5} height={unit * 5} fill="#ffffff" />
-          <rect x={(bc + 2) * unit} y={(br + 2) * unit} width={unit * 3} height={unit * 3} fill="#0a0a0a" />
-        </g>
-      ))}
-    </svg>
   );
 }

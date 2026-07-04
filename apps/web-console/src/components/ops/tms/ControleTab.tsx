@@ -4,11 +4,35 @@ import {
   SectionHeader, DataTable, FilterBar, FilterChip, StatusChip, ViagemStatusChip, brl,
 } from "@/components/ops/primitives";
 import { VoyageTrack } from "@/components/ops/motion-bits";
-import { VOLUMES, VIAGENS, EMBARCACOES, type Viagem, type Cidade } from "@/mocks/data";
+import type { EmbarcacaoApi, NavegacaoViagemApi, TmsCargaApi, TmsVolumeApi } from "@/lib/ajc-api";
+
+type ViagemStatusUi = "planejada" | "em_curso" | "concluida" | "cancelada";
+
+type ViagemLike = {
+  id: string;
+  codigo: string;
+  origem: string;
+  destino: string;
+  status: ViagemStatusUi;
+  cargaPct: number;
+  embarcacaoId?: string;
+  escalas: Array<{ cidade: string; horaReal?: string | null }>;
+};
+
+type VolumeLike = {
+  id: string;
+  uuid: string;
+  cargaId: string;
+  cliente: string;
+  cidadeDestino: string;
+  peso: number;
+  viagemId: string;
+  status: string;
+};
 
 type ViagemResumo = {
   id: string;
-  viagem: Viagem;
+  viagem: ViagemLike;
   embarcacao: string;
   recebidos: number;
   embarcados: number;
@@ -19,16 +43,32 @@ type ViagemResumo = {
   valorCobrado: number;
 };
 
-/** B.11 — Controle de carga por viagem (operação/diretoria). */
-export function ControleTab() {
-  const [filtroCidade, setFiltroCidade] = useState<Cidade | "todas">("todas");
+/** B.11 - Controle de carga por viagem (operacao/diretoria). */
+export function ControleTab({
+  cargas = [],
+  volumes,
+  viagens,
+  embarcacoes,
+}: {
+  cargas?: TmsCargaApi[];
+  volumes?: TmsVolumeApi[];
+  viagens?: NavegacaoViagemApi[];
+  embarcacoes?: EmbarcacaoApi[];
+}) {
+  const [filtroCidade, setFiltroCidade] = useState<string | "todas">("todas");
+  const apiViagens = useMemo<ViagemLike[]>(() => viagens?.map(mapViagem) ?? [], [viagens]);
+  const apiVolumes = useMemo<VolumeLike[]>(() => volumes?.map((v) => mapVolume(v, cargas)) ?? [], [volumes, cargas]);
+  const apiEmbarcacoes = embarcacoes ?? [];
 
   const resumos = useMemo<ViagemResumo[]>(() => {
-    return VIAGENS.map((viagem) => {
-      const vols = VOLUMES.filter((v) => v.viagemId === viagem.id);
-      const emb = EMBARCACOES.find((e) => e.id === viagem.embarcacaoId);
-      // valor declarado/cobrado derivado do peso (mock determinístico)
-      const valorDeclarado = vols.reduce((s, v) => s + v.peso * 1200, 0);
+    return apiViagens.map((viagem) => {
+      const cargasDaViagem = cargas.filter((c) => c.viagem_codigo === viagem.codigo);
+      const cargaIdsDaViagem = new Set(cargasDaViagem.map((c) => c.id));
+      const vols = apiVolumes.filter((v) => cargaIdsDaViagem.size ? cargaIdsDaViagem.has(v.cargaId) : v.viagemId === viagem.id);
+      const emb = apiEmbarcacoes.find((e) => e.id === viagem.embarcacaoId);
+      const valorDeclarado = cargasDaViagem.length
+        ? cargasDaViagem.reduce((s, c) => s + (c.valor_declarado ?? 0), 0)
+        : vols.reduce((s, v) => s + v.peso * 1200, 0);
       return {
         id: viagem.id,
         viagem,
@@ -39,24 +79,26 @@ export function ControleTab() {
         divergentes: vols.filter((v) => v.status === "divergente").length,
         total: vols.length,
         valorDeclarado,
-        valorCobrado: Math.round(valorDeclarado * 0.055),
+        valorCobrado: cargasDaViagem.length
+          ? cargasDaViagem.reduce((s, c) => s + (c.valor_cobrado ?? 0), 0)
+          : Math.round(valorDeclarado * 0.055),
       };
     }).filter((r) => r.total > 0);
-  }, []);
+  }, [apiViagens, apiVolumes, apiEmbarcacoes, cargas]);
 
   const rows = resumos.filter(
     (r) => filtroCidade === "todas" || r.viagem.destino === filtroCidade || r.viagem.escalas.some((e) => e.cidade === filtroCidade),
   );
 
-  const cidadesComCarga = Array.from(new Set(VOLUMES.map((v) => v.cidadeDestino)));
-  const viagemDestaque = VIAGENS.find((v) => v.id === "VIA-2026-0418");
+  const cidadesComCarga = Array.from(new Set(apiVolumes.map((v) => v.cidadeDestino)));
+  const viagemDestaque = apiViagens.find((v) => v.status === "em_curso") ?? apiViagens[0];
 
   return (
     <div className="mt-5 space-y-4">
       <SectionHeader
-        eyebrow="Operação · diretoria"
+        eyebrow="Operacao · diretoria"
         title="Controle de carga por viagem"
-        description="Visão em tempo real do que está em cada viagem: volumes por estado, valor declarado × cobrado e divergências abertas. Base do BI de rentabilidade."
+        description="Visao em tempo real do que esta em cada viagem: volumes por estado, valor declarado x cobrado e divergencias abertas. Base do BI de rentabilidade."
       />
 
       {viagemDestaque && (
@@ -66,7 +108,9 @@ export function ControleTab() {
               <Ship className="h-4 w-4 text-[color:var(--brand)]" />
               <h3 className="font-display text-lg">{viagemDestaque.origem} → {viagemDestaque.destino} · {viagemDestaque.codigo}</h3>
             </div>
-            <StatusChip tone="brand" pulse>em curso</StatusChip>
+            <StatusChip tone={viagemDestaque.status === "em_curso" ? "brand" : "neutral"} pulse={viagemDestaque.status === "em_curso"}>
+              {viagemDestaque.status === "em_curso" ? "em curso" : viagemDestaque.status}
+            </StatusChip>
           </div>
           <VoyageTrack
             label="Rota e escalas"
@@ -79,7 +123,7 @@ export function ControleTab() {
         </div>
       )}
 
-      <FilterBar searchPlaceholder="Buscar viagem, embarcação, cidade…">
+      <FilterBar searchPlaceholder="Buscar viagem, embarcacao, cidade...">
         <FilterChip active={filtroCidade === "todas"} onClick={() => setFiltroCidade("todas")}>Todas cidades</FilterChip>
         {cidadesComCarga.map((c) => (
           <FilterChip key={c} active={filtroCidade === c} onClick={() => setFiltroCidade(c)}>{c}</FilterChip>
@@ -96,7 +140,7 @@ export function ControleTab() {
               <p className="text-[10px] text-muted-foreground">{r.viagem.origem} → {r.viagem.destino}</p>
             </div>
           ) },
-          { key: "embarcacao", header: "Embarcação", render: (r) => <span className="text-xs">{r.embarcacao}</span> },
+          { key: "embarcacao", header: "Embarcacao", render: (r) => <span className="text-xs">{r.embarcacao}</span> },
           { key: "total", header: "Volumes", align: "right", render: (r) => (
             <span className="inline-flex items-center gap-1 font-mono text-sm"><Boxes className="h-3.5 w-3.5 text-muted-foreground" />{r.total}</span>
           ) },
@@ -118,20 +162,19 @@ export function ControleTab() {
         ]}
       />
 
-      {/* Detalhe por volume */}
       <div>
         <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
           <MapPin className="h-3.5 w-3.5" /> Volumes em rastreio
         </p>
         <DataTable
-          rows={VOLUMES}
+          rows={apiVolumes}
           columns={[
             { key: "uuid", header: "UUID / QR", render: (r) => <span className="font-mono text-[11px] text-muted-foreground">{r.uuid}</span> },
             { key: "cargaId", header: "Carga", render: (r) => <span className="font-mono text-xs">{r.cargaId}</span> },
             { key: "cliente", header: "Cliente", render: (r) => <span className="font-medium">{r.cliente}</span> },
             { key: "cidadeDestino", header: "Destino" },
             { key: "peso", header: "Peso (kg)", align: "right" },
-            { key: "viagemId", header: "Viagem", render: (r) => <span className="font-mono text-xs">{VIAGENS.find((v) => v.id === r.viagemId)?.codigo ?? "—"}</span> },
+            { key: "viagemId", header: "Viagem", render: (r) => <span className="font-mono text-xs">{apiViagens.find((v) => v.id === r.viagemId || v.codigo === r.viagemId)?.codigo ?? "—"}</span> },
             { key: "status", header: "Estado", render: (r) => {
               const tone =
                 r.status === "divergente" ? "danger" :
@@ -145,4 +188,31 @@ export function ControleTab() {
       </div>
     </div>
   );
+}
+
+function mapViagem(v: NavegacaoViagemApi): ViagemLike {
+  return {
+    id: v.id,
+    codigo: v.codigo ?? "sem-codigo",
+    origem: v.origemSigla,
+    destino: v.destinoSigla ?? v.escalas.at(-1)?.cidadeSigla ?? "—",
+    status: ["planejada", "em_curso", "concluida", "cancelada"].includes(v.status) ? (v.status as ViagemStatusUi) : "planejada",
+    cargaPct: 0,
+    embarcacaoId: v.embarcacaoId,
+    escalas: v.escalas.map((e) => ({ cidade: e.cidadeSigla, horaReal: e.dataHoraReal })),
+  };
+}
+
+function mapVolume(v: TmsVolumeApi, cargas: TmsCargaApi[]): VolumeLike {
+  const carga = cargas.find((c) => c.id === v.carga_id);
+  return {
+    id: v.id,
+    uuid: v.uuid,
+    cargaId: v.carga_id,
+    cliente: carga?.remetente_nome ?? "Cliente nao informado",
+    cidadeDestino: v.cidade_destino_sigla,
+    peso: Number(v.peso ?? 0),
+    viagemId: carga?.viagem_codigo ?? "",
+    status: v.status,
+  };
 }

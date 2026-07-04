@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Users, Package, Boxes, Car, Paperclip, AlertTriangle, FileText, Wifi, Utensils, Coffee, Building2, Truck, Receipt, HandCoins, PenLine } from "lucide-react";
 import {
   SectionHeader, StatusChip, GhostButton, brl,
 } from "@/components/ops/primitives";
-import { PRESTACOES_CONTAS, VIAGENS, EMBARCACOES, type PrestacaoStatus } from "@/mocks/data";
+import { listTmsPrestacoes, type PrestacaoContasApi, type PrestacaoContasItensApi } from "@/lib/ajc-api";
+
+type PrestacaoStatus = "rascunho" | "enviada" | "conferida";
 
 const STATUS_TONE: Record<PrestacaoStatus, "neutral" | "warning" | "success"> = {
   rascunho: "neutral",
@@ -16,6 +18,25 @@ const STATUS_LABEL: Record<PrestacaoStatus, string> = {
   conferida: "Conferida",
 };
 
+type PrestacaoView = {
+  id: string;
+  viagemId: string;
+  viagemCodigo: string;
+  embarcacaoNome: string;
+  periodo: string;
+  gerente: string;
+  status: PrestacaoStatus;
+  totalDeclarado: number;
+  totalSistema: number;
+  passageiros: number;
+  encomendas: number;
+  cargas: number;
+  veiculos: number;
+  anexos: number;
+  atualizadoEm: string;
+  itens: PrestacaoContasItensApi;
+};
+
 /**
  * B.10 — Prestação de contas do gerente da embarcação.
  * Espelha o formulário operacional real (modelo "PRESTAÇÃO DE CONTAS GERENTES AM VI"):
@@ -25,15 +46,50 @@ const STATUS_LABEL: Record<PrestacaoStatus, string> = {
  * é mantida como faixa de conferência do financeiro.
  */
 export function PrestacaoTab() {
-  const [sel, setSel] = useState(PRESTACOES_CONTAS[1].id);
-  const pc = PRESTACOES_CONTAS.find((p) => p.id === sel) ?? PRESTACOES_CONTAS[0];
-  const viagem = VIAGENS.find((v) => v.id === pc.viagemId);
-  const embarcacao = EMBARCACOES.find((e) => e.id === viagem?.embarcacaoId);
+  const [apiPrestacoes, setApiPrestacoes] = useState<PrestacaoContasApi[]>([]);
+  const [apiFalhou, setApiFalhou] = useState(false);
+  const [sel, setSel] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    listTmsPrestacoes()
+      .then((prestacoes) => {
+        if (!alive) return;
+        setApiPrestacoes(prestacoes);
+        setApiFalhou(false);
+      })
+      .catch(() => {
+        if (alive) setApiFalhou(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const prestacoes = useMemo(() => {
+    return apiPrestacoes.map(mapApiPrestacao);
+  }, [apiPrestacoes]);
+
+  const pc = prestacoes.find((p) => p.id === sel) ?? prestacoes[1] ?? prestacoes[0];
+  if (!pc) {
+    return (
+      <div className="mt-5">
+        <SectionHeader
+          eyebrow="Gerente da embarcaÃ§Ã£o"
+          title="PrestaÃ§Ã£o de contas da viagem"
+          description={apiFalhou ? "Nao foi possivel carregar prestacoes reais do backend." : "Nenhuma prestacao real cadastrada para conferir."}
+        />
+      </div>
+    );
+  }
+  const [saidaPeriodo, retornoPeriodo = ""] = pc.periodo.split(" -> ");
+  const viagem = { codigo: pc.viagemCodigo, saida: saidaPeriodo, retorno: retornoPeriodo };
+  const embarcacao = { nome: pc.embarcacaoNome };
   const divergencia = pc.totalSistema - pc.totalDeclarado;
   const temDivergencia = divergencia !== 0;
 
   // --- Receitas à bordo (Espécie / PIX / Total) ---
-  const receitasBordo = [
+  const receitasBordo = pc.itens.receitasBordo ?? [
     { rotulo: "Passagens", especie: 6_240, pix: 12_840 },
     { rotulo: "Fretes STM/Almeirim", especie: 1_810, pix: 980 },
     { rotulo: "Fretes STM/Gurupá", especie: 640, pix: 1_220 },
@@ -44,41 +100,41 @@ export function PrestacaoTab() {
   ];
 
   // --- Cozinha por dia da viagem ---
-  const cozinhaDias = [
+  const cozinhaDias = pc.itens.cozinhaDias ?? [
     { dia: "Dia 1", cafe: 180, almoco: 420, jantar: 360 },
     { dia: "Dia 2", cafe: 210, almoco: 480, jantar: 390 },
     { dia: "Dia 3", cafe: 160, almoco: 360, jantar: 300 },
   ];
 
   // --- Lanchonete / Internet (Espécie / PIX / Total) ---
-  const lanchonete = { especie: 540, pix: 1_280 };
-  const internet = { especie: 220, pix: 1_160 };
+  const lanchonete = pc.itens.lanchonete ?? { especie: 540, pix: 1_280 };
+  const internet = pc.itens.internet ?? { especie: 220, pix: 1_160 };
 
   // --- Passagens por agência (Espécie / PIX-Conta / Total / Comissão / Saldo) ---
-  const passagensAgencias = [
+  const passagensAgencias = (pc.itens.passagensAgencias ?? [
     { cidade: "Breves", especie: 1_240, pixConta: 2_180 },
     { cidade: "Gurupá", especie: 860, pixConta: 1_540 },
     { cidade: "Almeirim", especie: 1_120, pixConta: 2_360 },
     { cidade: "Prainha", especie: 640, pixConta: 1_180 },
     { cidade: "Monte Alegre", especie: 980, pixConta: 1_760 },
     { cidade: "Santarém", especie: 2_140, pixConta: 4_280 },
-  ].map((a) => {
+  ]).map((a) => {
     const total = a.especie + a.pixConta;
-    const comissao = Math.round(total * 0.1);
+    const comissao = Math.round(total * ((a.comissaoPct ?? 10) / 100));
     return { ...a, total, comissao, saldo: total - comissao };
   });
 
   // --- Fretes por agência (Espécie / PIX-Conta / Total / Saldo) ---
-  const fretesAgencias = [
+  const fretesAgencias = (pc.itens.fretesAgencias ?? [
     { cidade: "Gurupá", especie: 420, pixConta: 680 },
     { cidade: "Almeirim", especie: 360, pixConta: 540 },
     { cidade: "Prainha", especie: 180, pixConta: 320 },
     { cidade: "Monte Alegre", especie: 250, pixConta: 410 },
     { cidade: "Santarém", especie: 640, pixConta: 980 },
-  ].map((a) => ({ ...a, total: a.especie + a.pixConta, saldo: a.especie + a.pixConta }));
+  ]).map((a) => ({ ...a, total: a.especie + a.pixConta, saldo: a.especie + a.pixConta }));
 
   // --- Despesas (Descrição / Valor) ---
-  const despesas = [
+  const despesas = pc.itens.despesas ?? [
     { descricao: "Pagamento de carregador", valor: 480 },
     { descricao: "Pagamento de despacho", valor: 320 },
     { descricao: "Recolhimento de lixo/resíduos", valor: 180 },
@@ -88,7 +144,7 @@ export function PrestacaoTab() {
   ];
 
   // --- Redondas e gratificações (Nome / Função / Valor) ---
-  const redondas = [
+  const redondas = pc.itens.redondas ?? [
     { nome: "José Carlos", funcao: "Marinheiro de convés", valor: 150 },
     { nome: "Antônio Lima", funcao: "Cozinha", valor: 120 },
     { nome: "Maria das Graças", funcao: "Camareira", valor: 120 },
@@ -123,8 +179,7 @@ export function PrestacaoTab() {
       />
 
       <div className="flex flex-wrap gap-2">
-        {PRESTACOES_CONTAS.map((p) => {
-          const v = VIAGENS.find((x) => x.id === p.viagemId);
+        {prestacoes.map((p) => {
           const active = p.id === sel;
           return (
             <button
@@ -136,7 +191,7 @@ export function PrestacaoTab() {
                   : "bg-[color:var(--muted)] ring-[color:var(--hairline)] hover:bg-[color:var(--accent)]"
               }`}
             >
-              <span className="font-mono text-xs">{v?.codigo}</span>
+              <span className="font-mono text-xs">{p.viagemCodigo}</span>
               <span className="mt-0.5 text-[10px] text-muted-foreground">{p.gerente}</span>
             </button>
           );
@@ -495,6 +550,44 @@ function CabecalhoCampo({ label, value, mono }: { label: string; value: string; 
       <p className={`mt-1 text-sm text-foreground ${mono ? "font-mono" : ""}`}>{value}</p>
     </div>
   );
+}
+
+function mapApiPrestacao(p: PrestacaoContasApi): PrestacaoView {
+  return {
+    id: p.id,
+    viagemId: p.viagem_id,
+    viagemCodigo: p.viagem_codigo,
+    embarcacaoNome: p.embarcacao_nome,
+    periodo: `${formatDateTime(p.data_hora_saida)} -> ${formatDateTime(p.data_hora_retorno)}`,
+    gerente: p.gerente_nome,
+    status: normalizePrestacaoStatus(p.status),
+    totalDeclarado: Number(p.total_declarado ?? 0),
+    totalSistema: Number(p.total_sistema ?? 0),
+    passageiros: Number(p.passageiros ?? 0),
+    encomendas: Number(p.encomendas ?? 0),
+    cargas: Number(p.cargas ?? 0),
+    veiculos: Number(p.veiculos ?? 0),
+    anexos: Array.isArray(p.anexos) ? p.anexos.length : 0,
+    atualizadoEm: formatDateTime(p.atualizado_em),
+    itens: p.itens ?? {},
+  };
+}
+
+function normalizePrestacaoStatus(status: string): PrestacaoStatus {
+  if (status === "enviada" || status === "conferida") return status;
+  return "rascunho";
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function ResumoLinha({ label, value, strong }: { label: string; value: string; strong?: boolean }) {

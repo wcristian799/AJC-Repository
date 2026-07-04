@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -7,10 +7,16 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/ops/BrandMark";
 import { brl } from "@/components/ops/primitives";
+import { RealQR } from "@/components/ops/RealQR";
 import {
-  CIDADES, PRECOS_PASSAGEM, VENDA_CLASSES, VENDA_OFERTAS,
-  type VendaClasseId, type Cidade,
-} from "@/mocks/data";
+  createBilhete,
+  listNavegacaoViagens,
+  listPrecosPassagemMatriz,
+  type BilheteApi,
+  type NavegacaoViagemApi,
+  type PrecoPassagemMatrizApi,
+} from "@/lib/ajc-api";
+import { resumoPrecoPassagem, type PrecoPassagemResumo } from "@/lib/passagem-pricing";
 
 export const Route = createFileRoute("/totem")({
   head: () => ({ meta: [{ title: "Totem · AJC Ferry Boat" }] }),
@@ -21,8 +27,44 @@ const easeOut = [0.16, 1, 0.3, 1] as const;
 
 type Modo = "ocioso" | "em_uso" | "fora_servico";
 type Passo = "destino" | "viagem" | "classe" | "pagamento" | "bilhete";
+type Cidade = "BEL" | "BRV" | "GUR" | "ALM" | "PMZ" | "PRA" | "MTA" | "STM";
+type VendaClasseId = "rede" | "vip" | "camarote";
+type OfertaTotem = {
+  id: string;
+  origem: Cidade;
+  destino: Cidade;
+  embarcacao: string;
+  saida: string;
+  chegada: string;
+  duracao: string;
+  viagemId?: string;
+  disponibilidade: Record<VendaClasseId, { restantes: number; capacidade: number }>;
+};
 
+const CIDADES: Array<{ sigla: Cidade; nome: string }> = [
+  { sigla: "BEL", nome: "Belem" },
+  { sigla: "BRV", nome: "Breves" },
+  { sigla: "GUR", nome: "Gurupa" },
+  { sigla: "ALM", nome: "Almeirim" },
+  { sigla: "PMZ", nome: "Porto de Moz" },
+  { sigla: "PRA", nome: "Prainha" },
+  { sigla: "MTA", nome: "Monte Alegre" },
+  { sigla: "STM", nome: "Santarem" },
+];
+const VENDA_CLASSES: Array<{ id: VendaClasseId; nome: string; subtitulo: string; precoKey: keyof PrecoPassagemResumo; pulseira: { nome: string; hex: string }; perks: string[] }> = [
+  { id: "rede", nome: "Rede", subtitulo: "Conves", precoKey: "rede", pulseira: { nome: "pendente", hex: "var(--brand)" }, perks: ["Rede numerada", "Bagagem de mao"] },
+  { id: "vip", nome: "Rede VIP", subtitulo: "Sala climatizada", precoKey: "vip", pulseira: { nome: "pendente", hex: "var(--brand)" }, perks: ["Ar-condicionado", "Tomada"] },
+  { id: "camarote", nome: "Camarote Royal", subtitulo: "Suite", precoKey: "camaroteRoyal", pulseira: { nome: "pendente", hex: "var(--brand)" }, perks: ["Privativo", "Ate 2 pessoas"] },
+];
 const cidadeNome = (s: string) => CIDADES.find((c) => c.sigla === s)?.nome ?? s;
+const classeApi = (classeId: VendaClasseId) =>
+  classeId === "vip" ? "rede_sala_vip" : classeId === "camarote" ? "suite_master" : "rede";
+const classeCapacidadeKey = (classeId: VendaClasseId) =>
+  classeId === "vip" ? "rede_sala_vip" : classeId === "camarote" ? "suite_master" : "rede";
+const parseCapacidade = (value: unknown) => {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
 
 function Totem() {
   const [modo, setModo] = useState<Modo>("ocioso");
@@ -95,14 +137,72 @@ function Ocioso({ onTocar }: { onTocar: () => void }) {
 function EmUso({ onSair }: { onSair: () => void }) {
   const [passo, setPasso] = useState<Passo>("destino");
   const [destino, setDestino] = useState<Cidade>("STM");
-  const [ofertaId, setOfertaId] = useState<string>(VENDA_OFERTAS[0].id);
+  const [ofertaId, setOfertaId] = useState<string>("");
   const [classeId, setClasseId] = useState<VendaClasseId>("rede");
+  const [viagens, setViagens] = useState<NavegacaoViagemApi[]>([]);
+  const [precosPassagem, setPrecosPassagem] = useState<PrecoPassagemMatrizApi[]>([]);
+  const [bilhete, setBilhete] = useState<BilheteApi | null>(null);
+  const [emitindo, setEmitindo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
   const trecho = `BEL → ${destino}`;
-  const preco = PRECOS_PASSAGEM.find((p) => p.trecho === trecho);
-  const oferta = VENDA_OFERTAS.find((o) => o.id === ofertaId)!;
+  const preco = useMemo(() => resumoPrecoPassagem(precosPassagem, "BEL", destino), [destino, precosPassagem]);
+  const ofertas = useMemo<OfertaTotem[]>(() => {
+    return viagens
+      .filter((v) => v.origemSigla === "BEL" && (v.destinoSigla ?? "") === destino)
+      .map((v) => ({
+        id: v.id,
+        origem: v.origemSigla as Cidade,
+        destino: (v.destinoSigla ?? destino) as Cidade,
+        embarcacao: v.embarcacaoNome,
+        saida: new Date(v.dataHoraSaida).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+        chegada: v.dataHoraRetorno ? new Date(v.dataHoraRetorno).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "",
+        duracao: v.codigo ?? "viagem programada",
+        viagemId: v.id,
+        disponibilidade: {
+          rede: { restantes: parseCapacidade(v.capacidadePaxDisponivel[classeCapacidadeKey("rede")]), capacidade: parseCapacidade(v.capacidadePaxDisponivel[classeCapacidadeKey("rede")]) },
+          vip: { restantes: parseCapacidade(v.capacidadePaxDisponivel[classeCapacidadeKey("vip")]), capacidade: parseCapacidade(v.capacidadePaxDisponivel[classeCapacidadeKey("vip")]) },
+          camarote: { restantes: parseCapacidade(v.capacidadePaxDisponivel[classeCapacidadeKey("camarote")]), capacidade: parseCapacidade(v.capacidadePaxDisponivel[classeCapacidadeKey("camarote")]) },
+        },
+      }));
+  }, [destino, viagens]);
+  const oferta = ofertas.find((o) => o.id === ofertaId) ?? ofertas[0] ?? null;
   const classe = VENDA_CLASSES.find((c) => c.id === classeId)!;
   const valor = preco ? preco[classe.precoKey] : 0;
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const [viagensApi, precosApi] = await Promise.all([
+          listNavegacaoViagens(),
+          listPrecosPassagemMatriz(),
+        ]);
+        if (!alive) return;
+        setViagens(viagensApi);
+        setPrecosPassagem(precosApi);
+        const primeira = viagensApi.find((v) => v.origemSigla === "BEL" && (v.destinoSigla ?? "") === destino) ?? viagensApi[0];
+        if (primeira) {
+          setDestino((primeira.destinoSigla ?? destino) as Cidade);
+          setOfertaId(primeira.id);
+        }
+      } catch (error) {
+        console.error(error);
+        setErro(error instanceof Error ? error.message : "Falha ao carregar viagens reais");
+      }
+    }
+    load();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const primeira = ofertas[0];
+    if (primeira && !ofertas.some((o) => o.id === ofertaId)) {
+      setOfertaId(primeira.id);
+    }
+  }, [ofertaId, ofertas]);
 
   // Timeout de inatividade — totem volta ao ocioso após 60s (curto p/ demo).
   const [restante, setRestante] = useState(60);
@@ -118,6 +218,35 @@ function EmUso({ onSair }: { onSair: () => void }) {
 
   // Destinos populares (exclui Belém).
   const destinos = CIDADES.filter((c) => c.sigla !== "BEL");
+
+  async function emitirBilhete() {
+    if (emitindo) return;
+    if (!oferta?.viagemId) {
+      setErro("Totem sem viagem real selecionada. Faca login e sincronize antes de emitir.");
+      return;
+    }
+    setEmitindo(true);
+    setErro(null);
+    try {
+      const novo = await createBilhete({
+        viagemId: oferta.viagemId,
+        classe: classeApi(classeId),
+        tipo: "totem",
+        canal: "totem",
+        precoPago: valor,
+        formaPagamento: "cartao_debito",
+        observacoes: "Pagamento aprovado no totem (stub de maquininha)",
+        clientUuid: crypto.randomUUID(),
+      });
+      setBilhete(novo);
+      setPasso("bilhete");
+    } catch (error) {
+      console.error(error);
+      setErro(error instanceof Error ? error.message : "Falha ao emitir bilhete no totem");
+    } finally {
+      setEmitindo(false);
+    }
+  }
 
   return (
     <motion.div
@@ -161,7 +290,7 @@ function EmUso({ onSair }: { onSair: () => void }) {
           {passo === "viagem" && (
             <Passo key="viagem" titulo={`Belém → ${cidadeNome(destino)}`} onVoltar={() => setPasso("destino")}>
               <div className="space-y-4">
-                {VENDA_OFERTAS.map((o) => (
+                {ofertas.map((o) => (
                   <button
                     key={o.id}
                     onClick={() => { setOfertaId(o.id); setPasso("classe"); }}
@@ -177,11 +306,16 @@ function EmUso({ onSair }: { onSair: () => void }) {
                     <ArrowRight className="h-7 w-7 text-[color:var(--brand)]" />
                   </button>
                 ))}
+                {ofertas.length === 0 && (
+                  <div className="surface-card p-6 text-center text-muted-foreground">
+                    Nenhuma viagem real disponivel para este destino.
+                  </div>
+                )}
               </div>
             </Passo>
           )}
 
-          {passo === "classe" && (
+          {passo === "classe" && oferta && (
             <Passo key="classe" titulo="Escolha a classe" onVoltar={() => setPasso("viagem")}>
               <div className="grid grid-cols-3 gap-4">
                 {VENDA_CLASSES.map((c) => {
@@ -215,7 +349,7 @@ function EmUso({ onSair }: { onSair: () => void }) {
             </Passo>
           )}
 
-          {passo === "pagamento" && (
+          {passo === "pagamento" && oferta && (
             <Passo key="pagamento" titulo="Pague no totem" onVoltar={() => setPasso("classe")}>
               <div className="grid grid-cols-[1fr_auto] items-center gap-8">
                 <div className="space-y-4">
@@ -231,17 +365,19 @@ function EmUso({ onSair }: { onSair: () => void }) {
                   <CreditCard className="h-16 w-16 text-[color:var(--brand)]" strokeWidth={1.3} />
                   <p className="max-w-[12rem] text-center text-base text-muted-foreground">Aproxime ou insira o cartão na maquininha</p>
                   <button
-                    onClick={() => setPasso("bilhete")}
+                    onClick={emitirBilhete}
+                    disabled={emitindo}
                     className="flex h-16 items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-[color:var(--brand)] to-[color:var(--brand-soft)] px-8 text-xl font-semibold text-primary-foreground shadow-[0_18px_40px_-12px_color-mix(in_oklab,var(--brand)_70%,transparent)] active:scale-95"
                   >
-                    <Check className="h-6 w-6" /> Simular pagamento
+                    <Check className="h-6 w-6" /> {emitindo ? "Emitindo..." : "Simular pagamento"}
                   </button>
+                  {erro && <p className="max-w-[12rem] text-center text-xs text-[color:var(--danger)]">{erro}</p>}
                 </div>
               </div>
             </Passo>
           )}
 
-          {passo === "bilhete" && (
+          {passo === "bilhete" && oferta && (
             <Passo key="bilhete" titulo="">
               <div className="flex flex-col items-center text-center">
                 <motion.span
@@ -256,8 +392,9 @@ function EmUso({ onSair }: { onSair: () => void }) {
                   <Printer className="h-6 w-6" /> Retire o bilhete impresso abaixo
                 </p>
                 <div className="mt-6 rounded-3xl bg-white p-5 shadow-[0_18px_50px_-20px_rgba(0,0,0,0.5)]">
-                  <TotemQR seed={`${trecho}-${classe.nome}-${oferta.saida}`} size={220} />
+                  <RealQR value={bilhete?.qr_token ?? `${trecho}-${classe.nome}-${oferta.saida}`} size={220} label="QR do bilhete" />
                 </div>
+                {bilhete && <p className="mt-3 font-mono text-sm text-muted-foreground">{bilhete.codigo}</p>}
                 <p className="mt-4 text-base">
                   <span className="inline-flex items-center gap-2">
                     <span className="h-4 w-4 rounded-full" style={{ background: classe.pulseira.hex }} />
@@ -314,57 +451,5 @@ function Resumo({ label, value }: { label: string; value: string }) {
       <span className="text-base text-muted-foreground">{label}</span>
       <span className="text-xl font-medium">{value}</span>
     </div>
-  );
-}
-
-/* ============ QR fake para o totem (grid SVG determinístico) ============ */
-function TotemQR({ seed, size = 200 }: { seed: string; size?: number }) {
-  const cells = 25;
-  const modules = useMemo(() => {
-    let h = 1779033703 ^ seed.length;
-    for (let i = 0; i < seed.length; i++) {
-      h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
-      h = (h << 13) | (h >>> 19);
-    }
-    let a = h >>> 0;
-    const rand = () => {
-      a |= 0; a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-    const grid: boolean[][] = [];
-    for (let r = 0; r < cells; r++) {
-      const row: boolean[] = [];
-      for (let c = 0; c < cells; c++) row.push(rand() > 0.5);
-      grid.push(row);
-    }
-    return grid;
-  }, [seed]);
-
-  const unit = size / cells;
-  const isFinder = (r: number, c: number) => {
-    const inBox = (br: number, bc: number) => r >= br && r < br + 7 && c >= bc && c < bc + 7;
-    return inBox(0, 0) || inBox(0, cells - 7) || inBox(cells - 7, 0);
-  };
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="QR do bilhete" shapeRendering="crispEdges">
-      <rect width={size} height={size} fill="#ffffff" />
-      {modules.map((row, r) =>
-        row.map((on, c) =>
-          on && !isFinder(r, c) ? (
-            <rect key={`${r}-${c}`} x={c * unit} y={r * unit} width={unit} height={unit} fill="#0a0a0a" />
-          ) : null
-        )
-      )}
-      {[[0, 0], [0, cells - 7], [cells - 7, 0]].map(([br, bc], i) => (
-        <g key={i}>
-          <rect x={bc * unit} y={br * unit} width={unit * 7} height={unit * 7} fill="#0a0a0a" />
-          <rect x={(bc + 1) * unit} y={(br + 1) * unit} width={unit * 5} height={unit * 5} fill="#ffffff" />
-          <rect x={(bc + 2) * unit} y={(br + 2) * unit} width={unit * 3} height={unit * 3} fill="#0a0a0a" />
-        </g>
-      ))}
-    </svg>
   );
 }

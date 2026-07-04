@@ -1,13 +1,26 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Ship, Plus, CalendarRange, Users, Send, AlertTriangle, Clock } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Ship, Plus, CalendarRange, Send, AlertTriangle, Clock } from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
 import {
   SectionHeader, KPIStat, StatusChip, ViagemStatusChip, ViagemSituacaoChip,
   DataTable, FilterBar, FilterChip, PrimaryButton, GhostButton,
 } from "@/components/ops/primitives";
 import { ShimmerBar } from "@/components/ops/motion-bits";
-import { EMBARCACOES, VIAGENS, COLABORADORES, ESCALAS } from "@/mocks/data";
+import {
+  AjcApiError,
+  type EmbarcacaoApi,
+  type NavegacaoEscalaColaboradorApi,
+  type NavegacaoViagemApi,
+  type RotaTemplateApi,
+  createEmbarcacao,
+  listEmbarcacoes,
+  createNavegacaoViagem,
+  listNavegacaoEscalasColaboradores,
+  listNavegacaoTemplatesRotas,
+  listNavegacaoViagens,
+  notifyNavegacaoEscalas,
+} from "@/lib/ajc-api";
 
 export const Route = createFileRoute("/app/navegacao")({
   head: () => ({ meta: [{ title: "Navegação · AJC Suite" }] }),
@@ -15,6 +28,37 @@ export const Route = createFileRoute("/app/navegacao")({
 });
 
 type Tab = "operacao" | "viagens" | "capacidade" | "escalas" | "embarcacoes";
+type ViagemStatus = "planejada" | "em_curso" | "concluida" | "cancelada";
+type ViagemSituacao = "no_prazo" | "atencao" | "atrasado";
+
+type ViagemView = {
+  id: string;
+  codigo: string;
+  embarcacaoId: string;
+  embarcacaoNome: string;
+  origem: string;
+  destino: string;
+  saida: string;
+  retorno: string;
+  status: ViagemStatus;
+  situacao?: ViagemSituacao;
+  ocupacaoPct: number;
+  cargaPct: number;
+  passageiros: number;
+  volumes: number;
+  escalas: Array<{ cidade: string; horaPrevista: string; horaReal?: string | null }>;
+  capacidadePaxDisponivel: Record<string, unknown>;
+};
+
+type RotaView = {
+  id: string;
+  rotulo: string;
+  origemSigla: string;
+  destinoSigla: string;
+  embarcacao: string;
+  saida: string;
+  paradas: string[];
+};
 
 /** Lista oficial de embarcações (Lucas, 30/jun) — substitui os nomes-fantasia do mock antigo. */
 const FROTA_LUCAS = [
@@ -35,26 +79,57 @@ const CLASSES_POR_EMBARCACAO: Record<string, string[]> = {
   "F/B Amazonas VI": ["Rede", "Suíte Comum", "Suíte Comum VIP", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
   "F/B Paru (cargas)": [],
 };
+const CLASSE_API_BY_LABEL: Record<string, string> = {
+  "Rede": "rede",
+  "Rede Sala VIP": "rede_sala_vip",
+  "Rede VIP": "rede_sala_vip",
+  "Camarote": "camarote",
+  "SuÃ­te Comum": "suite_comum",
+  "Suite Comum": "suite_comum",
+  "SuÃ­te Comum VIP": "suite_comum_vip",
+  "Suite Comum VIP": "suite_comum_vip",
+  "SuÃ­te Master": "suite_master",
+  "Suite Master": "suite_master",
+  "SuÃ­te Master VIP": "suite_master_vip",
+  "Suite Master VIP": "suite_master_vip",
+  "Mega SuÃ­te": "mega_suite",
+  "Mega Suite": "mega_suite",
+};
 
 /** Templates de cronograma/paradas do FAQ 2026 — alimentam o preenchimento automático das paradas. */
-const ROTAS_FAQ: { id: string; rotulo: string; embarcacao: string; saida: string; paradas: string[] }[] = [
+const CLASSES_FORM_EMBARCACAO = [
+  "Rede",
+  "Rede Sala VIP",
+  "Camarote",
+  "Suite Comum",
+  "Suite Comum VIP",
+  "Suite Master",
+  "Suite Master VIP",
+  "Mega Suite",
+];
+
+const ROTAS_FAQ: { id: string; rotulo: string; origemSigla: string; destinoSigla: string; embarcacao: string; saida: string; paradas: string[] }[] = [
   {
     id: "bel-alm", rotulo: "Belém → Almeirim", embarcacao: "F/B Amazonas V",
+    origemSigla: "BEL", destinoSigla: "ALM",
     saida: "Terça · 17h/18h (validar)",
     paradas: ["Breves · qua 09h", "Gurupá · qua 20h", "Porto de Moz · qui 08h", "Almeirim · qui 14h (chegada)"],
   },
   {
     id: "bel-stm-qua", rotulo: "Belém → Santarém (quarta)", embarcacao: "F/B Amazonas VI",
+    origemSigla: "BEL", destinoSigla: "STM",
     saida: "Quarta · 17h/18h (validar)",
     paradas: ["Breves · qui 09h", "Gurupá · qui 20h", "Almeirim · sex 09h", "Prainha · sex 17h", "Monte Alegre · sex 23h", "Santarém · sáb 10h/início tarde"],
   },
   {
     id: "bel-stm-sex", rotulo: "Belém → Santarém (sexta)", embarcacao: "F/B Amazonas IV",
+    origemSigla: "BEL", destinoSigla: "STM",
     saida: "Sexta · 17h/18h (validar)",
     paradas: ["Breves · sáb 09h", "Gurupá · sáb 20h", "Almeirim · dom 09h", "Prainha · dom 17h", "Monte Alegre · dom 23h", "Santarém · seg 19h/início tarde"],
   },
   {
     id: "stm-bel-sab", rotulo: "Santarém → Belém (retorno sábado)", embarcacao: "F/B Amazonas VI",
+    origemSigla: "STM", destinoSigla: "BEL",
     saida: "Sábado · 16h",
     paradas: ["Prainha · 00h (dia a validar)", "Almeirim · dom 08h", "Gurupá · dom 16h", "Breves · seg 02h", "Belém · seg 19h (chegada)"],
   },
@@ -63,13 +138,84 @@ const ROTAS_FAQ: { id: string; rotulo: string; embarcacao: string; saida: string
 function Navegacao() {
   const [tab, setTab] = useState<Tab>("operacao");
   const [showNovaViagem, setShowNovaViagem] = useState(false);
+  const [showNovaEmbarcacao, setShowNovaEmbarcacao] = useState(false);
   const [showCalendario, setShowCalendario] = useState(false);
   const [rotaSel, setRotaSel] = useState(ROTAS_FAQ[1].id);
-  const rota = ROTAS_FAQ.find((r) => r.id === rotaSel) ?? ROTAS_FAQ[0];
+  const [salvandoViagem, setSalvandoViagem] = useState(false);
+  const [viagemError, setViagemError] = useState<string | null>(null);
+  const [embarcacaoError, setEmbarcacaoError] = useState<string | null>(null);
+  const [salvandoEmbarcacao, setSalvandoEmbarcacao] = useState(false);
+  const [notificandoEscalas, setNotificandoEscalas] = useState(false);
+  const [escalaMensagem, setEscalaMensagem] = useState<string | null>(null);
+  const [viagemForm, setViagemForm] = useState({
+    embarcacaoId: "",
+    dataHoraSaida: defaultDateTimeLocal(),
+    dataHoraRetorno: "",
+    capacidade: {} as Record<string, string>,
+  });
+  const [embarcacaoForm, setEmbarcacaoForm] = useState({
+    nome: "",
+    tipo: "passeio_carga" as "passeio_carga" | "carga",
+    status: "ativa" as "ativa" | "manutencao" | "alugada",
+    capacidadeCarga: "",
+    capacidadePax: {} as Record<string, string>,
+  });
+  const [viagensApi, setViagensApi] = useState<NavegacaoViagemApi[]>([]);
+  const [embarcacoes, setEmbarcacoes] = useState<EmbarcacaoApi[]>([]);
+  const [templatesApi, setTemplatesApi] = useState<RotaTemplateApi[]>([]);
+  const [escalasColaboradores, setEscalasColaboradores] = useState<NavegacaoEscalaColaboradorApi[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([listNavegacaoViagens(), listEmbarcacoes(), listNavegacaoTemplatesRotas(), listNavegacaoEscalasColaboradores()])
+      .then(([viagens, frota, templates, escalas]) => {
+        if (!active) return;
+        setViagensApi(viagens);
+        setEmbarcacoes(frota);
+        setTemplatesApi(Array.isArray(templates) ? templates : []);
+        setEscalasColaboradores(escalas);
+        setLoadError(null);
+        if (templates[0]?.id) {
+          setRotaSel((current) => (templates.some((template) => template.id === current) ? current : templates[0].id));
+        }
+        const rotaAtual = (Array.isArray(templates) && templates.length ? normalizeRotas(templates) : ROTAS_FAQ).find((template) => template.id === rotaSel) ?? ROTAS_FAQ[1];
+        const embarcacaoDoTemplate = frota.find((e) => normalizeBoatName(e.nome) === normalizeBoatName(rotaAtual.embarcacao)) ?? frota[0];
+        if (embarcacaoDoTemplate) {
+          setViagemForm((prev) => ({ ...prev, embarcacaoId: prev.embarcacaoId || embarcacaoDoTemplate.id }));
+        }
+      })
+      .catch((err) => {
+        if (!active) return;
+        setLoadError(err instanceof AjcApiError ? err.message : "Nao foi possivel carregar a navegacao.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const rotas = useMemo(() => normalizeRotas(templatesApi), [templatesApi]);
+  const viagens = useMemo(() => viagensApi.map(mapViagemView), [viagensApi]);
+  const rota = rotas.find((r) => r.id === rotaSel) ?? rotas[0] ?? ROTAS_FAQ[0];
   const embSel = rota.embarcacao;
-  const classesEmb = CLASSES_POR_EMBARCACAO[embSel] ?? [];
-  const ativas = EMBARCACOES.filter((e) => e.status === "ativa").length;
-  const emCurso = VIAGENS.filter((v) => v.status === "em_curso");
+  const embarcacaoTemplate = embarcacoes.find((e) => normalizeBoatName(e.nome) === normalizeBoatName(embSel));
+  const embarcacaoSelecionada = embarcacoes.find((e) => e.id === viagemForm.embarcacaoId) ?? embarcacaoTemplate ?? embarcacoes[0];
+  const classesEmb = classesFromCapacidade(embarcacaoSelecionada?.capacidadePax) ?? CLASSES_POR_EMBARCACAO[embarcacaoSelecionada?.nome ?? embSel] ?? CLASSES_POR_EMBARCACAO[embSel] ?? [];
+  const ativas = embarcacoes.filter((e) => e.status === "ativa").length;
+  const emCurso = viagens.filter((v) => v.status === "em_curso");
+  const colaboradoresEscala = useMemo(
+    () => escalasColaboradores.map((escala) => ({
+      id: escala.colaboradorId,
+      nome: escala.colaboradorNome,
+      whatsapp: escala.colaboradorWhatsapp ?? "sem WhatsApp",
+    })),
+    [escalasColaboradores],
+  );
 
   const tabs: [Tab, string][] = [
     ["operacao", "Painel operacional"],
@@ -78,6 +224,133 @@ function Navegacao() {
     ["escalas", "Escala de colaboradores"],
     ["embarcacoes", "Embarcações"],
   ];
+
+  function selecionarRota(id: string) {
+    setRotaSel(id);
+    const nextRota = rotas.find((r) => r.id === id);
+    const embarcacaoDaRota = nextRota
+      ? embarcacoes.find((e) => normalizeBoatName(e.nome) === normalizeBoatName(nextRota.embarcacao))
+      : null;
+    if (embarcacaoDaRota) {
+      setViagemForm((prev) => ({ ...prev, embarcacaoId: embarcacaoDaRota.id }));
+    }
+  }
+
+  function setCapacidadeClasse(label: string, value: string) {
+    const key = classeKeyFromLabel(label);
+    setViagemForm((prev) => ({ ...prev, capacidade: { ...prev.capacidade, [key]: value } }));
+  }
+
+  async function salvarNovaViagem() {
+    if (salvandoViagem) return;
+    const embarcacao = embarcacaoSelecionada;
+    if (!embarcacao) {
+      setViagemError("Selecione uma embarcacao.");
+      return;
+    }
+    if (!viagemForm.dataHoraSaida) {
+      setViagemError("Informe a data e hora de saida.");
+      return;
+    }
+    const capacidade = Object.fromEntries(
+      Object.entries(viagemForm.capacidade)
+        .map(([key, value]) => [key, Number(value)])
+        .filter(([, value]) => Number.isFinite(value) && Number(value) > 0),
+    );
+    if (classesEmb.length > 0 && Object.keys(capacidade).length === 0) {
+      setViagemError("Informe ao menos uma capacidade por classe.");
+      return;
+    }
+    setSalvandoViagem(true);
+    setViagemError(null);
+    try {
+      const nova = await createNavegacaoViagem({
+        embarcacaoId: embarcacao.id,
+        origemSigla: rota.origemSigla,
+        destinoSigla: rota.destinoSigla,
+        dataHoraSaida: toIsoFromDateTimeLocal(viagemForm.dataHoraSaida),
+        dataHoraRetorno: viagemForm.dataHoraRetorno ? toIsoFromDateTimeLocal(viagemForm.dataHoraRetorno) : undefined,
+        capacidadePaxDisponivel: capacidade,
+        observacoes: `Criada a partir do template FAQ: ${rota.rotulo}. Saida FAQ: ${rota.saida}`,
+        escalas: rota.paradas.map((parada) => ({
+          cidadeSigla: cidadeSiglaFromParada(parada) ?? rota.destinoSigla,
+          observacao: parada,
+        })),
+        clientUuid: crypto.randomUUID(),
+      });
+      setViagensApi((prev) => [nova, ...prev.filter((v) => v.id !== nova.id)]);
+      setShowNovaViagem(false);
+      setTab("viagens");
+      setViagemForm((prev) => ({ ...prev, capacidade: {} }));
+    } catch (error) {
+      console.error(error);
+      setViagemError(error instanceof Error ? error.message : "Falha ao criar viagem");
+    } finally {
+      setSalvandoViagem(false);
+    }
+  }
+
+  async function notificarEscalasWhatsapp() {
+    const escalaIds = escalasColaboradores
+      .filter((escala) => !escala.conflito && escala.statusOriginal !== "confirmada" && escala.statusOriginal !== "cancelada")
+      .map((escala) => escala.id);
+    if (escalaIds.length === 0) {
+      setEscalaMensagem("Nenhuma escala pendente para notificar.");
+      return;
+    }
+    setNotificandoEscalas(true);
+    setEscalaMensagem(null);
+    try {
+      await notifyNavegacaoEscalas({ escalaIds, clientUuid: crypto.randomUUID() });
+      setEscalasColaboradores(await listNavegacaoEscalasColaboradores());
+      setEscalaMensagem(`${escalaIds.length} escala(s) enfileirada(s) no stub WhatsApp. Provedor real segue pendente.`);
+    } catch (error) {
+      setEscalaMensagem(error instanceof Error ? error.message : "Nao foi possivel notificar as escalas.");
+    } finally {
+      setNotificandoEscalas(false);
+    }
+  }
+
+  async function salvarNovaEmbarcacao() {
+    if (salvandoEmbarcacao) return;
+    const nome = embarcacaoForm.nome.trim();
+    if (!nome) {
+      setEmbarcacaoError("Informe o nome da embarcacao.");
+      return;
+    }
+    const capacidadePax = Object.fromEntries(
+      Object.entries(embarcacaoForm.capacidadePax)
+        .map(([key, value]) => [key, Number(value)])
+        .filter(([, value]) => Number.isFinite(value) && Number(value) > 0),
+    );
+    setSalvandoEmbarcacao(true);
+    setEmbarcacaoError(null);
+    try {
+      const nova = await createEmbarcacao({
+        nome,
+        tipo: embarcacaoForm.tipo,
+        status: embarcacaoForm.status,
+        capacidadeCarga: parseOptionalNumber(embarcacaoForm.capacidadeCarga),
+        capacidadePax,
+      });
+      setEmbarcacoes((prev) => [nova, ...prev.filter((item) => item.id !== nova.id)].sort((a, b) => a.nome.localeCompare(b.nome)));
+      setViagemForm((prev) => ({ ...prev, embarcacaoId: prev.embarcacaoId || nova.id }));
+      setShowNovaEmbarcacao(false);
+      setTab("embarcacoes");
+      setEmbarcacaoForm({
+        nome: "",
+        tipo: "passeio_carga",
+        status: "ativa",
+        capacidadeCarga: "",
+        capacidadePax: {},
+      });
+    } catch (error) {
+      console.error(error);
+      setEmbarcacaoError(error instanceof Error ? error.message : "Falha ao criar embarcacao");
+    } finally {
+      setSalvandoEmbarcacao(false);
+    }
+  }
 
   return (
     <AppShell crumb="Navegação">
@@ -94,11 +367,17 @@ function Navegacao() {
       />
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KPIStat index={0} label="Embarcações ativas" value={`${ativas}/${EMBARCACOES.length}`} hint="1 em manutenção · 2 alugadas" icon={Ship} />
-        <KPIStat index={1} label="Viagens em curso" value={String(emCurso.length)} hint="2 com situação de atenção" />
-        <KPIStat index={2} label="Passageiros embarcados (hoje)" value={String(emCurso.reduce((s, v) => s + v.passageiros, 0))} hint="todas as classes" delta={{ value: "+12%", positive: true }} />
-        <KPIStat index={3} label="Volumes em trânsito" value={String(emCurso.reduce((s, v) => s + v.volumes, 0))} hint="rastreio QR ativo" delta={{ value: "+128", positive: true }} />
+        <KPIStat index={0} label="Embarcações ativas" value={`${ativas}/${embarcacoes.length}`} hint={loading ? "carregando frota" : "cadastros conectados"} icon={Ship} />
+        <KPIStat index={1} label="Viagens em curso" value={String(emCurso.length)} hint={`${viagens.length} viagens no cronograma`} />
+        <KPIStat index={2} label="Capacidade pax planejada" value={String(viagens.reduce((s, v) => s + v.passageiros, 0))} hint="soma das vagas por classe" delta={{ value: "API", positive: true }} />
+        <KPIStat index={3} label="Volumes em trânsito" value={String(emCurso.reduce((s, v) => s + v.volumes, 0))} hint="TMS integra no proximo bloco" delta={{ value: "pendente", positive: true }} />
       </section>
+
+      {loadError && (
+        <div className="mt-4 rounded-lg border border-[color:var(--danger)]/30 bg-[color:var(--danger)]/10 px-4 py-3 text-sm text-foreground">
+          {loadError}
+        </div>
+      )}
 
       {(showNovaViagem || showCalendario) && (
         <section className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_1fr]">
@@ -106,34 +385,52 @@ function Navegacao() {
             <div className="surface-card brand-rail brand-rail-left p-5">
               <div className="flex items-center gap-2">
                 <Plus className="h-4 w-4 text-[color:var(--brand)]" />
-                <h3 className="font-display text-lg">Nova viagem · fluxo mockado</h3>
+                <h3 className="font-display text-lg">Nova viagem</h3>
                 <StatusChip tone="success">campos Lucas + FAQ 2026</StatusChip>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">Número gerado pelo sistema, FerryBoat em lista, saída, e paradas com preenchimento automático a partir do DOC FAQ. Camarotes/classes condicionais à embarcação.</p>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <MockField label="Número da viagem (auto)" value="V-0422 · gerado pelo sistema" />
+                <MockField label="Numero da viagem (auto)" value="gerado pelo sistema" />
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">FerryBoat</p>
                   <select
-                    value={embSel}
-                    onChange={() => { /* mock: embarcação segue o template de rota */ }}
-                    disabled
+                    value={embarcacaoSelecionada?.id ?? ""}
+                    onChange={(event) => setViagemForm((prev) => ({ ...prev, embarcacaoId: event.target.value }))}
                     className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
                   >
-                    {FROTA_LUCAS.map((f) => <option key={f} value={f}>{f}</option>)}
+                    {embarcacoes.length
+                      ? embarcacoes.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)
+                      : FROTA_LUCAS.map((f) => <option key={f} value={f}>{f}</option>)}
                   </select>
                 </div>
                 <div className="sm:col-span-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Trecho / rota (DOC FAQ)</p>
                   <div className="mt-1 flex flex-wrap gap-2">
-                    {ROTAS_FAQ.map((r) => (
-                      <FilterChip key={r.id} active={r.id === rotaSel} onClick={() => setRotaSel(r.id)}>{r.rotulo}</FilterChip>
+                    {rotas.map((r) => (
+                      <FilterChip key={r.id} active={r.id === rotaSel} onClick={() => selecionarRota(r.id)}>{r.rotulo}</FilterChip>
                     ))}
                   </div>
                 </div>
-                <MockField label="Data e hora da saída" value={rota.saida} />
-                <MockField label="Embarcação do template" value={embSel} />
+                <label>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Data e hora da saida</p>
+                  <input
+                    type="datetime-local"
+                    value={viagemForm.dataHoraSaida}
+                    onChange={(event) => setViagemForm((prev) => ({ ...prev, dataHoraSaida: event.target.value }))}
+                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                  />
+                  <span className="mt-1 block text-[10px] text-muted-foreground">FAQ: {rota.saida}</span>
+                </label>
+                <label>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Data e hora do retorno</p>
+                  <input
+                    type="datetime-local"
+                    value={viagemForm.dataHoraRetorno}
+                    onChange={(event) => setViagemForm((prev) => ({ ...prev, dataHoraRetorno: event.target.value }))}
+                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                  />
+                </label>
               </div>
 
               <div className="mt-4">
@@ -151,22 +448,39 @@ function Navegacao() {
                 </ol>
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <MockField label="Passageiros disponíveis em rede" value="manual · ex. 180" />
-                <MockField label="Camarotes disponíveis (por classe)" value="conforme embarcação selecionada" />
+              <div className="mt-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Capacidade disponivel por classe - {embarcacaoSelecionada?.nome ?? embSel}</p>
+                {classesEmb.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">Embarcacao so de carga - sem classes de passageiro.</p>
+                ) : (
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    {classesEmb.map((classe) => {
+                      const key = classeKeyFromLabel(classe);
+                      return (
+                        <label key={classe}>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{classe}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            inputMode="numeric"
+                            value={viagemForm.capacidade[key] ?? ""}
+                            onChange={(event) => setCapacidadeClasse(classe, event.target.value)}
+                            className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
+                            placeholder="0"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              <div className="mt-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Classes disponíveis · {embSel}</p>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {classesEmb.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">Embarcação só de carga — sem classes de passageiro.</span>
-                  ) : (
-                    classesEmb.map((c) => (
-                      <span key={c} className="rounded-md bg-[color:var(--muted)] px-2.5 py-1 text-xs text-foreground ring-1 ring-[color:var(--hairline)]">{c}</span>
-                    ))
-                  )}
-                </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <PrimaryButton icon={Plus} onClick={salvarNovaViagem} disabled={salvandoViagem || !embarcacaoSelecionada}>
+                  {salvandoViagem ? "Criando..." : "Criar viagem"}
+                </PrimaryButton>
+                <GhostButton onClick={() => setShowNovaViagem(false)}>Cancelar</GhostButton>
+                {viagemError && <span className="text-xs text-[color:var(--danger)]">{viagemError}</span>}
               </div>
             </div>
           )}
@@ -179,7 +493,7 @@ function Navegacao() {
               </div>
               <p className="mt-1 text-xs text-muted-foreground">Visualização acionável do cronograma longo enquanto a regra final de calendário é definida.</p>
               <div className="mt-4 space-y-2">
-                {VIAGENS.slice(0, 5).map((v) => (
+                {viagens.slice(0, 5).map((v) => (
                   <div key={v.id} className="flex items-center gap-3 rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
                     <Clock className="h-4 w-4 text-[color:var(--brand)]" />
                     <div className="min-w-0 flex-1">
@@ -219,7 +533,7 @@ function Navegacao() {
             </header>
             <ul className="divide-y divide-[color:var(--hairline)]">
               {emCurso.map((v) => {
-                const emb = EMBARCACOES.find((e) => e.id === v.embarcacaoId);
+                const emb = embarcacoes.find((e) => e.id === v.embarcacaoId);
                 return (
                   <li key={v.id} className="px-5 py-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -227,7 +541,7 @@ function Navegacao() {
                         <p className="text-sm">
                           <span className="font-mono text-muted-foreground">{v.codigo}</span>{" "}
                           <span className="font-display text-foreground">{v.origem} → {v.destino}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">{emb?.nome}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{emb?.nome ?? v.embarcacaoNome}</span>
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">Saída {v.saida} · Retorno {v.retorno}</p>
                       </div>
@@ -261,11 +575,11 @@ function Navegacao() {
               <h3 className="font-display text-lg text-foreground">Frota agora</h3>
             </header>
             <ul className="divide-y divide-[color:var(--hairline)]">
-              {EMBARCACOES.map((e) => (
+              {embarcacoes.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-3 px-5 py-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">{e.nome}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{e.tipo.replace("_", " + ")} · {e.ultimaViagem}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{e.tipo.replace("_", " + ")} · {lastTripLabel(viagens, e.id)}</p>
                   </div>
                   <StatusChip tone={e.status === "ativa" ? "success" : e.status === "manutencao" ? "warning" : "offline"}>
                     {e.status === "ativa" ? "Ativa" : e.status === "manutencao" ? "Manutenção" : "Alugada"}
@@ -279,18 +593,18 @@ function Navegacao() {
 
       {tab === "viagens" && (
         <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar por código, embarcação, trecho…" right={<PrimaryButton icon={Plus}>Nova viagem</PrimaryButton>}>
+          <FilterBar searchPlaceholder="Buscar por código, embarcação, trecho…" right={<PrimaryButton icon={Plus} onClick={() => setShowNovaViagem((v) => !v)}>Nova viagem</PrimaryButton>}>
             <FilterChip active>Todas</FilterChip>
             <FilterChip>Em curso</FilterChip>
             <FilterChip>Planejadas</FilterChip>
             <FilterChip>Concluídas</FilterChip>
           </FilterBar>
           <DataTable
-            rows={VIAGENS}
+            rows={viagens}
             columns={[
               { key: "codigo", header: "Código", render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.codigo}</span> },
               { key: "trecho", header: "Trecho", render: (r) => <span className="font-display text-sm">{r.origem} → {r.destino}</span> },
-              { key: "embarcacao", header: "Embarcação", render: (r) => EMBARCACOES.find((e) => e.id === r.embarcacaoId)?.nome ?? "—" },
+              { key: "embarcacao", header: "Embarcação", render: (r) => r.embarcacaoNome },
               { key: "saida", header: "Saída", render: (r) => <span className="font-mono text-xs">{r.saida}</span> },
               { key: "retorno", header: "Retorno", render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.retorno}</span> },
               { key: "status", header: "Status", render: (r) => <ViagemStatusChip s={r.status} /> },
@@ -304,13 +618,9 @@ function Navegacao() {
 
       {tab === "capacidade" && (
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {EMBARCACOES.filter((e) => e.tipo === "passeio_carga").map((e) => {
-            const viagem = VIAGENS.find((v) => v.embarcacaoId === e.id && v.status === "em_curso");
-            const classes = [
-              { label: "Rede", cap: e.capRede, tone: "brand" as const },
-              { label: "Rede VIP", cap: e.capVip, tone: "warning" as const },
-              { label: "Camarote", cap: e.capCamarote, tone: "success" as const },
-            ];
+          {embarcacoes.filter((e) => e.tipo !== "carga").map((e) => {
+            const viagem = viagens.find((v) => v.embarcacaoId === e.id && v.status === "em_curso");
+            const classes = capacityRows(e.capacidadePax);
             const ocup = viagem?.ocupacaoPct ?? 0;
             return (
               <div key={e.id} className="surface-card brand-rail brand-rail-left p-5">
@@ -340,7 +650,7 @@ function Navegacao() {
                 </div>
                 <div className="mt-4 flex items-center justify-between border-t border-[color:var(--hairline)] pt-3 text-xs">
                   <span className="text-muted-foreground">Carga</span>
-                  <span className="font-mono text-foreground/85">{e.capCargaTon} t · {viagem?.cargaPct ?? 0}% usado</span>
+                  <span className="font-mono text-foreground/85">{e.capacidadeCarga ?? "—"} t · {viagem?.cargaPct ?? 0}% usado</span>
                 </div>
               </div>
             );
@@ -359,17 +669,17 @@ function Navegacao() {
             </div>
             <StatusChip tone="danger" pulse>bloqueante</StatusChip>
           </div>
-          <FilterBar searchPlaceholder="Buscar colaborador, viagem, função…" right={<PrimaryButton icon={Send}>Notificar via WhatsApp</PrimaryButton>}>
+          <FilterBar searchPlaceholder="Buscar colaborador, viagem, função…" right={<PrimaryButton icon={Send} disabled={notificandoEscalas} onClick={notificarEscalasWhatsapp}>{notificandoEscalas ? "Enfileirando..." : "Notificar via WhatsApp"}</PrimaryButton>}>
             <FilterChip active>Todas</FilterChip>
             <FilterChip>Confirmadas</FilterChip>
             <FilterChip>Pendentes</FilterChip>
             <FilterChip>Conflitos</FilterChip>
           </FilterBar>
           <DataTable
-            rows={ESCALAS}
+            rows={escalasColaboradores}
             columns={[
               { key: "colaborador", header: "Colaborador", render: (r) => {
-                const col = COLABORADORES.find((c) => c.id === r.colaboradorId);
+                const col = colaboradoresEscala.find((c) => c.id === r.colaboradorId);
                 return (
                   <div>
                     <p className="font-medium">{col?.nome ?? "—"}</p>
@@ -378,14 +688,15 @@ function Navegacao() {
                 );
               } },
               { key: "funcao", header: "Função", render: (r) => <span className="text-xs">{r.funcao}</span> },
-              { key: "viagem", header: "Viagem", render: (r) => <span className="font-mono text-xs">{VIAGENS.find((v) => v.id === r.viagemId)?.codigo ?? "—"}</span> },
+              { key: "viagem", header: "Viagem", render: (r) => <span className="font-mono text-xs">{viagens.find((v) => v.id === r.viagemId)?.codigo ?? "—"}</span> },
               { key: "notificadoEm", header: "Notificado em", render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.notificadoEm}</span> },
               { key: "status", header: "Status", render: (r) => {
-                const tone = r.status === "confirmado" ? "success" : r.status === "notificado" ? "info" : r.status === "conflito" ? "danger" : "warning";
+                const tone = r.status === "confirmada" ? "success" : r.status === "notificada" ? "info" : r.status === "conflito" ? "danger" : "warning";
                 return <StatusChip tone={tone as never} pulse={r.status === "conflito"}>{r.status}</StatusChip>;
               } },
             ]}
           />
+          {escalaMensagem && <p className="text-center text-[11px] text-muted-foreground">{escalaMensagem}</p>}
           <p className="text-center text-[11px] text-muted-foreground">
             Escala notifica o colaborador via WhatsApp. Conflito (mesmo colaborador em duas viagens) bloqueia até resolução.
           </p>
@@ -394,33 +705,203 @@ function Navegacao() {
 
       {tab === "embarcacoes" && (
         <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar embarcação…" right={<PrimaryButton icon={Plus}>Nova embarcação</PrimaryButton>}>
+          <FilterBar searchPlaceholder="Buscar embarcação…" right={<PrimaryButton icon={Plus} onClick={() => setShowNovaEmbarcacao((value) => !value)}>Nova embarcação</PrimaryButton>}>
             <FilterChip active>Todas</FilterChip>
             <FilterChip>Ativas</FilterChip>
             <FilterChip>Manutenção</FilterChip>
             <FilterChip>Alugadas</FilterChip>
           </FilterBar>
           <DataTable
-            rows={EMBARCACOES}
+            rows={embarcacoes}
             columns={[
               { key: "nome", header: "Embarcação", render: (r) => <span className="font-medium">{r.nome}</span> },
               { key: "tipo", header: "Tipo", render: (r) => <span className="text-xs">{r.tipo === "carga" ? "Só carga" : "Passeio + carga"}</span> },
-              { key: "capRede", header: "Rede", align: "right", render: (r) => r.capRede || "—" },
-              { key: "capVip", header: "VIP", align: "right", render: (r) => r.capVip || "—" },
-              { key: "capCamarote", header: "Camarote", align: "right", render: (r) => r.capCamarote || "—" },
-              { key: "capCargaTon", header: "Carga (t)", align: "right" },
+              { key: "capRede", header: "Rede", align: "right", render: (r) => capacityValue(r.capacidadePax, "rede") },
+              { key: "capVip", header: "VIP", align: "right", render: (r) => capacityValue(r.capacidadePax, "rede_sala_vip") },
+              { key: "capCamarote", header: "Camarote", align: "right", render: (r) => capacityValue(r.capacidadePax, "camarote") },
+              { key: "capacidadeCarga", header: "Carga (t)", align: "right", render: (r) => r.capacidadeCarga ?? "—" },
               { key: "status", header: "Status", render: (r) => (
                 <StatusChip tone={r.status === "ativa" ? "success" : r.status === "manutencao" ? "warning" : "offline"}>
                   {r.status === "ativa" ? "Ativa" : r.status === "manutencao" ? "Manutenção" : "Alugada"}
                 </StatusChip>
               ) },
-              { key: "ultimaViagem", header: "Última viagem", render: (r) => <span className="font-mono text-xs">{r.ultimaViagem}</span> },
+              { key: "ultimaViagem", header: "Última viagem", render: (r) => <span className="font-mono text-xs">{lastTripLabel(viagens, r.id)}</span> },
             ]}
           />
         </div>
       )}
     </AppShell>
   );
+}
+
+function mapViagemView(v: NavegacaoViagemApi): ViagemView {
+  const capacidade = v.capacidadePaxDisponivel ?? {};
+  const passageiros = Object.values(capacidade).reduce((sum, value) => sum + numericValue(value), 0);
+  return {
+    id: v.id,
+    codigo: v.codigo ?? "sem-codigo",
+    embarcacaoId: v.embarcacaoId,
+    embarcacaoNome: v.embarcacaoNome,
+    origem: v.origemSigla,
+    destino: v.destinoSigla ?? v.escalas.at(-1)?.cidadeSigla ?? "—",
+    saida: formatDateTime(v.dataHoraSaida),
+    retorno: v.dataHoraRetorno ? formatDateTime(v.dataHoraRetorno) : "—",
+    status: asViagemStatus(v.status),
+    situacao: asViagemSituacao(v.situacao),
+    ocupacaoPct: 0,
+    cargaPct: 0,
+    passageiros,
+    volumes: 0,
+    capacidadePaxDisponivel: capacidade,
+    escalas: v.escalas.map((escala) => ({
+      cidade: escala.cidadeSigla,
+      horaPrevista: escala.dataHoraPrevista ? formatShortDateTime(escala.dataHoraPrevista) : "—",
+      horaReal: escala.dataHoraReal ? formatShortDateTime(escala.dataHoraReal) : null,
+    })),
+  };
+}
+
+function normalizeRotas(templates: RotaTemplateApi[]): RotaView[] {
+  if (!templates.length) return ROTAS_FAQ;
+  return templates.map((template) => ({
+    id: template.id,
+    rotulo: template.rotulo ?? template.label ?? `${template.origemSigla ?? template.origem ?? "Origem"} → ${template.destinoSigla ?? template.destino ?? "Destino"}`,
+    origemSigla: template.origemSigla ?? siglaFromLabel(template.origem) ?? "BEL",
+    destinoSigla: template.destinoSigla ?? siglaFromLabel(template.destino) ?? "STM",
+    embarcacao: template.embarcacaoNome ?? template.embarcacao ?? "F/B Amazonas VI",
+    saida: template.saidaTexto ?? template.saida ?? "horario a validar",
+    paradas: (template.paradas ?? []).map((parada) => {
+      if (typeof parada === "string") return parada;
+      const cidade = parada.cidadeSigla ?? parada.cidade ?? parada.label ?? "parada";
+      const texto = parada.texto ?? parada.hora ?? parada.dataHoraPrevista ?? "";
+      return texto ? `${cidade} · ${texto}` : cidade;
+    }),
+  }));
+}
+
+function defaultDateTimeLocal() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(17, 0, 0, 0);
+  return toDateTimeLocalValue(date);
+}
+
+function toDateTimeLocalValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function toIsoFromDateTimeLocal(value: string) {
+  return new Date(value).toISOString();
+}
+
+function classeKeyFromLabel(label: string) {
+  const direct = CLASSE_API_BY_LABEL[label];
+  if (direct) return direct;
+  return label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function siglaFromLabel(label?: string) {
+  if (!label) return null;
+  return cidadeSiglaFromParada(label);
+}
+
+function cidadeSiglaFromParada(label: string) {
+  const normalized = label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (normalized.includes("belem")) return "BEL";
+  if (normalized.includes("breves")) return "BRV";
+  if (normalized.includes("gurupa")) return "GUR";
+  if (normalized.includes("almeirim")) return "ALM";
+  if (normalized.includes("porto de moz")) return "PMZ";
+  if (normalized.includes("prainha")) return "PRA";
+  if (normalized.includes("monte alegre")) return "MTA";
+  if (normalized.includes("santarem")) return "STM";
+  return null;
+}
+
+function capacityRows(capacidade: Record<string, unknown>) {
+  const rows = Object.entries(capacidade)
+    .filter(([, value]) => numericValue(value) > 0)
+    .slice(0, 6)
+    .map(([key, value], index) => ({
+      label: labelClasse(key),
+      cap: numericValue(value),
+      tone: (index % 3 === 0 ? "brand" : index % 3 === 1 ? "warning" : "success") as "brand" | "warning" | "success",
+    }));
+  return rows.length ? rows : [{ label: "Sem classes cadastradas", cap: 0, tone: "brand" as const }];
+}
+
+function classesFromCapacidade(capacidade?: Record<string, unknown>) {
+  if (!capacidade) return null;
+  const classes = Object.entries(capacidade)
+    .filter(([, value]) => numericValue(value) > 0)
+    .map(([key]) => labelClasse(key));
+  return classes.length ? classes : null;
+}
+
+function capacityValue(capacidade: Record<string, unknown>, key: string) {
+  const value = numericValue(capacidade[key]);
+  return value || "—";
+}
+
+function numericValue(value: unknown) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim()) return Number(value) || 0;
+  return 0;
+}
+
+function parseOptionalNumber(value: string) {
+  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function labelClasse(key: string) {
+  return key
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+    .replace("Vip", "VIP");
+}
+
+function lastTripLabel(viagens: ViagemView[], embarcacaoId: string) {
+  const viagem = viagens.find((v) => v.embarcacaoId === embarcacaoId);
+  return viagem ? `${viagem.codigo} · ${viagem.origem} → ${viagem.destino}` : "Sem viagem vinculada";
+}
+
+function normalizeBoatName(value: string) {
+  return value.toUpperCase().replace(/\s+/g, " ").trim();
+}
+
+function asViagemStatus(status: string): ViagemStatus {
+  return ["planejada", "em_curso", "concluida", "cancelada"].includes(status) ? (status as ViagemStatus) : "planejada";
+}
+
+function asViagemSituacao(situacao: string | null): ViagemSituacao | undefined {
+  return situacao && ["no_prazo", "atencao", "atrasado"].includes(situacao) ? (situacao as ViagemSituacao) : undefined;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatShortDateTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function MockField({ label, value, wide }: { label: string; value: string; wide?: boolean }) {

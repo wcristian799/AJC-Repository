@@ -39,14 +39,29 @@ INSERT INTO permissao (modulo, acao, descricao) VALUES
   ('cadastros', 'editar',    'Editar cadastros'),
   ('navegacao', 'ver',       'Visualizar viagens/embarcações'),
   ('navegacao', 'criar',     'Criar viagem/embarcação'),
+  ('navegacao', 'editar',    'Editar viagens, escalas e notificações'),
   ('precos',    'ver',       'Visualizar preços'),
   ('precos',    'reajustar', 'Reajustar preços em massa'),
+  ('tms',       'ver',       'Visualizar TMS/cargas'),
+  ('tms',       'criar',     'Criar cargas, paletes, portaria e recebimentos'),
   ('tms',       'conferir',  'Conferir volumes'),
   ('tms',       'entregar',  'Registrar entrega'),
+  ('veiculos',  'ver',       'Visualizar veículos e máquinas'),
+  ('veiculos',  'criar',     'Criar e movimentar veículos e máquinas'),
+  ('encomendas','ver',       'Visualizar encomendas'),
+  ('encomendas','criar',     'Criar encomendas e declarações'),
+  ('vendas',    'ver',       'Visualizar vendas, bilhetes e manifesto'),
   ('vendas',    'vender',    'Emitir bilhete'),
   ('vendas',    'validar',   'Validar embarque'),
+  ('vendas',    'cortesia',  'Emitir e gerenciar cortesias'),
   ('crm',       'ver',       'Visualizar CRM'),
-  ('caixa',     'operar',    'Operar caixa')
+  ('crm',       'criar',     'Criar clientes/cotações no CRM'),
+  ('crm',       'editar',    'Editar clientes e alocações do CRM'),
+  ('caixa',     'ver',       'Visualizar caixas e movimentos'),
+  ('caixa',     'operar',    'Operar caixa'),
+  ('operacao',  'ver',       'Visualizar alertas operacionais'),
+  ('operacao',  'criar',     'Criar alertas operacionais'),
+  ('operacao',  'editar',    'Editar e resolver alertas operacionais')
 ON CONFLICT (modulo, acao) DO NOTHING;
 
 -- ── Usuário admin de desenvolvimento ──────────────────────────────────────

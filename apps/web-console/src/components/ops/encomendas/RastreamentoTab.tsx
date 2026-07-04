@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import {
   Search, MapPin, MessageCircle, CheckCircle2, Circle, Truck, PackageCheck,
@@ -6,10 +6,8 @@ import {
 import {
   SectionHeader, StatusChip, Tag, brl,
 } from "@/components/ops/primitives";
-import {
-  ENCOMENDAS, ENCOMENDA_FLUXO, VIAGENS,
-  type Encomenda, type EncomendaStatus,
-} from "@/mocks/data";
+import { ENCOMENDA_FLUXO } from "./pricing";
+import type { EncomendaStatus, EncomendaUi, ViagemEncomendaUi } from "./types";
 
 const STATUS_LABEL: Record<EncomendaStatus, string> = {
   recebido: "Recebido",
@@ -21,11 +19,33 @@ const STATUS_LABEL: Record<EncomendaStatus, string> = {
 };
 
 /** B.5 — Rastreamento da encomenda (cliente / atendimento). */
-export function RastreamentoTab() {
-  const [selId, setSelId] = useState<string>(ENCOMENDAS[0].id);
-  const enc = ENCOMENDAS.find((e) => e.id === selId)!;
-  const viagem = VIAGENS.find((v) => v.id === enc.viagemId);
-  const idxAtual = ENCOMENDA_FLUXO.indexOf(enc.status);
+export function RastreamentoTab({
+  encomendas = [],
+  viagens,
+}: {
+  encomendas?: EncomendaUi[];
+  viagens?: ViagemEncomendaUi[];
+}) {
+  const [selId, setSelId] = useState<string>(encomendas[0]?.id ?? "");
+  const enc = encomendas.find((e) => e.id === selId) ?? encomendas[0];
+  const viagem = useMemo(() => {
+    if (!enc) return null;
+    return viagens?.find((v) => v.id === enc.viagemId)
+      ?? null;
+  }, [enc, viagens]);
+  const idxAtual = enc ? ENCOMENDA_FLUXO.indexOf(enc.status) : -1;
+
+  if (!enc) {
+    return (
+      <div className="mt-5">
+        <SectionHeader
+          eyebrow="Cliente · atendimento"
+          title="Rastreamento da encomenda"
+          description="Nenhuma encomenda disponível para rastreio."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mt-5 space-y-4">
@@ -36,14 +56,13 @@ export function RastreamentoTab() {
       />
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-        {/* Seletor de encomenda */}
         <div className="space-y-2">
           <div className="surface-card flex h-10 items-center gap-2 px-3">
             <Search className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Selecione a encomenda</span>
           </div>
           <div className="space-y-1.5">
-            {ENCOMENDAS.map((e) => (
+            {encomendas.map((e) => (
               <button
                 key={e.id}
                 onClick={() => setSelId(e.id)}
@@ -63,7 +82,6 @@ export function RastreamentoTab() {
           </div>
         </div>
 
-        {/* Detalhe + timeline */}
         <div className="space-y-4">
           <div className="surface-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -80,7 +98,6 @@ export function RastreamentoTab() {
               </div>
             </div>
 
-            {/* Timeline */}
             <ol className="mt-6 space-y-0">
               {ENCOMENDA_FLUXO.map((s, i) => {
                 const done = i < idxAtual;
@@ -117,7 +134,6 @@ export function RastreamentoTab() {
             </ol>
           </div>
 
-          {/* Notificações */}
           <div className="surface-card p-5">
             <div className="flex items-center gap-2">
               <MessageCircle className="h-4 w-4 text-[color:var(--brand)]" />

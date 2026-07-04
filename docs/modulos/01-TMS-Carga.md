@@ -25,6 +25,7 @@ Agente (id, nome, cidade_sigla, percentual_comissao)
 Carga (id, viagem_id, cliente_remetente_id, destinatario_id, cidade_destino_sigla,
         tipo_recebimento[porto_balsa|direto], status, valor_declarado, valor_cobrado,
         nf_dc_id?, criado_por, criado_em)
+  ⚠️ **Regra de negócio:** toda carga precisa ter **valor declarado** E **valor cobrado**. Nenhuma carga sobe sem etiqueta e sem cobrança registrada. Cada etiqueta deve gerar cobrança. Relatório separado por viagem deve deixar claro de onde veio cada valor/comissão (mencionada como ~2% sobre montante na transcrição).
   └─ Volume (id, carga_id, uuid, palete_id?, indice_volume, total_volumes, peso,
              status[recebido|conferido|embarcado|reconferido|desembarcado|entregue|divergente])
        └─ EventoVolume (volume_id, tipo, usuario_id, timestamp, gps?, foto_id?, obs)

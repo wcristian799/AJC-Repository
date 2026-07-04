@@ -117,7 +117,7 @@
 - "Reimprimir lote" vira **Reimprimir etiqueta**.
 - Reimpressão abre lista do dia para escolher etiqueta/conferência.
 - "Volume a etiquetar" vira **Palete ou volume para etiquetar**.
-- Etiqueta deve mostrar siglas **MP**, **PD**, **PC**.
+- Etiqueta deve mostrar siglas **MP** (multi-pallet), **PD** (pallet único/diferenciado?), **PC** (pallet comum?). Significado exato de PD/PC deve ser confirmado com Lucas antes de definir label final.
 - Recebimento deve contemplar MP/PD/PC, palete completo/parcial e carga sem palete.
 
 **Tarefas**
@@ -165,7 +165,8 @@
 - Veículos/Máquinas entram agora no MVP.
 - Cadastro/envio por PDV, Comercial e Gerente do Porto.
 - Campos: placa obrigatória para veículo; remetente e destinatário com nome, telefone, CPF/CNPJ.
-- App conferente: checklist de envio, fotos, etiqueta, bipe de subida e descida.
+- **App conferente: checklist de envio/entrega DEVE ser embutido no app principal do conferente, NÃO em app separado.** Checklist baseado no modelo Frota Martins (envio + devolução/caução).
+- App conferente: fotos, etiqueta, bipe de subida e descida.
 - Entrega: checklist de entrega baseado no modelo Frota Martins.
 
 **Tarefas**
@@ -218,7 +219,10 @@
 - Motivos/categorias de cortesia devem ter indicação de cadastro.
 - QR usado/vencido impede segunda entrada.
 - Manifesto: total geral da saída e total por cidade/escala.
-- BP-e: PDV com opção emitir/não emitir no ato; portal/app público obrigatório/automático.
+- **BP-e em 3 níveis (decisão do cliente):**
+  - **Nível 1 — PDV manual:** agente comercial emite manualmente quando o cliente não tem acesso digital.
+  - **Nível 2 — Site + app cliente (automático-obrigatório):** portal online e área do cliente emitem BP-e automaticamente após pagamento confirmado.
+  - **Nível 3 — App do agente (opcional):** conferente/porteiro pode emitir BP-e via app se necessário, mas é opcional (não bloqueia operação).
 - FAQ 2026 traz preços atuais de passagem por destino/classe, formas de pagamento atuais (dinheiro, PIX, crédito, débito e parcelamento até 2x com acréscimo) e regras públicas de meia/isento; usar como referência visual de tabela/preço, sem hard-code no futuro backend.
 
 **Tarefas**
@@ -254,6 +258,7 @@
 - AP/AR com filtros dia, semana, mês e personalizado.
 - Comissão de agentes ligada ao contas a receber; libera quando AR é pago; status em aberto, liberada, pago; datas de mudança.
 - DRE e Compras aparecem como fase posterior, não como construção agora.
+- **Nota:** já existe estudo real do cliente sobre DRE/plano de contas (consultoria 2026); esse material será usado na fase financeira avançada, não no MVP.
 - Transcrição bruta cita regra futura: carga/encomenda/veículo com valor declarado/cobrado, nenhuma carga sobe sem etiqueta/cobrança, etiquetas geram cobrança e comissão de 2% sobre montante de carga com relatório por viagem. Não construir financeiro completo agora; no front, no máximo sinalizar como indicador/pendência financeira.
 
 **Tarefas**
@@ -261,6 +266,7 @@
 - [x] Ajustar filtros AP/AR.
 - [x] Ajustar comissão de agentes com status e datas.
 - [x] Sinalizar DRE/Compras como posterior.
+- [x] Registrar que DRE/plano de contas tem estudo real (consultoria 2026) para fase posterior.
 
 ### 12. Portal online (`/portal`) — por último
 

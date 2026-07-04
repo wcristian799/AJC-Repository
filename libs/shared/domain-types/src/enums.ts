@@ -94,8 +94,32 @@ export const StatusPrestacao = ['rascunho', 'enviada', 'conferida'] as const;
 export type StatusPrestacao = (typeof StatusPrestacao)[number];
 
 // ── Vendas / Passagens ──────────────────────────────────────────────
-export const ClassePassagem = ['rede', 'rede_vip', 'camarote'] as const;
+// 8 classes reais por embarcação (material do Lucas 30/jun/2026,
+// docs/feedback/2026-06-30-lucas-campos-navegacao-tms.md). Capacidade por
+// classe de cada embarcação vive em `embarcacao.capacidade_pax` (JSONB), não aqui.
+export const ClassePassagem = [
+  'rede',
+  'rede_sala_vip',
+  'camarote',
+  'suite_comum',
+  'suite_comum_vip',
+  'suite_master',
+  'suite_master_vip',
+  'mega_suite',
+] as const;
 export type ClassePassagem = (typeof ClassePassagem)[number];
+
+// Rótulos de exibição (UI) → mapeiam o valor de domínio ao nome comercial.
+export const CLASSE_PASSAGEM_LABEL: Record<ClassePassagem, string> = {
+  rede: 'Rede',
+  rede_sala_vip: 'Rede Sala VIP',
+  camarote: 'Camarote',
+  suite_comum: 'Suíte Comum',
+  suite_comum_vip: 'Suíte Comum VIP',
+  suite_master: 'Suíte Master',
+  suite_master_vip: 'Suíte Master VIP',
+  mega_suite: 'Mega Suíte',
+};
 
 export const TipoBilhete = [
   'online',

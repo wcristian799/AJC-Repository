@@ -1,6 +1,6 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { Pool } from 'pg';
-import { PG_POOL } from '../database/database.module';
+import { PG_POOL } from '../database/database.constants';
 
 /**
  * Health-check: reporta o processo E a conectividade do banco.

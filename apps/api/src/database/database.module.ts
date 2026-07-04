@@ -1,7 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { Pool } from 'pg';
-
-export const PG_POOL = 'PG_POOL';
+import { PG_POOL } from './database.constants';
+import { DatabaseService } from './database.service';
 
 /**
  * Módulo de banco — expõe um Pool `pg` único, configurado por DATABASE_URL.
@@ -20,7 +20,8 @@ export const PG_POOL = 'PG_POOL';
         return new Pool({ connectionString, max: 10 });
       },
     },
+    DatabaseService,
   ],
-  exports: [PG_POOL],
+  exports: [PG_POOL, DatabaseService],
 })
 export class DatabaseModule {}

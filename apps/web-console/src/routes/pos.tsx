@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Ship, Ticket, Plus, Minus, Trash2, User, CreditCard, Banknote, QrCode,
@@ -9,9 +9,16 @@ import {
 import { BrandMark } from "@/components/ops/BrandMark";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import {
-  CIDADES, PRECOS_PASSAGEM, VENDA_CLASSES, VENDA_GRATUIDADES, VENDA_CORTESIAS, CAIXAS,
-  type VendaClasseId, type Cidade,
-} from "@/mocks/data";
+  abrirCaixa,
+  createBilhete,
+  listCaixas,
+  listNavegacaoViagens,
+  listPrecosPassagemMatriz,
+  type CaixaApi,
+  type NavegacaoViagemApi,
+  type PrecoPassagemMatrizApi,
+} from "@/lib/ajc-api";
+import { resumoPrecoPassagem, type PrecoPassagemResumo } from "@/lib/passagem-pricing";
 
 export const Route = createFileRoute("/pos")({
   head: () => ({
@@ -24,10 +31,47 @@ export const Route = createFileRoute("/pos")({
 });
 
 const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+type Cidade = "BEL" | "BRV" | "GUR" | "ALM" | "PMZ" | "PRA" | "MTA" | "STM";
+type VendaClasseId = "rede" | "vip" | "camarote";
+const CIDADES: Array<{ sigla: Cidade; nome: string }> = [
+  { sigla: "BEL", nome: "Belem" },
+  { sigla: "BRV", nome: "Breves" },
+  { sigla: "GUR", nome: "Gurupa" },
+  { sigla: "ALM", nome: "Almeirim" },
+  { sigla: "PMZ", nome: "Porto de Moz" },
+  { sigla: "PRA", nome: "Prainha" },
+  { sigla: "MTA", nome: "Monte Alegre" },
+  { sigla: "STM", nome: "Santarem" },
+];
+const VENDA_CLASSES: Array<{
+  id: VendaClasseId;
+  nome: string;
+  subtitulo: string;
+  precoKey: keyof PrecoPassagemResumo;
+  pulseira: { nome: string; hex: string };
+  perks: string[];
+}> = [
+  { id: "rede", nome: "Rede", subtitulo: "Convés", precoKey: "rede", pulseira: { nome: "pendente", hex: "var(--brand)" }, perks: ["Rede numerada", "Bagagem de mão"] },
+  { id: "vip", nome: "Rede VIP", subtitulo: "Sala climatizada", precoKey: "vip", pulseira: { nome: "pendente", hex: "var(--brand)" }, perks: ["Ar-condicionado", "Tomada"] },
+  { id: "camarote", nome: "Camarote Royal", subtitulo: "Suíte", precoKey: "camaroteRoyal", pulseira: { nome: "pendente", hex: "var(--brand)" }, perks: ["Privativo", "Até 2 pessoas"] },
+];
+const VENDA_GRATUIDADES = [
+  { id: "idoso", label: "Idoso (60+)", doc: "Documento com foto" },
+  { id: "pcd", label: "PCD", doc: "Documento/laudo" },
+  { id: "crianca", label: "Crianca", doc: "Certidao/documento" },
+];
+const VENDA_CORTESIAS = [
+  { codigo: "AJC-CORT-1042", motivo: "Cortesia operacional", classe: "Rede VIP", usada: false },
+  { codigo: "AJC-CORT-1043", motivo: "Cortesia comercial", classe: "Rede", usada: false },
+];
 const cidadeNome = (s: string) => CIDADES.find((c) => c.sigla === s)?.nome ?? s;
 
 type PayMethod = "credito" | "debito" | "pix" | "dinheiro";
 type TipoItem = "paga" | "gratuidade" | "cortesia";
+const classeApi = (classeId: VendaClasseId) =>
+  classeId === "vip" ? "rede_sala_vip" : classeId === "camarote" ? "suite_master" : "rede";
+const formaPagamentoApi = (pay: PayMethod): "dinheiro" | "pix" | "cartao_credito" | "cartao_debito" =>
+  pay === "credito" ? "cartao_credito" : pay === "debito" ? "cartao_debito" : pay;
 
 type Linha = {
   id: string;
@@ -40,20 +84,28 @@ type Linha = {
   rotulo?: string;        // ex.: "Idoso (60+)" ou código de cortesia
 };
 
-const caixaPorto = CAIXAS.find((c) => c.tipo === "porto") ?? CAIXAS[0];
-
 function PosScreen() {
   const [destino, setDestino] = useState<Cidade>("STM");
+  const [viagens, setViagens] = useState<NavegacaoViagemApi[]>([]);
+  const [precosPassagem, setPrecosPassagem] = useState<PrecoPassagemMatrizApi[]>([]);
+  const [viagemId, setViagemId] = useState("");
+  const [caixa, setCaixa] = useState<CaixaApi | null>(null);
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [pay, setPay] = useState<PayMethod>("credito");
   const [pagamentos, setPagamentos] = useState<Record<PayMethod, number>>({ credito: 0, debito: 0, pix: 0, dinheiro: 0 });
   const [emitirBpe, setEmitirBpe] = useState(true);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   const [sheet, setSheet] = useState<null | "gratuidade" | "cortesia">(null);
 
   const trecho = `BEL → ${destino}`;
-  const preco = PRECOS_PASSAGEM.find((p) => p.trecho === trecho);
+  const preco = useMemo(() => resumoPrecoPassagem(precosPassagem, "BEL", destino), [destino, precosPassagem]);
+  const viagensDoDestino = useMemo(
+    () => viagens.filter((v) => v.origemSigla === "BEL" && (v.destinoSigla ?? "") === destino),
+    [destino, viagens],
+  );
+  const viagemSelecionada = viagens.find((v) => v.id === viagemId) ?? viagensDoDestino[0] ?? viagens[0];
 
   const subtotal = linhas.reduce((a, l) => a + l.valor, 0);
   const isencoes = linhas.reduce((a, l) => a + (l.tipo !== "paga" ? l.precoCheio : 0), 0);
@@ -62,6 +114,43 @@ function PosScreen() {
   const faltaPagar = Math.max(0, total - totalPago);
   const troco = Math.max(0, totalPago - total);
   const podeCobrar = linhas.length > 0 && (total === 0 || totalPago >= total);
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const [viagensApi, caixasApi, precosApi] = await Promise.all([
+          listNavegacaoViagens(),
+          listCaixas(),
+          listPrecosPassagemMatriz(),
+        ]);
+        if (!alive) return;
+        setViagens(viagensApi);
+        setPrecosPassagem(precosApi);
+        const aberto = caixasApi.find((c) => c.status === "aberto" && c.tipo === "porto") ?? caixasApi.find((c) => c.status === "aberto");
+        setCaixa(aberto ?? null);
+        if (!aberto) {
+          setErro("Nenhum caixa aberto encontrado. Abra um caixa no Financeiro antes de usar o PDV.");
+        }
+        const primeira = viagensApi.find((v) => v.origemSigla === "BEL" && (v.destinoSigla ?? "") === destino) ?? viagensApi[0];
+        if (primeira) setViagemId(primeira.id);
+      } catch (error) {
+        console.error(error);
+        setErro(error instanceof Error ? error.message : "Falha ao carregar PDV");
+      }
+    }
+    load();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const primeira = viagensDoDestino[0];
+    if (primeira && !viagensDoDestino.some((v) => v.id === viagemId)) {
+      setViagemId(primeira.id);
+    }
+  }, [destino, viagemId, viagensDoDestino]);
 
   function addPaga(classeId: VendaClasseId) {
     const c = VENDA_CLASSES.find((x) => x.id === classeId)!;
@@ -91,17 +180,42 @@ function PosScreen() {
     setPagamentos({ credito: 0, debito: 0, pix: 0, dinheiro: 0 });
   }
 
-  function cobrar() {
+  async function cobrar() {
     if (paying || !podeCobrar) return;
+    if (!viagemSelecionada) {
+      setErro("Nenhuma viagem real encontrada para este destino.");
+      return;
+    }
     setPaying(true);
-    window.setTimeout(() => {
+    setErro(null);
+    try {
+      const caixaAberto = caixa ?? await abrirCaixa({ tipo: "porto", referencia: "Caixa do porto", valorAbertura: 0 });
+      setCaixa(caixaAberto);
+      for (const linha of linhas) {
+        await createBilhete({
+          viagemId: viagemSelecionada.id,
+          classe: classeApi(linha.classeId),
+          tipo: linha.tipo === "paga" ? "pdv" : linha.tipo,
+          canal: "pdv",
+          precoPago: linha.valor,
+          caixaId: caixaAberto.id,
+          formaPagamento: linha.tipo === "paga" ? formaPagamentoApi(pay) : linha.tipo,
+          observacoes: linha.rotulo,
+          emitirBpe,
+          clientUuid: crypto.randomUUID(),
+        });
+      }
       setPaid(true);
       window.setTimeout(() => {
         setPaid(false);
         setPaying(false);
         limpar();
       }, 1600);
-    }, 900);
+    } catch (error) {
+      console.error(error);
+      setErro(error instanceof Error ? error.message : "Falha ao emitir bilhetes");
+      setPaying(false);
+    }
   }
 
   return (
@@ -123,11 +237,11 @@ function PosScreen() {
 
         <div className="hidden items-center justify-center gap-2 md:flex">
           <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--muted)] px-3.5 py-1.5 text-xs text-foreground/80 ring-1 ring-[color:var(--hairline)]">
-            <Wallet className="h-3.5 w-3.5 text-[color:var(--brand)]" /> Saldo do caixa: <span className="font-mono">{brl(caixaPorto.saldo)}</span>
+            <Wallet className="h-3.5 w-3.5 text-[color:var(--brand)]" /> Saldo do caixa: <span className="font-mono">{caixa ? brl(caixa.saldo) : "—"}</span>
           </span>
           <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--muted)] px-3.5 py-1.5 text-xs text-foreground/80 ring-1 ring-[color:var(--hairline)]">
-            <ArrowDownToLine className="h-3.5 w-3.5 text-[color:var(--success)]" /> {brl(caixaPorto.entradasDia)}
-            <ArrowUpFromLine className="ml-1 h-3.5 w-3.5 text-[color:var(--danger)]" /> {brl(caixaPorto.saidasDia)}
+            <ArrowDownToLine className="h-3.5 w-3.5 text-[color:var(--success)]" /> {caixa ? brl(caixa.entradas_dia) : "—"}
+            <ArrowUpFromLine className="ml-1 h-3.5 w-3.5 text-[color:var(--danger)]" /> {caixa ? brl(caixa.saidas_dia) : "—"}
           </span>
         </div>
 
@@ -155,6 +269,18 @@ function PosScreen() {
             >
               {CIDADES.filter((c) => c.sigla !== "BEL").map((c) => <option key={c.sigla} value={c.sigla}>{c.nome}</option>)}
             </select>
+            <select
+              value={viagemSelecionada?.id ?? ""}
+              onChange={(e) => setViagemId(e.target.value)}
+              className="h-9 min-w-44 rounded-md bg-[color:var(--muted)] px-3 text-sm ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
+            >
+              {(viagensDoDestino.length ? viagensDoDestino : viagens).map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.codigo ?? "Viagem"} · {new Date(v.dataHoraSaida).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </option>
+              ))}
+            </select>
+            {erro && <span className="text-xs text-[color:var(--danger)]">{erro}</span>}
           </div>
 
           {/* Classes */}
@@ -429,7 +555,7 @@ function PosScreen() {
 }
 
 function ClassePicker({ preco, render }: {
-  preco: ReturnType<typeof PRECOS_PASSAGEM.find>;
+  preco: PrecoPassagemResumo;
   render: (classeId: VendaClasseId) => React.ReactNode;
 }) {
   const [classeId, setClasseId] = useState<VendaClasseId>("rede");
