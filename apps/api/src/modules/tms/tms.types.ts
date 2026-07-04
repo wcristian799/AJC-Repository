@@ -83,6 +83,19 @@ export interface ConferirDocumentoInput {
   clientUuid?: string;
 }
 
+export interface CreateDocumentoManualInput {
+  clienteRemetenteId: string;
+  tipo: 'NFe' | 'NFCe' | 'DC';
+  numero: string;
+  cidadeOrigemSigla?: string;
+  cidadeDestinoSigla?: string;
+  valor?: number;
+  pesoTotal?: number;
+  totalVolumes?: number;
+  destinatarioNome?: string;
+  clientUuid?: string;
+}
+
 export interface PrestacaoContasItem {
   [key: string]: unknown;
 }

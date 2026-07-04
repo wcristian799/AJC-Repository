@@ -5,7 +5,7 @@ import {
 } from "@/components/ops/primitives";
 import {
   conferirTmsDocumento,
-  createTmsCarga,
+  createTmsDocumentoManual,
   listTmsCargas,
   listTmsDocumentos,
   listTmsVolumes,
@@ -32,7 +32,6 @@ type NotaDC = {
 };
 
 type ManualDocumentoForm = {
-  viagemId: string;
   clienteRemetenteId: string;
   tipo: "NFe" | "NFCe" | "DC";
   numero: string;
@@ -76,10 +75,8 @@ export function NotasTab({
   const [showManual, setShowManual] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
-  const defaultViagem = viagens?.[0];
   const defaultCliente = clientes?.[0];
   const [manualForm, setManualForm] = useState<ManualDocumentoForm>({
-    viagemId: "",
     clienteRemetenteId: "",
     tipo: "NFe",
     numero: "",
@@ -101,16 +98,12 @@ export function NotasTab({
 
   useEffect(() => {
     setManualForm((prev) => {
-      const viagem = viagens?.find((item) => item.id === prev.viagemId) ?? defaultViagem;
       return {
         ...prev,
-        viagemId: prev.viagemId || viagem?.id || "",
         clienteRemetenteId: prev.clienteRemetenteId || defaultCliente?.id || "",
-        cidadeOrigemSigla: prev.cidadeOrigemSigla || viagem?.origemSigla || "",
-        cidadeDestinoSigla: prev.cidadeDestinoSigla || viagem?.destinoSigla || "",
       };
     });
-  }, [viagens, clientes]);
+  }, [clientes]);
 
   async function marcarDocumento(id: string, status: "conferida" | "divergente") {
     setSavingId(id);
@@ -144,8 +137,8 @@ export function NotasTab({
 
   async function salvarManual() {
     setErro(null);
-    if (!manualForm.viagemId || !manualForm.clienteRemetenteId || !manualForm.cidadeDestinoSigla.trim()) {
-      setErro("Informe viagem, cliente remetente e destino.");
+    if (!manualForm.clienteRemetenteId) {
+      setErro("Informe o cliente remetente.");
       return;
     }
     if (!manualForm.numero.trim()) {
@@ -155,28 +148,20 @@ export function NotasTab({
     const totalVolumes = Math.max(1, Number.parseInt(manualForm.totalVolumes, 10) || 1);
     setManualSaving(true);
     try {
-      await createTmsCarga({
-        categoria: "carga",
-        viagemId: manualForm.viagemId,
+      await createTmsDocumentoManual({
         clienteRemetenteId: manualForm.clienteRemetenteId,
         destinatarioNome: manualForm.destinatarioNome.trim() || undefined,
         cidadeOrigemSigla: manualForm.cidadeOrigemSigla.trim().toUpperCase() || undefined,
-        cidadeDestinoSigla: manualForm.cidadeDestinoSigla.trim().toUpperCase(),
-        tipoRecebimento: "porto_balsa",
-        valorDeclarado: parseNumber(manualForm.valor),
+        cidadeDestinoSigla: manualForm.cidadeDestinoSigla.trim().toUpperCase() || undefined,
+        tipo: manualForm.tipo,
+        numero: manualForm.numero.trim(),
+        valor: parseNumber(manualForm.valor),
         pesoTotal: parseNumber(manualForm.pesoTotal),
         totalVolumes,
-        numeroDocumento: manualForm.numero.trim(),
-        documento: {
-          tipo: manualForm.tipo,
-          numero: manualForm.numero.trim(),
-          valor: parseNumber(manualForm.valor),
-          origem: "manual",
-        },
         clientUuid: crypto.randomUUID(),
       });
       await refreshTmsCore();
-      setManualForm((prev) => ({ ...prev, numero: "", valor: "", pesoTotal: "", totalVolumes: "1", destinatarioNome: "" }));
+      setManualForm((prev) => ({ ...prev, numero: "", valor: "", pesoTotal: "", totalVolumes: "1", destinatarioNome: "", cidadeOrigemSigla: "", cidadeDestinoSigla: "" }));
       setShowManual(false);
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Nao foi possivel lancar o documento manual.");
@@ -242,20 +227,9 @@ export function NotasTab({
           <div className="flex flex-wrap items-center gap-2">
             <Upload className="h-4 w-4 text-[color:var(--brand)]" />
             <h3 className="font-display text-lg">Lancamento manual de NF/DC</h3>
-            <StatusChip tone="brand">cria carga + documento + volumes</StatusChip>
+            <StatusChip tone="brand">documento avulso sem carga/viagem</StatusChip>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <FormSelect label="Viagem" value={manualForm.viagemId} onChange={(value) => {
-              const viagem = viagens?.find((item) => item.id === value);
-              setManualForm((prev) => ({
-                ...prev,
-                viagemId: value,
-                cidadeOrigemSigla: viagem?.origemSigla ?? prev.cidadeOrigemSigla,
-                cidadeDestinoSigla: viagem?.destinoSigla ?? prev.cidadeDestinoSigla,
-              }));
-            }}>
-              {(viagens ?? []).map((viagem) => <option key={viagem.id} value={viagem.id}>{viagem.codigo ?? "Viagem"} - {viagem.origemSigla} / {viagem.destinoSigla}</option>)}
-            </FormSelect>
             <FormSelect label="Cliente remetente" value={manualForm.clienteRemetenteId} onChange={(value) => setManualForm((prev) => ({ ...prev, clienteRemetenteId: value }))}>
               {(clientes ?? []).map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
             </FormSelect>
@@ -274,7 +248,7 @@ export function NotasTab({
               <FormInput label="Destinatario" value={manualForm.destinatarioNome} onChange={(value) => setManualForm((prev) => ({ ...prev, destinatarioNome: value }))} placeholder="Nome/razao social" />
             </div>
             <div className="flex items-end gap-2">
-              <PrimaryButton icon={Upload} onClick={salvarManual} disabled={manualSaving || !(viagens?.length) || !(clientes?.length)}>
+              <PrimaryButton icon={Upload} onClick={salvarManual} disabled={manualSaving || !(clientes?.length)}>
                 {manualSaving ? "Lancando..." : "Salvar"}
               </PrimaryButton>
               <GhostButton onClick={() => setShowManual(false)}>Cancelar</GhostButton>

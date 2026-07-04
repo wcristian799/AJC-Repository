@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SaveDeclaracaoConteudoInput, SavePrestacaoContasInput } from './tms.types';
+import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoManualInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SaveDeclaracaoConteudoInput, SavePrestacaoContasInput } from './tms.types';
 
 @Injectable()
 export class TmsRepository {
@@ -62,7 +62,11 @@ export class TmsRepository {
              df.arquivo_url, df.arquivo_hash, df.status::text, df.origem,
              df.criado_em, df.atualizado_em,
              c.codigo AS carga_codigo, c.numero_pedido, c.tipo_recebimento::text,
-             c.cidade_origem_sigla, c.cidade_destino_sigla, c.peso_total,
+             COALESCE(c.cidade_origem_sigla, df.cidade_origem_sigla) AS cidade_origem_sigla,
+             COALESCE(c.cidade_destino_sigla, df.cidade_destino_sigla) AS cidade_destino_sigla,
+             COALESCE(c.peso_total, df.peso_total) AS peso_total,
+             COALESCE(c.total_volumes, df.total_volumes) AS total_volumes,
+             COALESCE(c.destinatario_nome, df.destinatario_nome) AS destinatario_nome,
              cli.nome AS cliente_nome,
              u.nome AS lancado_por_nome
       FROM documento_fiscal df
@@ -77,7 +81,70 @@ export class TmsRepository {
       ...row,
       valor: row.valor === null ? null : Number(row.valor),
       peso_total: row.peso_total === null ? null : Number(row.peso_total),
+      total_volumes: row.total_volumes === null ? null : Number(row.total_volumes),
     }));
+  }
+
+  async createDocumentoManual(input: CreateDocumentoManualInput, userId: string) {
+    const totalVolumes = Math.max(1, input.totalVolumes ?? 1);
+    if (input.clientUuid) {
+      const existing = await this.db.one<{ id: string }>(
+        'SELECT entidade_id AS id FROM audit_evento WHERE entidade = $1 AND client_uuid = $2 LIMIT 1',
+        ['documento_fiscal', input.clientUuid],
+      );
+      if (existing?.id) return this.findDocumento(existing.id);
+    }
+    const documentoId = await this.db.tx(async (client) => {
+      const result = await client.query<{ id: string }>(
+        `
+        INSERT INTO documento_fiscal (
+          tipo, numero, valor, cliente_id, origem, lancado_por,
+          cidade_origem_sigla, cidade_destino_sigla, peso_total, total_volumes, destinatario_nome
+        )
+        VALUES ($1::tipo_documento_fiscal, $2, $3, $4, 'manual', $5, $6, $7, $8, $9, $10)
+        RETURNING id
+        `,
+        [
+          input.tipo,
+          input.numero.trim(),
+          input.valor ?? null,
+          input.clienteRemetenteId,
+          userId,
+          input.cidadeOrigemSigla?.trim().toUpperCase() || null,
+          input.cidadeDestinoSigla?.trim().toUpperCase() || null,
+          input.pesoTotal ?? null,
+          totalVolumes,
+          input.destinatarioNome?.trim() || null,
+        ],
+      );
+      const documentoId = result.rows[0]?.id;
+      await client.query(
+        `
+        INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_depois, client_uuid)
+        VALUES ('documento_fiscal', $1, 'criar', $2, $3::jsonb, $4)
+        ON CONFLICT (client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING
+        `,
+        [
+          documentoId,
+          userId,
+          JSON.stringify({
+            tipo: input.tipo,
+            numero: input.numero.trim(),
+            clienteRemetenteId: input.clienteRemetenteId,
+            cidadeOrigemSigla: input.cidadeOrigemSigla?.trim().toUpperCase() || null,
+            cidadeDestinoSigla: input.cidadeDestinoSigla?.trim().toUpperCase() || null,
+            valor: input.valor ?? null,
+            pesoTotal: input.pesoTotal ?? null,
+            totalVolumes,
+            destinatarioNome: input.destinatarioNome?.trim() || null,
+            origem: 'manual',
+          }),
+          input.clientUuid ?? null,
+        ],
+      );
+      return documentoId;
+    });
+    return this.findDocumento(documentoId);
   }
 
   async conferirDocumento(documentoId: string, input: ConferirDocumentoInput, userId: string) {
@@ -134,7 +201,11 @@ export class TmsRepository {
              df.arquivo_url, df.arquivo_hash, df.status::text, df.origem,
              df.criado_em, df.atualizado_em,
              c.codigo AS carga_codigo, c.numero_pedido, c.tipo_recebimento::text,
-             c.cidade_origem_sigla, c.cidade_destino_sigla, c.peso_total,
+             COALESCE(c.cidade_origem_sigla, df.cidade_origem_sigla) AS cidade_origem_sigla,
+             COALESCE(c.cidade_destino_sigla, df.cidade_destino_sigla) AS cidade_destino_sigla,
+             COALESCE(c.peso_total, df.peso_total) AS peso_total,
+             COALESCE(c.total_volumes, df.total_volumes) AS total_volumes,
+             COALESCE(c.destinatario_nome, df.destinatario_nome) AS destinatario_nome,
              cli.nome AS cliente_nome,
              u.nome AS lancado_por_nome
       FROM documento_fiscal df
@@ -152,6 +223,7 @@ export class TmsRepository {
       ...row,
       valor: row.valor === null ? null : Number(row.valor),
       peso_total: row.peso_total === null ? null : Number(row.peso_total),
+      total_volumes: row.total_volumes === null ? null : Number(row.total_volumes),
     };
   }
 

@@ -693,8 +693,23 @@ export type TmsDocumentoApi = {
   cidade_origem_sigla: string | null;
   cidade_destino_sigla: string | null;
   peso_total: number | null;
+  total_volumes?: number | null;
+  destinatario_nome?: string | null;
   cliente_nome: string | null;
   lancado_por_nome: string | null;
+};
+
+export type CreateTmsDocumentoManualInput = {
+  clienteRemetenteId: string;
+  tipo: "NFe" | "NFCe" | "DC";
+  numero: string;
+  cidadeOrigemSigla?: string;
+  cidadeDestinoSigla?: string;
+  valor?: number;
+  pesoTotal?: number;
+  totalVolumes?: number;
+  destinatarioNome?: string;
+  clientUuid?: string;
 };
 
 export type EncomendaDeclaracaoApi = {
@@ -961,6 +976,14 @@ export function printTmsEtiqueta(volumeId: string, input: PrintTmsEtiquetaInput)
 
 export function listTmsDocumentos() {
   return request<TmsDocumentoApi[]>("/tms/documentos", { auth: true });
+}
+
+export function createTmsDocumentoManual(input: CreateTmsDocumentoManualInput) {
+  return request<TmsDocumentoApi>("/tms/documentos/manual", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
 }
 
 export function conferirTmsDocumento(id: string, input: { status: "conferida" | "divergente"; observacao?: string; clientUuid?: string }) {

@@ -4,7 +4,7 @@ import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { TmsRepository } from './tms.repository';
-import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SavePrestacaoContasInput } from './tms.types';
+import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoManualInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SavePrestacaoContasInput } from './tms.types';
 
 @UseGuards(AuthGuard)
 @Controller('tms')
@@ -36,6 +36,14 @@ export class TmsController {
   @RequirePermissions('tms.ver')
   listDocumentos() {
     return this.repository.listDocumentos();
+  }
+
+  @Post('documentos/manual')
+  @RequirePermissions('tms.criar')
+  createDocumentoManual(@Body() body: CreateDocumentoManualInput, @CurrentUser() user: AuthTokenPayload) {
+    this.require(body.clienteRemetenteId, 'clienteRemetenteId');
+    this.require(body.numero, 'numero');
+    return this.repository.createDocumentoManual(body, user.sub);
   }
 
   @Post('documentos/:id/conferencia')
