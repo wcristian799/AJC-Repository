@@ -1,4 +1,9 @@
 # STATUS — Diário vivo do projeto AJC
+## Trabalho 2026-07-04 - Hotfix TMS volume sem UUID
+- Contexto: /app/tms caia em runtime com TypeError ao tentar executar slice em volume.uuid ausente vindo da API/seed.
+- O que foi feito: app.tms normaliza respostas de listagem para arrays e usa safeShortId(volume.uuid, volume.id) no preview de Nova Carga, impedindo crash da rota por dado incompleto.
+- Verificacao: bun run build em apps/web-console exit 0.
+
 ## Trabalho 2026-07-04 - Navegacao como ciclo saida-retorno
 - Contexto: Nova Viagem ainda podia parecer trecho isolado e abrir Belem-Almeirim com data incoerente. Regra corrigida pelo dono: Belem-Almeirim sai na terca e toda viagem deve nascer como saida + retorno/fechamento previsto.
 - O que foi feito: /app/navegacao agora trata templates do FAQ como ciclo, mostra chips com ida/volta, exibe bloco Ciclo da viagem, preenche a proxima data correta da rota e calcula retorno/fechamento previsto. Belem-Almeirim preenche terca 17h com fechamento quinta 14h.

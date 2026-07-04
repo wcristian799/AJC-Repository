@@ -134,7 +134,18 @@ function TMS() {
     ])
       .then(([cargas, documentos, volumes, paletes, portaria, entregas, veiculos, viagens, embarcacoes, clientes]) => {
         if (!active) return;
-        setData({ cargas, documentos, volumes, paletes, portaria, entregas, veiculos, viagens, embarcacoes, clientes });
+        setData({
+          cargas: ensureArray(cargas),
+          documentos: ensureArray(documentos),
+          volumes: ensureArray(volumes),
+          paletes: ensureArray(paletes),
+          portaria: ensureArray(portaria),
+          entregas: ensureArray(entregas),
+          veiculos: ensureArray(veiculos),
+          viagens: ensureArray(viagens),
+          embarcacoes: ensureArray(embarcacoes),
+          clientes: ensureArray(clientes),
+        });
         setLoadError(null);
       })
       .catch((err) => {
@@ -215,7 +226,7 @@ function TMS() {
         clientUuid: crypto.randomUUID(),
       });
       const [cargas, documentos, volumes] = await Promise.all([listTmsCargas(), listTmsDocumentos(), listTmsVolumes()]);
-      setData((prev) => ({ ...prev, cargas, documentos, volumes }));
+      setData((prev) => ({ ...prev, cargas: ensureArray(cargas), documentos: ensureArray(documentos), volumes: ensureArray(volumes) }));
       setNovaCargaForm((prev) => ({
         ...initialNovaCargaForm,
         viagemId: prev.viagemId,
@@ -489,6 +500,10 @@ function parseMoney(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function ensureArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 type TmsData = {
   cargas: TmsCargaApi[];
   documentos: TmsDocumentoApi[];
@@ -508,7 +523,7 @@ function buildNovaCargaPreview(data: TmsData) {
   const viagem = data.viagens.find((v) => v.codigo === carga?.viagem_codigo) ?? data.viagens[0];
   return {
     pedido: carga?.numero_pedido ?? "gerado ao salvar",
-    uuid: volume ? `${volume.uuid.slice(0, 8)}... · QR gerado` : "gerado ao salvar",
+    uuid: volume ? `${safeShortId(volume.uuid, volume.id)}... · QR gerado` : "gerado ao salvar",
     codigo: carga?.codigo ?? "gerado ao salvar",
     viagem: viagem ? `${viagem.codigo ?? "sem codigo"} · ${viagem.origemSigla} → ${viagem.destinoSigla ?? "destino"}` : "selecionar viagem",
     origem: carga?.cidade_origem_sigla ?? viagem?.origemSigla ?? "selecionar",
@@ -519,4 +534,9 @@ function buildNovaCargaPreview(data: TmsData) {
     valor: carga?.valor_declarado ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(carga.valor_declarado) : "manual",
     agenda: data.portaria[0]?.entrada_em ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(data.portaria[0].entrada_em)) : "janela a definir",
   };
+}
+
+function safeShortId(...values: Array<unknown>) {
+  const value = values.find((item) => typeof item === "string" && item.trim().length > 0);
+  return typeof value === "string" ? value.slice(0, 8) : "sem-uuid";
 }
