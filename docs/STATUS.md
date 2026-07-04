@@ -1,10 +1,19 @@
 # STATUS — Diário vivo do projeto AJC
+## Trabalho 2026-07-04 - Navegacao como ciclo saida-retorno
+- Contexto: Nova Viagem ainda podia parecer trecho isolado e abrir Belem-Almeirim com data incoerente. Regra corrigida pelo dono: Belem-Almeirim sai na terca e toda viagem deve nascer como saida + retorno/fechamento previsto.
+- O que foi feito: /app/navegacao agora trata templates do FAQ como ciclo, mostra chips com ida/volta, exibe bloco Ciclo da viagem, preenche a proxima data correta da rota e calcula retorno/fechamento previsto. Belem-Almeirim preenche terca 17h com fechamento quinta 14h.
+- Protecao no backend: POST /api/navegacao/viagens exige dataHoraRetorno e valida retorno posterior a saida; PATCH /api/navegacao/viagens/:id rejeita apagar retorno.
+- Decisao complementar: Status/Situacao nao sao editaveis no formulario de viagem; a tela mostra o estado atual apenas como leitura e o PATCH generico rejeita alteracao manual desses campos. Transicoes futuras devem ser acoes/endpoints do ciclo operacional.
+- Proximo passo recomendado: se Lucas entregar paradas detalhadas da volta fisica, enriquecer o template para separar ida, volta e chegada final; por enquanto retorno/fechamento fica obrigatorio e auditavel.
+
 ## Trabalho 2026-07-04 - Navegacao com edicao real em modal
 - **Contexto:** na tela `/app/navegacao`, os dados de frota/viagens ja vinham da API real (`GET /api/cadastros/embarcacoes`, `GET /api/navegacao/viagens`, `GET /api/navegacao/templates-rotas`), mas Nova Viagem abria formulario inline grande e nao havia edicao real de viagem/embarcacao. Regra fechada pelo dono: tudo que cria precisa editar e abrir em modal.
 - **O que foi feito no backend:** criado `PATCH /api/navegacao/viagens/:id` com RBAC `navegacao.editar`, atualizando embarcacao, trecho, saida/retorno, status, situacao, capacidade, observacoes e escalas com `audit_evento`; criado `PATCH /api/cadastros/embarcacoes/:id` com RBAC `cadastros.editar`, validando duplicidade, tipo/status/capacidades e auditando a alteracao.
 - **O que foi feito no front:** `apps/web-console/src/lib/ajc-api.ts` ganhou `updateNavegacaoViagem` e `updateEmbarcacao`; `/app/navegacao` agora abre Nova/Editar viagem e Nova/Editar embarcacao em overlay modal, preenche o formulario ao clicar na linha da tabela/lista, salva via API real e atualiza o estado local. O formulario inline da tela principal deixou de ocupar a pagina.
 - **Verificacao:** `npm run build --workspace apps/api` exit 0; `bun run build` em `apps/web-console` exit 0. Pente fino inicial apontou proximas lacunas: fornecedores/colaboradores ainda precisam PATCH; formularios grandes de Financeiro/TMS/Vendas/Veiculos ainda precisam virar modal/drawer padronizado se seguirmos a regra global.
-- **Proximo passo recomendado:** continuar o pente fino por modulo: Cadastros fornecedores/colaboradores (editar real), depois formularios inline grandes de TMS Nova Carga, Vendas Nova Passagem, Financeiro Lancamento minimo e Veiculos Novo envio.## Trabalho 2026-07-04 - Front Vercel apontando para API Coolify
+- **Proximo passo recomendado:** continuar o pente fino por modulo: Cadastros fornecedores/colaboradores (editar real), depois formularios inline grandes de TMS Nova Carga, Vendas Nova Passagem, Financeiro Lancamento minimo e Veiculos Novo envio.
+
+## Trabalho 2026-07-04 - Front Vercel apontando para API Coolify
 - **Contexto:** o bundle publicado na Vercel estava chamando `http://localhost:3000/api/auth/login`, porque `apps/web-console/src/lib/ajc-api.ts` tinha fallback local quando `VITE_AJC_API_URL` nao era definida no build.
 - **O que foi feito:** o fallback de `AJC_API_URL` passou para `https://apiajc.byteintelligence.com.br/api` e foi criado `apps/web-console/.env.production.example` com `VITE_AJC_API_URL=https://apiajc.byteintelligence.com.br/api`.
 - **Verificacao:** `bun run build` em `apps/web-console` exit 0; `rg` nao encontra `localhost:3000` em codigo fonte do front, apenas em documentacao antiga/dev.

@@ -60,6 +60,11 @@ type RotaView = {
   embarcacao: string;
   saida: string;
   paradas: string[];
+  saidaDiaSemana: number;
+  saidaHora: string;
+  retornoDias: number;
+  retornoHora: string;
+  cicloLabel: string;
 };
 
 /** Lista oficial de embarcações (Lucas, 30/jun) — substitui os nomes-fantasia do mock antigo. */
@@ -110,30 +115,50 @@ const CLASSES_FORM_EMBARCACAO = [
   "Mega Suite",
 ];
 
-const ROTAS_FAQ: { id: string; rotulo: string; origemSigla: string; destinoSigla: string; embarcacao: string; saida: string; paradas: string[] }[] = [
+const ROTAS_FAQ: RotaView[] = [
   {
-    id: "bel-alm", rotulo: "Belém → Almeirim", embarcacao: "F/B Amazonas V",
+    id: "bel-alm", rotulo: "Belém ⇄ Almeirim (terça)", embarcacao: "F/B Amazonas V",
     origemSigla: "BEL", destinoSigla: "ALM",
     saida: "Terça · 17h/18h (validar)",
     paradas: ["Breves · qua 09h", "Gurupá · qua 20h", "Porto de Moz · qui 08h", "Almeirim · qui 14h (chegada)"],
+    saidaDiaSemana: 2,
+    saidaHora: "17:00",
+    retornoDias: 2,
+    retornoHora: "14:00",
+    cicloLabel: "Saída terça 17h em Belém; fechamento previsto quinta 14h em Almeirim.",
   },
   {
-    id: "bel-stm-qua", rotulo: "Belém → Santarém (quarta)", embarcacao: "F/B Amazonas VI",
+    id: "bel-stm-qua", rotulo: "Belém ⇄ Santarém (quarta)", embarcacao: "F/B Amazonas VI",
     origemSigla: "BEL", destinoSigla: "STM",
     saida: "Quarta · 17h/18h (validar)",
     paradas: ["Breves · qui 09h", "Gurupá · qui 20h", "Almeirim · sex 09h", "Prainha · sex 17h", "Monte Alegre · sex 23h", "Santarém · sáb 10h/início tarde"],
+    saidaDiaSemana: 3,
+    saidaHora: "17:00",
+    retornoDias: 3,
+    retornoHora: "10:00",
+    cicloLabel: "Saída quarta 17h em Belém; fechamento previsto sábado 10h em Santarém.",
   },
   {
-    id: "bel-stm-sex", rotulo: "Belém → Santarém (sexta)", embarcacao: "F/B Amazonas IV",
+    id: "bel-stm-sex", rotulo: "Belém ⇄ Santarém (sexta)", embarcacao: "F/B Amazonas IV",
     origemSigla: "BEL", destinoSigla: "STM",
     saida: "Sexta · 17h/18h (validar)",
     paradas: ["Breves · sáb 09h", "Gurupá · sáb 20h", "Almeirim · dom 09h", "Prainha · dom 17h", "Monte Alegre · dom 23h", "Santarém · seg 19h/início tarde"],
+    saidaDiaSemana: 5,
+    saidaHora: "17:00",
+    retornoDias: 3,
+    retornoHora: "19:00",
+    cicloLabel: "Saída sexta 17h em Belém; fechamento previsto segunda 19h em Santarém.",
   },
   {
-    id: "stm-bel-sab", rotulo: "Santarém → Belém (retorno sábado)", embarcacao: "F/B Amazonas VI",
+    id: "stm-bel-sab", rotulo: "Santarém ⇄ Belém (retorno sábado)", embarcacao: "F/B Amazonas VI",
     origemSigla: "STM", destinoSigla: "BEL",
     saida: "Sábado · 16h",
     paradas: ["Prainha · 00h (dia a validar)", "Almeirim · dom 08h", "Gurupá · dom 16h", "Breves · seg 02h", "Belém · seg 19h (chegada)"],
+    saidaDiaSemana: 6,
+    saidaHora: "16:00",
+    retornoDias: 2,
+    retornoHora: "19:00",
+    cicloLabel: "Saída sábado 16h em Santarém; fechamento previsto segunda 19h em Belém.",
   },
 ];
 
@@ -237,9 +262,13 @@ function Navegacao() {
     const embarcacaoDaRota = nextRota
       ? embarcacoes.find((e) => normalizeBoatName(e.nome) === normalizeBoatName(nextRota.embarcacao))
       : null;
-    if (embarcacaoDaRota) {
-      setViagemForm((prev) => ({ ...prev, embarcacaoId: embarcacaoDaRota.id }));
-    }
+    const datas = nextRota ? defaultDatesForRota(nextRota) : null;
+    setViagemForm((prev) => ({
+      ...prev,
+      embarcacaoId: embarcacaoDaRota?.id ?? prev.embarcacaoId,
+      dataHoraSaida: datas?.dataHoraSaida ?? prev.dataHoraSaida,
+      dataHoraRetorno: datas?.dataHoraRetorno ?? prev.dataHoraRetorno,
+    }));
   }
 
   function setCapacidadeClasse(label: string, value: string) {
@@ -248,12 +277,13 @@ function Navegacao() {
   }
 
   function abrirNovaViagem() {
+    const datas = defaultDatesForRota(rota);
     setViagemEditandoId(null);
     setViagemError(null);
     setViagemForm((prev) => ({
       ...prev,
-      dataHoraSaida: defaultDateTimeLocal(),
-      dataHoraRetorno: "",
+      dataHoraSaida: datas.dataHoraSaida,
+      dataHoraRetorno: datas.dataHoraRetorno,
       status: "planejada",
       situacao: "no_prazo",
       capacidade: {},
@@ -333,6 +363,14 @@ function Navegacao() {
       setViagemError("Informe a data e hora de saida.");
       return;
     }
+    if (!viagemForm.dataHoraRetorno) {
+      setViagemError("Informe a data e hora de retorno/fechamento da viagem.");
+      return;
+    }
+    if (new Date(viagemForm.dataHoraRetorno).getTime() <= new Date(viagemForm.dataHoraSaida).getTime()) {
+      setViagemError("O retorno precisa ser posterior a saida.");
+      return;
+    }
     const capacidade = Object.fromEntries(
       Object.entries(viagemForm.capacidade)
         .map(([key, value]) => [key, Number(value)])
@@ -350,10 +388,8 @@ function Navegacao() {
         origemSigla: rota.origemSigla,
         destinoSigla: rota.destinoSigla,
         dataHoraSaida: toIsoFromDateTimeLocal(viagemForm.dataHoraSaida),
-        dataHoraRetorno: viagemForm.dataHoraRetorno ? toIsoFromDateTimeLocal(viagemForm.dataHoraRetorno) : null,
+        dataHoraRetorno: toIsoFromDateTimeLocal(viagemForm.dataHoraRetorno),
         capacidadePaxDisponivel: capacidade,
-        status: viagemForm.status,
-        situacao: viagemForm.situacao,
         observacoes: `Criada a partir do template FAQ: ${rota.rotulo}. Saida FAQ: ${rota.saida}`,
         escalas: rota.paradas.map((parada) => ({
           cidadeSigla: cidadeSiglaFromParada(parada) ?? rota.destinoSigla,
@@ -362,7 +398,7 @@ function Navegacao() {
       };
       const salva = viagemEditandoId
         ? await updateNavegacaoViagem(viagemEditandoId, payload)
-        : await createNavegacaoViagem({ ...payload, dataHoraRetorno: payload.dataHoraRetorno ?? undefined, clientUuid: crypto.randomUUID() });
+        : await createNavegacaoViagem({ ...payload, clientUuid: crypto.randomUUID() });
       setViagensApi((prev) => [salva, ...prev.filter((v) => v.id !== salva.id)]);
       fecharViagemModal();
       setTab("viagens");
@@ -503,6 +539,11 @@ function Navegacao() {
                     ))}
                   </div>
                 </div>
+                <div className="sm:col-span-2 rounded-lg bg-[color:var(--muted)] px-3 py-2.5 ring-1 ring-[color:var(--hairline)]">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Ciclo da viagem</p>
+                  <p className="mt-1 text-sm text-foreground">{rota.cicloLabel}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Toda viagem deve nascer com saida e retorno/fechamento previsto.</p>
+                </div>
                 <label>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Data e hora da saida</p>
                   <input
@@ -514,39 +555,23 @@ function Navegacao() {
                   <span className="mt-1 block text-[10px] text-muted-foreground">FAQ: {rota.saida}</span>
                 </label>
                 <label>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Data e hora do retorno</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Retorno / fechamento previsto</p>
                   <input
                     type="datetime-local"
                     value={viagemForm.dataHoraRetorno}
                     onChange={(event) => setViagemForm((prev) => ({ ...prev, dataHoraRetorno: event.target.value }))}
                     className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
                   />
+                  <span className="mt-1 block text-[10px] text-muted-foreground">Obrigatorio para fechar o ciclo da viagem.</span>
                 </label>
-                <label>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status</p>
-                  <select
-                    value={viagemForm.status}
-                    onChange={(event) => setViagemForm((prev) => ({ ...prev, status: event.target.value as ViagemStatus }))}
-                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                  >
-                    <option value="planejada">Planejada</option>
-                    <option value="em_curso">Em curso</option>
-                    <option value="concluida">Concluida</option>
-                    <option value="cancelada">Cancelada</option>
-                  </select>
-                </label>
-                <label>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Situacao</p>
-                  <select
-                    value={viagemForm.situacao}
-                    onChange={(event) => setViagemForm((prev) => ({ ...prev, situacao: event.target.value as ViagemSituacao }))}
-                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                  >
-                    <option value="no_prazo">No prazo</option>
-                    <option value="atencao">Atencao</option>
-                    <option value="atrasado">Atrasado</option>
-                  </select>
-                </label>
+                <div className="sm:col-span-2 rounded-lg bg-[color:var(--muted)] px-3 py-2.5 ring-1 ring-[color:var(--hairline)]">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status operacional</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <ViagemStatusChip s={viagemEditandoId ? viagemForm.status : "planejada"} />
+                    <ViagemSituacaoChip s={viagemEditandoId ? viagemForm.situacao : "no_prazo"} />
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Status e situacao sao alterados pelo sistema conforme o ciclo da viagem.</p>
+                </div>
               </div>
 
               <div className="mt-4">
@@ -975,20 +1000,31 @@ function mapViagemView(v: NavegacaoViagemApi): ViagemView {
 
 function normalizeRotas(templates: RotaTemplateApi[]): RotaView[] {
   if (!templates.length) return ROTAS_FAQ;
-  return templates.map((template) => ({
-    id: template.id,
-    rotulo: template.rotulo ?? template.label ?? `${template.origemSigla ?? template.origem ?? "Origem"} → ${template.destinoSigla ?? template.destino ?? "Destino"}`,
-    origemSigla: template.origemSigla ?? siglaFromLabel(template.origem) ?? "BEL",
-    destinoSigla: template.destinoSigla ?? siglaFromLabel(template.destino) ?? "STM",
-    embarcacao: template.embarcacaoNome ?? template.embarcacao ?? "F/B Amazonas VI",
-    saida: template.saidaTexto ?? template.saida ?? "horario a validar",
-    paradas: (template.paradas ?? []).map((parada) => {
-      if (typeof parada === "string") return parada;
-      const cidade = parada.cidadeSigla ?? parada.cidade ?? parada.label ?? "parada";
-      const texto = parada.texto ?? parada.hora ?? parada.dataHoraPrevista ?? "";
-      return texto ? `${cidade} · ${texto}` : cidade;
-    }),
-  }));
+  return templates.map((template) => {
+    const origemSigla = template.origemSigla ?? siglaFromLabel(template.origem) ?? "BEL";
+    const destinoSigla = template.destinoSigla ?? siglaFromLabel(template.destino) ?? "STM";
+    const schedule = scheduleForTemplate(template);
+    const rotuloBase = template.rotulo ?? template.label ?? `${origemSigla} -> ${destinoSigla}`;
+    return {
+      id: template.id,
+      rotulo: rotuloBase.includes("⇄") || rotuloBase.includes("<->") ? rotuloBase : `${rotuloBase.replace("→", "⇄").replace("->", "⇄")} (${schedule.dayLabel})`,
+      origemSigla,
+      destinoSigla,
+      embarcacao: template.embarcacaoNome ?? template.embarcacao ?? "F/B Amazonas VI",
+      saida: template.saidaTexto ?? template.saida ?? "horario a validar",
+      paradas: (template.paradas ?? []).map((parada) => {
+        if (typeof parada === "string") return parada;
+        const cidade = parada.cidadeSigla ?? parada.cidade ?? parada.label ?? "parada";
+        const texto = parada.texto ?? parada.hora ?? parada.dataHoraPrevista ?? "";
+        return texto ? `${cidade} · ${texto}` : cidade;
+      }),
+      saidaDiaSemana: schedule.saidaDiaSemana,
+      saidaHora: schedule.saidaHora,
+      retornoDias: schedule.retornoDias,
+      retornoHora: schedule.retornoHora,
+      cicloLabel: schedule.cicloLabel,
+    };
+  });
 }
 
 function defaultDateTimeLocal() {
@@ -996,6 +1032,84 @@ function defaultDateTimeLocal() {
   date.setDate(date.getDate() + 1);
   date.setHours(17, 0, 0, 0);
   return toDateTimeLocalValue(date);
+}
+
+function defaultDatesForRota(rota: RotaView) {
+  const saida = nextWeekdayDateTime(rota.saidaDiaSemana, rota.saidaHora);
+  const retorno = new Date(saida);
+  retorno.setDate(retorno.getDate() + rota.retornoDias);
+  const [retornoHora, retornoMinuto] = parseHourMinute(rota.retornoHora);
+  retorno.setHours(retornoHora, retornoMinuto, 0, 0);
+  return {
+    dataHoraSaida: toDateTimeLocalValue(saida),
+    dataHoraRetorno: toDateTimeLocalValue(retorno),
+  };
+}
+
+function nextWeekdayDateTime(dayOfWeek: number, time: string) {
+  const date = new Date();
+  const [hour, minute] = parseHourMinute(time);
+  const diff = (dayOfWeek - date.getDay() + 7) % 7;
+  date.setDate(date.getDate() + diff);
+  date.setHours(hour, minute, 0, 0);
+  if (date.getTime() <= Date.now()) {
+    date.setDate(date.getDate() + 7);
+  }
+  return date;
+}
+
+function parseHourMinute(time: string) {
+  const [hourRaw, minuteRaw = "0"] = time.split(":");
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  return [Number.isFinite(hour) ? hour : 17, Number.isFinite(minute) ? minute : 0] as const;
+}
+
+function scheduleForTemplate(template: RotaTemplateApi) {
+  const haystack = `${template.id} ${template.rotulo ?? ""} ${template.label ?? ""} ${template.saidaTexto ?? ""} ${template.saida ?? ""}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const origemSigla = template.origemSigla ?? siglaFromLabel(template.origem) ?? "BEL";
+  const destinoSigla = template.destinoSigla ?? siglaFromLabel(template.destino) ?? "STM";
+  if (haystack.includes("alm")) {
+    return {
+      dayLabel: "terça",
+      saidaDiaSemana: 2,
+      saidaHora: "17:00",
+      retornoDias: 2,
+      retornoHora: "14:00",
+      cicloLabel: `Saida terca 17h em ${origemSigla}; fechamento previsto quinta 14h em ${destinoSigla}.`,
+    };
+  }
+  if (haystack.includes("sexta") || haystack.includes("sex")) {
+    return {
+      dayLabel: "sexta",
+      saidaDiaSemana: 5,
+      saidaHora: "17:00",
+      retornoDias: 3,
+      retornoHora: "19:00",
+      cicloLabel: `Saida sexta 17h em ${origemSigla}; fechamento previsto segunda 19h em ${destinoSigla}.`,
+    };
+  }
+  if (haystack.includes("sabado") || haystack.includes("sab")) {
+    return {
+      dayLabel: "sábado",
+      saidaDiaSemana: 6,
+      saidaHora: "16:00",
+      retornoDias: 2,
+      retornoHora: "19:00",
+      cicloLabel: `Saida sabado 16h em ${origemSigla}; fechamento previsto segunda 19h em ${destinoSigla}.`,
+    };
+  }
+  return {
+    dayLabel: "quarta",
+    saidaDiaSemana: 3,
+    saidaHora: "17:00",
+    retornoDias: 3,
+    retornoHora: "10:00",
+    cicloLabel: `Saida quarta 17h em ${origemSigla}; fechamento previsto sabado 10h em ${destinoSigla}.`,
+  };
 }
 
 function toDateTimeLocalValue(date: Date) {

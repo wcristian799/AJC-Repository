@@ -69,11 +69,12 @@ export class NavegacaoController {
     if (!body || typeof body !== 'object') {
       throw new BadRequestException('Payload invalido');
     }
-    for (const field of ['embarcacaoId', 'origemSigla', 'dataHoraSaida'] as const) {
+    for (const field of ['embarcacaoId', 'origemSigla', 'dataHoraSaida', 'dataHoraRetorno'] as const) {
       if (typeof body[field] !== 'string' || body[field].trim().length === 0) {
         throw new BadRequestException(`${field} obrigatorio`);
       }
     }
+    this.validateViagemDates(body.dataHoraSaida, body.dataHoraRetorno);
     if (!Array.isArray(body.escalas) || body.escalas.length === 0) {
       throw new BadRequestException('escalas obrigatorio');
     }
@@ -88,6 +89,9 @@ export class NavegacaoController {
     if (!body || typeof body !== 'object') {
       throw new BadRequestException('Payload invalido');
     }
+    if ('status' in body || 'situacao' in body) {
+      throw new BadRequestException('Status e situacao da viagem sao alterados pelo ciclo operacional do sistema');
+    }
     if ('escalas' in body) {
       if (!Array.isArray(body.escalas) || body.escalas.length === 0) {
         throw new BadRequestException('escalas obrigatorio');
@@ -97,6 +101,27 @@ export class NavegacaoController {
           throw new BadRequestException('cidadeSigla da escala obrigatoria');
         }
       }
+    }
+    if ('dataHoraRetorno' in body && (typeof body.dataHoraRetorno !== 'string' || body.dataHoraRetorno.trim().length === 0)) {
+      throw new BadRequestException('dataHoraRetorno obrigatorio');
+    }
+    if (body.dataHoraSaida || typeof body.dataHoraRetorno === 'string') {
+      this.validateViagemDates(body.dataHoraSaida, typeof body.dataHoraRetorno === 'string' ? body.dataHoraRetorno : undefined, true);
+    }
+  }
+
+  private validateViagemDates(dataHoraSaida?: string, dataHoraRetorno?: string, partial = false): void {
+    if (partial && (!dataHoraSaida || !dataHoraRetorno)) return;
+    const saida = Date.parse(dataHoraSaida ?? '');
+    const retorno = Date.parse(dataHoraRetorno ?? '');
+    if (!Number.isFinite(saida)) {
+      throw new BadRequestException('dataHoraSaida invalida');
+    }
+    if (!Number.isFinite(retorno)) {
+      throw new BadRequestException('dataHoraRetorno invalida');
+    }
+    if (retorno <= saida) {
+      throw new BadRequestException('dataHoraRetorno deve ser posterior a dataHoraSaida');
     }
   }
 }

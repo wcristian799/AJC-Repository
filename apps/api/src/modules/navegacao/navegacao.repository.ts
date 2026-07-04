@@ -379,6 +379,14 @@ export class NavegacaoRepository {
       ? before.capacidadePaxDisponivel
       : sanitizeCapacidade(input.capacidadePaxDisponivel);
     const escalas = input.escalas;
+    const nextSaida = input.dataHoraSaida ?? before.dataHoraSaida;
+    const nextRetorno = input.dataHoraRetorno === undefined ? before.dataHoraRetorno : input.dataHoraRetorno;
+    if (!nextRetorno) {
+      throw new BadRequestException('dataHoraRetorno obrigatorio');
+    }
+    if (Date.parse(nextRetorno) <= Date.parse(nextSaida)) {
+      throw new BadRequestException('dataHoraRetorno deve ser posterior a dataHoraSaida');
+    }
 
     await this.db.tx(async (client) => {
       await client.query(
