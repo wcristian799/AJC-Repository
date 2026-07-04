@@ -729,9 +729,9 @@ function buildNovaCargaPreview(
   const primeiroDocumento = documentosSelecionados[0];
   return {
     pedido: buildPedidoVenda(cliente, primeiroDocumento, form),
-    uuid: volume ? `${safeShortId(volume.uuid, volume.id)}... · QR gerado` : "gerado ao salvar",
+    uuid: volume ? safeShortId(volume.uuid, volume.id) + "... - QR gerado" : "gerado ao salvar",
     codigo: carga?.codigo ?? "gerado ao salvar",
-    viagem: viagem ? `${viagem.codigo ?? "sem codigo"} · ${viagem.origemSigla} �  ${viagem.destinoSigla ?? "destino"}` : "selecionar viagem",
+    viagem: viagem ? (viagem.codigo ?? "sem codigo") + " - " + viagem.origemSigla + " -> " + (viagem.destinoSigla ?? "destino") : "selecionar viagem",
     origem: form.cidadeOrigemSigla || carga?.cidade_origem_sigla || viagem?.origemSigla || "selecionar",
     destino: form.cidadeDestinoSigla || carga?.cidade_destino_sigla || viagem?.destinoSigla || "selecionar",
     cliente: cliente ? `${cliente.codigo} - ${cliente.nome}` : carga?.remetente_nome ?? "buscar cliente",

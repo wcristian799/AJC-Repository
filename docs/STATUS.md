@@ -1,4 +1,10 @@
 # STATUS — Diário vivo do projeto AJC
+
+## Trabalho 2026-07-04 - Nova Carga por cliente e NF/DC
+- Contexto: o dono confirmou a regra operacional do TMS: primeiro selecionar o cliente por busca interna, depois selecionar uma ou mais NF/DC conectadas a esse cliente; o numero do pedido/venda deve ser gerado como CODIGO_CLIENTE + tipo/numero da primeira nota selecionada, exemplo 10-nfe-122.
+- O que foi feito: /app/tms ja possui busca de cliente, lista NF/DC filtrada pelo cliente, selecao multipla de documentos, preenchimento automatico de tipo/numero/peso/valor a partir das notas selecionadas e preview do pedido a partir da primeira NF/DC. O backend POST /api/tms/cargas aceita documentoIds, valida que as notas pertencem ao cliente e ainda estao livres, vincula os documentos a carga e gera fallback de numero_pedido com cliente.codigo + tipo + numero.
+- Ajuste desta rodada: corrigido o preview de Nova Carga para nao renderizar caracteres quebrados em UUID/QR e viagem; builds de API e front passaram.
+- Proximo passo: redeploy do front/back para publicar o bundle atualizado; se a producao ainda nao recebeu a migration de cliente.codigo, aplicar infra/migrations/0018_cliente_codigo_cadastro.sql antes.
 ## Trabalho 2026-07-04 - Codigo unico de cliente
 - Contexto: cada cliente precisa ter codigo unico de cadastro visivel para operacao e usado no TMS como COD CLIENTE do numero de pedido.
 - O que foi feito: migration 0018 adiciona cliente.codigo com sequencia/default CLI-ANO-NNNN, backfill dos clientes existentes e indice unico; API de cadastros retorna codigo; CRM mostra codigo na lista, ficha 360, export e selects; TMS mostra codigo no select de cliente e usa cliente.codigo ao gerar numero_pedido.
