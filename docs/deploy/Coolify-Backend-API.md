@@ -33,8 +33,9 @@ Obrigatorias:
 - `POSTGRES_PASSWORD=...`
 - `POSTGRES_DB=ajc`
 - `DATABASE_URL=postgresql://ajc:SENHA@postgres:5432/ajc`
-- `JWT_SECRET=...`
-- `JWT_REFRESH_SECRET=...`
+- `AUTH_TOKEN_SECRET=...`
+- `AUTH_ACCESS_TTL_SECONDS=900`
+- `AUTH_REFRESH_TTL_SECONDS=2592000`
 - `CORS_ORIGINS=https://ajcmvp.vercel.app`
 
 Enquanto nao houver fornecedor/credenciais reais:
