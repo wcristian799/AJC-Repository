@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = "http://localhost:3000/api";
+const DEFAULT_API_URL = "https://apiajc.byteintelligence.com.br/api";
 
 export const AJC_API_URL = (import.meta.env.VITE_AJC_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
 
