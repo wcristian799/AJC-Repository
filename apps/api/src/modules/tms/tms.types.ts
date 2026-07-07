@@ -23,6 +23,7 @@ export interface CreateCargaInput {
   numeroDocumento?: string;
   numeroPedido?: string;
   documentoIds?: string[];
+  agendadoPara?: string;
   observacoes?: string;
   clientUuid?: string;
   documento?: DocumentoFiscalInput;

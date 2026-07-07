@@ -15,7 +15,7 @@ export class TmsRepository {
       SELECT c.id, c.codigo, c.numero_pedido, c.categoria, c.status::text, c.viagem_id,
              c.destinatario_nome, c.valor_declarado, c.valor_cobrado, c.peso_total,
              c.cidade_origem_sigla, c.cidade_destino_sigla, c.tipo_recebimento::text,
-             c.observacoes, c.criado_em,
+             c.agendado_para, c.observacoes, c.criado_em,
              v.codigo AS viagem_codigo, cr.nome AS remetente_nome,
              count(vol.id)::int AS total_volumes
       FROM carga c
@@ -35,6 +35,46 @@ export class TmsRepository {
       valor_cobrado: row.valor_cobrado === null ? null : Number(row.valor_cobrado),
       peso_total: row.peso_total === null ? null : Number(row.peso_total),
     }));
+  }
+
+  async listAgendamentoDisponibilidade(data: string) {
+    const normalizedDate = normalizeAgendaDate(data);
+    const result = await this.db.query(
+      `
+      WITH slots AS (
+        SELECT generate_series(
+          ($1::date + time '06:00') AT TIME ZONE 'America/Sao_Paulo',
+          ($1::date + time '18:00') AT TIME ZONE 'America/Sao_Paulo',
+          interval '30 minutes'
+        ) AS inicio
+      )
+      SELECT
+        slots.inicio AS inicio,
+        slots.inicio + interval '30 minutes' AS fim,
+        5::int AS capacidade,
+        count(c.id)::int AS ocupadas
+      FROM slots
+      LEFT JOIN carga c
+        ON c.agendado_para >= slots.inicio
+       AND c.agendado_para < slots.inicio + interval '30 minutes'
+       AND c.status <> 'cancelada'
+      GROUP BY slots.inicio
+      ORDER BY slots.inicio
+      `,
+      [normalizedDate],
+    );
+    return result.rows.map((row) => {
+      const ocupadas = Number(row.ocupadas ?? 0);
+      const capacidade = Number(row.capacidade ?? 5);
+      return {
+        inicio: row.inicio,
+        fim: row.fim,
+        capacidade,
+        ocupadas,
+        disponiveis: Math.max(capacidade - ocupadas, 0),
+        bloqueada: ocupadas >= capacidade,
+      };
+    });
   }
 
   async findCarga(id: string) {
@@ -382,6 +422,7 @@ export class TmsRepository {
     const codigo = await this.nextCodigo(categoria === 'encomenda' ? 'ENC' : 'CG');
     const documentosSelecionados = await this.findDocumentosSelecionados(input.documentoIds, input.clienteRemetenteId);
     const primeiroDocumento = documentosSelecionados[0];
+    const agendadoPara = input.agendadoPara ? normalizeAgendaSlot(input.agendadoPara) : null;
     const numeroPedido = input.numeroPedido ?? (await this.buildPedido(
       input.clienteRemetenteId,
       primeiroDocumento?.numero ?? input.documento?.numero ?? input.numeroDocumento,
@@ -389,15 +430,31 @@ export class TmsRepository {
     ));
 
     const cargaId = await this.db.tx(async (client) => {
+      if (agendadoPara) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`carga-agenda:${agendadoPara}`]);
+        const agenda = await client.query<{ ocupadas: string }>(
+          `
+          SELECT count(*)::text AS ocupadas
+          FROM carga
+          WHERE agendado_para >= $1::timestamptz
+            AND agendado_para < $1::timestamptz + interval '30 minutes'
+            AND status <> 'cancelada'
+          `,
+          [agendadoPara],
+        );
+        if (Number(agenda.rows[0]?.ocupadas ?? 0) >= 5) {
+          throw new BadRequestException('Janela de agendamento sem vagas');
+        }
+      }
       const inserted = await client.query<{ id: string }>(
         `
         INSERT INTO carga (
           codigo, numero_pedido, categoria, viagem_id, cliente_remetente_id, destinatario_id,
           destinatario_nome, cidade_origem_sigla, cidade_destino_sigla, tipo_recebimento,
-          valor_declarado, valor_cobrado, peso_total, client_uuid, criado_por, atualizado_por, observacoes
+          valor_declarado, valor_cobrado, peso_total, agendado_para, client_uuid, criado_por, atualizado_por, observacoes
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::tipo_recebimento_carga,
-                $11, $12, $13, $14, $15, $15, $16)
+                $11, $12, $13, $14, $15, $16, $16, $17)
         ON CONFLICT (client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING
         RETURNING id
         `,
@@ -415,6 +472,7 @@ export class TmsRepository {
           input.valorDeclarado ?? null,
           input.valorCobrado ?? null,
           input.pesoTotal ?? null,
+          agendadoPara,
           input.clientUuid ?? null,
           userId,
           input.observacoes ?? null,
@@ -482,6 +540,7 @@ export class TmsRepository {
             clienteRemetenteId: input.clienteRemetenteId,
             cidadeOrigemSigla: input.cidadeOrigemSigla ?? null,
             cidadeDestinoSigla: input.cidadeDestinoSigla,
+            agendadoPara,
             totalVolumes,
             documentoIds: documentosSelecionados.map((documento) => documento.id),
             documento: primeiroDocumento
@@ -1169,4 +1228,34 @@ function descricaoFromObs(raw?: string | null) {
     return raw;
   }
   return null;
+}
+
+function normalizeAgendaDate(value: string) {
+  const date = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new BadRequestException('data deve estar no formato YYYY-MM-DD');
+  }
+  return date;
+}
+
+function normalizeAgendaSlot(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException('agendadoPara invalido');
+  }
+  const minutes = date.getUTCMinutes();
+  const seconds = date.getUTCSeconds();
+  const milliseconds = date.getUTCMilliseconds();
+  if ((minutes !== 0 && minutes !== 30) || seconds !== 0 || milliseconds !== 0) {
+    throw new BadRequestException('agendadoPara deve usar janelas de 30 minutos');
+  }
+  const hourInBelem = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    hour12: false,
+  }).format(date));
+  if (hourInBelem < 6 || hourInBelem > 18) {
+    throw new BadRequestException('agendadoPara fora do horario operacional');
+  }
+  return date.toISOString();
 }

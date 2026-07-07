@@ -17,6 +17,13 @@ export class TmsController {
     return this.repository.listCargas(categoria);
   }
 
+  @Get('agendamentos/disponibilidade')
+  @RequirePermissions('tms.ver')
+  listAgendamentoDisponibilidade(@Query('data') data?: string) {
+    this.require(data, 'data');
+    return this.repository.listAgendamentoDisponibilidade(data!);
+  }
+
   @Get('cargas/:id')
   @RequirePermissions('tms.ver')
   getCarga(@Param('id') id: string) {
@@ -29,6 +36,7 @@ export class TmsController {
     this.require(body.viagemId, 'viagemId');
     this.require(body.clienteRemetenteId, 'clienteRemetenteId');
     this.require(body.cidadeDestinoSigla, 'cidadeDestinoSigla');
+    this.require(body.agendadoPara, 'agendadoPara');
     return this.repository.createCarga(body, user.sub);
   }
 

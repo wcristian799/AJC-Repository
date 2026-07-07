@@ -621,6 +621,7 @@ export type TmsCargaApi = {
   cidade_origem_sigla: string | null;
   cidade_destino_sigla: string;
   tipo_recebimento: string | null;
+  agendado_para?: string | null;
   observacoes?: string | null;
   criado_em: string;
   viagem_codigo: string;
@@ -639,6 +640,7 @@ export type CreateEncomendaInput = {
   pesoTotal?: number;
   totalVolumes?: number;
   numeroDocumento?: string;
+  agendadoPara?: string;
   observacoes?: string;
   clientUuid?: string;
   documento?: {
@@ -656,6 +658,15 @@ export type CreateTmsCargaInput = CreateEncomendaInput & {
   tipoRecebimento?: "porto_balsa" | "direto";
   numeroPedido?: string;
   documentoIds?: string[];
+};
+
+export type TmsAgendamentoSlotApi = {
+  inicio: string;
+  fim: string;
+  capacidade: number;
+  ocupadas: number;
+  disponiveis: number;
+  bloqueada: boolean;
 };
 
 export type TmsVolumeApi = {
@@ -932,6 +943,10 @@ export function listTmsCargas(params?: { categoria?: "carga" | "encomenda" }) {
   if (params?.categoria) search.set("categoria", params.categoria);
   const suffix = search.toString() ? `?${search.toString()}` : "";
   return request<TmsCargaApi[]>(`/tms/cargas${suffix}`, { auth: true });
+}
+
+export function listTmsAgendamentoDisponibilidade(data: string) {
+  return request<TmsAgendamentoSlotApi[]>(`/tms/agendamentos/disponibilidade?data=${encodeURIComponent(data)}`, { auth: true });
 }
 
 export function createTmsCarga(input: CreateTmsCargaInput) {

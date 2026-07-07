@@ -22,6 +22,7 @@ import {
   type ClienteApi,
   type EmbarcacaoApi,
   type NavegacaoViagemApi,
+  type TmsAgendamentoSlotApi,
   type TmsCargaApi,
   type TmsDocumentoApi,
   type TmsEntregaApi,
@@ -30,6 +31,7 @@ import {
   type TmsVolumeApi,
   type VeiculoEnvioApi,
   createTmsCarga,
+  listTmsAgendamentoDisponibilidade,
   listCidades,
   listEmbarcacoes,
   listClientes,
@@ -56,10 +58,11 @@ type NovaCargaForm = {
   viagemId: string;
   clienteRemetenteId: string;
   documentoIds: string[];
-  destinatarioNome: string;
   cidadeOrigemSigla: string;
   cidadeDestinoSigla: string;
   tipoRecebimento: "porto_balsa" | "direto";
+  agendamentoData: string;
+  agendadoPara: string;
   valorCobrado: string;
 };
 
@@ -67,10 +70,11 @@ const initialNovaCargaForm: NovaCargaForm = {
   viagemId: "",
   clienteRemetenteId: "",
   documentoIds: [],
-  destinatarioNome: "",
   cidadeOrigemSigla: "",
   cidadeDestinoSigla: "",
   tipoRecebimento: "porto_balsa",
+  agendamentoData: "",
+  agendadoPara: "",
   valorCobrado: "",
 };
 
@@ -98,6 +102,8 @@ function TMS() {
   const [clienteBusca, setClienteBusca] = useState("");
   const [savingNovaCarga, setSavingNovaCarga] = useState(false);
   const [novaCargaError, setNovaCargaError] = useState<string | null>(null);
+  const [agendamentoSlots, setAgendamentoSlots] = useState<TmsAgendamentoSlotApi[]>([]);
+  const [loadingAgendamento, setLoadingAgendamento] = useState(false);
   const [data, setData] = useState<TmsData>({
     cargas: [],
     cidades: [],
@@ -162,15 +168,45 @@ function TMS() {
   useEffect(() => {
     setNovaCargaForm((prev) => {
       const viagem = data.viagens.find((item) => item.id === prev.viagemId) ?? data.viagens[0];
+      const paradas = buildParadasViagem(viagem, data.cidades);
       return {
         ...prev,
         viagemId: prev.viagemId || viagem?.id || "",
         clienteRemetenteId: prev.clienteRemetenteId,
-        cidadeOrigemSigla: prev.cidadeOrigemSigla || viagem?.origemSigla || "",
-        cidadeDestinoSigla: prev.cidadeDestinoSigla || viagem?.destinoSigla || "",
+        cidadeOrigemSigla: prev.cidadeOrigemSigla || paradas[0]?.sigla || viagem?.origemSigla || "",
+        cidadeDestinoSigla: prev.cidadeDestinoSigla || paradas[paradas.length - 1]?.sigla || viagem?.destinoSigla || "",
+        agendamentoData: prev.agendamentoData || todayDateInput(),
       };
     });
-  }, [data.viagens, data.clientes]);
+  }, [data.viagens, data.clientes, data.cidades]);
+
+  useEffect(() => {
+    if (!showNovaCarga || !novaCargaForm.agendamentoData) return;
+    let active = true;
+    setLoadingAgendamento(true);
+    listTmsAgendamentoDisponibilidade(novaCargaForm.agendamentoData)
+      .then((slots) => {
+        if (!active) return;
+        const normalized = ensureArray(slots);
+        setAgendamentoSlots(normalized);
+        setNovaCargaForm((prev) => {
+          if (prev.agendamentoData !== novaCargaForm.agendamentoData) return prev;
+          const selected = normalized.find((slot) => slot.inicio === prev.agendadoPara);
+          if (selected && !selected.bloqueada) return prev;
+          const next = normalized.find((slot) => !slot.bloqueada);
+          return { ...prev, agendadoPara: next?.inicio ?? "" };
+        });
+      })
+      .catch(() => {
+        if (active) setAgendamentoSlots([]);
+      })
+      .finally(() => {
+        if (active) setLoadingAgendamento(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [showNovaCarga, novaCargaForm.agendamentoData]);
 
   const total = data.volumes.length;
   const conferidos = data.volumes.filter((v) => v.status !== "recebido").length;
@@ -189,7 +225,9 @@ function TMS() {
     [documentosDoCliente, novaCargaForm.documentoIds],
   );
   const primeiroDocumentoSelecionado = documentosSelecionados[0];
-  const novaCargaPreview = useMemo(() => buildNovaCargaPreview(data, novaCargaForm, clienteSelecionado, documentosSelecionados), [data, novaCargaForm, clienteSelecionado, documentosSelecionados]);
+  const viagemSelecionada = data.viagens.find((viagem) => viagem.id === novaCargaForm.viagemId) ?? null;
+  const paradasViagem = useMemo(() => buildParadasViagem(viagemSelecionada, data.cidades), [viagemSelecionada, data.cidades]);
+  const novaCargaPreview = useMemo(() => buildNovaCargaPreview(data, novaCargaForm, clienteSelecionado, documentosSelecionados, agendamentoSlots), [data, novaCargaForm, clienteSelecionado, documentosSelecionados, agendamentoSlots]);
 
   async function submitNovaCarga(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -210,6 +248,10 @@ function TMS() {
       setNovaCargaError("Informe o destino.");
       return;
     }
+    if (!novaCargaForm.agendadoPara) {
+      setNovaCargaError("Selecione uma janela de agendamento com vaga.");
+      return;
+    }
     setSavingNovaCarga(true);
     try {
       const valorDeclarado = soma(documentosSelecionados.map((documento) => documento.valor));
@@ -219,7 +261,6 @@ function TMS() {
         categoria: "carga",
         viagemId: novaCargaForm.viagemId,
         clienteRemetenteId: novaCargaForm.clienteRemetenteId,
-        destinatarioNome: novaCargaForm.destinatarioNome.trim() || undefined,
         cidadeOrigemSigla: novaCargaForm.cidadeOrigemSigla.trim().toUpperCase() || undefined,
         cidadeDestinoSigla: novaCargaForm.cidadeDestinoSigla.trim().toUpperCase(),
         tipoRecebimento: novaCargaForm.tipoRecebimento,
@@ -230,6 +271,7 @@ function TMS() {
         numeroPedido: novaCargaPreview.pedido,
         documentoIds: novaCargaForm.documentoIds,
         numeroDocumento: primeiroDocumentoSelecionado?.numero ?? undefined,
+        agendadoPara: novaCargaForm.agendadoPara,
         clientUuid: crypto.randomUUID(),
       });
       const [cargas, documentos, volumes] = await Promise.all([listTmsCargas(), listTmsDocumentos(), listTmsVolumes()]);
@@ -240,6 +282,8 @@ function TMS() {
         clienteRemetenteId: "",
         cidadeOrigemSigla: prev.cidadeOrigemSigla,
         cidadeDestinoSigla: prev.cidadeDestinoSigla,
+        agendamentoData: prev.agendamentoData,
+        agendadoPara: prev.agendadoPara,
       }));
       setClienteBusca("");
       setShowDocumentosModal(false);
@@ -269,11 +313,13 @@ function TMS() {
         .map((id) => documentosDoCliente.find((item) => item.id === id))
         .filter((item): item is TmsDocumentoApi => Boolean(item));
       const primeiro = selecionados[0];
+      const origemDocumento = normalizeAllowedSigla(primeiro?.cidade_origem_sigla, paradasViagem);
+      const destinoDocumento = normalizeAllowedSigla(primeiro?.cidade_destino_sigla, paradasViagem);
       return {
         ...prev,
         documentoIds,
-        cidadeOrigemSigla: primeiro?.cidade_origem_sigla ?? prev.cidadeOrigemSigla,
-        cidadeDestinoSigla: primeiro?.cidade_destino_sigla ?? prev.cidadeDestinoSigla,
+        cidadeOrigemSigla: origemDocumento ?? prev.cidadeOrigemSigla,
+        cidadeDestinoSigla: destinoDocumento ?? prev.cidadeDestinoSigla,
       };
     });
   }
@@ -355,11 +401,12 @@ function TMS() {
               value={novaCargaForm.viagemId}
               onChange={(viagemId) => {
                 const viagem = data.viagens.find((item) => item.id === viagemId);
+                const paradas = buildParadasViagem(viagem ?? null, data.cidades);
                 setNovaCargaForm((prev) => ({
                   ...prev,
                   viagemId,
-                  cidadeOrigemSigla: viagem?.origemSigla ?? prev.cidadeOrigemSigla,
-                  cidadeDestinoSigla: viagem?.destinoSigla ?? prev.cidadeDestinoSigla,
+                  cidadeOrigemSigla: paradas[0]?.sigla ?? viagem?.origemSigla ?? prev.cidadeOrigemSigla,
+                  cidadeDestinoSigla: paradas[paradas.length - 1]?.sigla ?? viagem?.destinoSigla ?? prev.cidadeDestinoSigla,
                 }));
               }}
             >
@@ -370,12 +417,23 @@ function TMS() {
                 </option>
               ))}
             </FormSelect>
-            <FormInput label="Origem" value={novaCargaForm.cidadeOrigemSigla} onChange={(cidadeOrigemSigla) => setNovaCargaForm((prev) => ({ ...prev, cidadeOrigemSigla }))} placeholder="BEL" maxLength={4} />
-            <FormInput label="Destino" value={novaCargaForm.cidadeDestinoSigla} onChange={(cidadeDestinoSigla) => setNovaCargaForm((prev) => ({ ...prev, cidadeDestinoSigla }))} placeholder="STM" maxLength={4} />
+            <CidadeParadaSelect
+              label="Origem"
+              value={novaCargaForm.cidadeOrigemSigla}
+              paradas={paradasViagem}
+              fallbackCidades={data.cidades}
+              onChange={(cidadeOrigemSigla) => setNovaCargaForm((prev) => ({ ...prev, cidadeOrigemSigla }))}
+            />
+            <CidadeParadaSelect
+              label="Destino"
+              value={novaCargaForm.cidadeDestinoSigla}
+              paradas={paradasViagem}
+              fallbackCidades={data.cidades}
+              onChange={(cidadeDestinoSigla) => setNovaCargaForm((prev) => ({ ...prev, cidadeDestinoSigla }))}
+            />
           </div>
 
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <FormInput label="Destinatario" value={novaCargaForm.destinatarioNome} onChange={(destinatarioNome) => setNovaCargaForm((prev) => ({ ...prev, destinatarioNome }))} placeholder="nome/empresa ou manual" />
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
             <CargaField label="NF/DC selecionadas" value={documentosSelecionados.length ? documentosSelecionados.map((documento) => `${documento.tipo}-${documento.numero ?? "sem-numero"}`).join(", ") : "selecionar no modal"} />
             <CargaField label="Primeira NF/DC do pedido" value={primeiroDocumentoSelecionado ? `${primeiroDocumentoSelecionado.tipo}-${primeiroDocumentoSelecionado.numero ?? "sem-numero"}` : "aguardando selecao"} />
           </div>
@@ -387,7 +445,14 @@ function TMS() {
               hint="primeira NF define o pedido"
             />
             <FormInput label="Frete cobrado" value={novaCargaForm.valorCobrado} onChange={(valorCobrado) => setNovaCargaForm((prev) => ({ ...prev, valorCobrado }))} placeholder="1200,00" inputMode="decimal" />
-            <CargaField label="Agendamento de recebimento" value={novaCargaPreview.agenda} hint="max 5 caminhoes/janela" />
+            <AgendamentoRecebimentoField
+              data={novaCargaForm.agendamentoData}
+              agendadoPara={novaCargaForm.agendadoPara}
+              slots={agendamentoSlots}
+              loading={loadingAgendamento}
+              onDataChange={(agendamentoData) => setNovaCargaForm((prev) => ({ ...prev, agendamentoData, agendadoPara: "" }))}
+              onSlotChange={(agendadoPara) => setNovaCargaForm((prev) => ({ ...prev, agendadoPara }))}
+            />
           </div>
 
           {novaCargaError && <p className="mt-3 rounded-md bg-[color:var(--danger)]/10 px-3 py-2 text-xs text-[color:var(--danger)] ring-1 ring-[color:var(--danger)]/30">{novaCargaError}</p>}
@@ -705,6 +770,82 @@ function FormSelect({
   );
 }
 
+function CidadeParadaSelect({
+  label,
+  value,
+  paradas,
+  fallbackCidades,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  paradas: CidadeOption[];
+  fallbackCidades: CidadeApi[];
+  onChange: (value: string) => void;
+}) {
+  const options = paradas.length ? paradas : fallbackCidades.filter((cidade) => cidade.ativo).map((cidade) => cidadeToOption(cidade));
+  return (
+    <FormSelect label={label} value={value} onChange={onChange}>
+      <option value="">Selecionar parada</option>
+      {options.map((cidade) => (
+        <option key={`${label}-${cidade.sigla}`} value={cidade.sigla}>
+          {cidade.sigla} - {cidade.nome}
+        </option>
+      ))}
+    </FormSelect>
+  );
+}
+
+function AgendamentoRecebimentoField({
+  data,
+  agendadoPara,
+  slots,
+  loading,
+  onDataChange,
+  onSlotChange,
+}: {
+  data: string;
+  agendadoPara: string;
+  slots: TmsAgendamentoSlotApi[];
+  loading: boolean;
+  onDataChange: (value: string) => void;
+  onSlotChange: (value: string) => void;
+}) {
+  const selected = slots.find((slot) => slot.inicio === agendadoPara);
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Agendamento de recebimento</p>
+        <span className="text-[9px] text-muted-foreground/70">max 5 caminhoes/janela</span>
+      </div>
+      <div className="mt-1 grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-2">
+        <input
+          type="date"
+          value={data}
+          onChange={(event) => onDataChange(event.target.value)}
+          className="h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors focus:border-[color:var(--brand)]"
+        />
+        <select
+          value={agendadoPara}
+          onChange={(event) => onSlotChange(event.target.value)}
+          disabled={loading || slots.length === 0}
+          className="h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground focus:border-[color:var(--brand)]"
+        >
+          <option value="">{loading ? "consultando..." : "Selecionar horario"}</option>
+          {slots.map((slot) => (
+            <option key={slot.inicio} value={slot.inicio} disabled={slot.bloqueada}>
+              {formatSlotTime(slot.inicio)} - {slot.disponiveis}/{slot.capacidade} vagas
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        {selected ? `${selected.ocupadas} agendado(s), ${selected.disponiveis} vaga(s) livres.` : "Janelas de 30 minutos consultadas no sistema."}
+      </p>
+    </div>
+  );
+}
+
 function parseMoney(value: string) {
   const normalized = value.trim().replace(/\./g, "").replace(",", ".");
   if (!normalized) return undefined;
@@ -736,6 +877,8 @@ function ensureArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
 
+type CidadeOption = { sigla: string; nome: string };
+
 type TmsData = {
   cargas: TmsCargaApi[];
   cidades: CidadeApi[];
@@ -755,6 +898,7 @@ function buildNovaCargaPreview(
   form: NovaCargaForm,
   cliente: ClienteApi | null,
   documentosSelecionados: TmsDocumentoApi[],
+  agendamentoSlots: TmsAgendamentoSlotApi[],
 ) {
   const carga = data.cargas[0];
   const volume = data.volumes.find((v) => v.carga_id === carga?.id) ?? data.volumes[0];
@@ -775,7 +919,7 @@ function buildNovaCargaPreview(
       : "selecione NF/DC do cliente",
     peso: typeof pesoSelecionado === "number" ? `${pesoSelecionado.toLocaleString("pt-BR")} kg` : carga?.peso_total ? `${carga.peso_total.toLocaleString("pt-BR")} kg` : "aguardando NF/DC",
     valor: typeof valorSelecionado === "number" ? formatCurrency(valorSelecionado) : carga?.valor_declarado ? formatCurrency(carga.valor_declarado) : "aguardando NF/DC",
-    agenda: data.portaria[0]?.entrada_em ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(data.portaria[0].entrada_em)) : "janela a definir",
+    agenda: formatAgendamentoPreview(form.agendadoPara, agendamentoSlots),
   };
 }
 
@@ -794,4 +938,55 @@ function formatCurrency(value: number) {
 function safeShortId(...values: Array<unknown>) {
   const value = values.find((item) => typeof item === "string" && item.trim().length > 0);
   return typeof value === "string" ? value.slice(0, 8) : "sem-uuid";
+}
+
+function todayDateInput() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function cidadeToOption(cidade: CidadeApi): CidadeOption {
+  return { sigla: cidade.sigla, nome: cidade.nome };
+}
+
+function buildParadasViagem(viagem: NavegacaoViagemApi | null | undefined, cidades: CidadeApi[]): CidadeOption[] {
+  if (!viagem) return [];
+  const cityMap = new Map(cidades.map((cidade) => [cidade.sigla, cidade.nome]));
+  const siglas = [
+    viagem.origemSigla,
+    ...ensureArray(viagem.escalas).map((escala) => escala.cidadeSigla),
+    viagem.destinoSigla,
+  ].filter((sigla): sigla is string => Boolean(sigla));
+  return [...new Set(siglas)].map((sigla) => ({ sigla, nome: cityMap.get(sigla) ?? sigla }));
+}
+
+function normalizeAllowedSigla(value: string | null | undefined, paradas: CidadeOption[]) {
+  const sigla = value?.trim().toUpperCase();
+  if (!sigla) return null;
+  if (paradas.length === 0) return sigla;
+  return paradas.some((parada) => parada.sigla === sigla) ? sigla : null;
+}
+
+function formatSlotTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatAgendamentoPreview(value: string, slots: TmsAgendamentoSlotApi[]) {
+  if (!value) return "selecione dia e horario";
+  const slot = slots.find((item) => item.inicio === value);
+  const date = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(new Date(value));
+  const time = formatSlotTime(value);
+  return slot ? `${date}, ${time} - ${slot.disponiveis}/${slot.capacidade} vagas` : `${date}, ${time}`;
 }
