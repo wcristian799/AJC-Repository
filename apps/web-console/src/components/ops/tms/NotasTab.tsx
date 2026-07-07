@@ -42,6 +42,12 @@ type ManualDocumentoForm = {
   pesoTotal: string;
   totalVolumes: string;
   destinatarioNome: string;
+  destinatarioDocumento: string;
+  destinatarioTelefone: string;
+  arquivoNome: string;
+  arquivoUrl: string;
+  arquivoHash: string;
+  arquivoTamanho: number | null;
 };
 
 const STATUS_TONE: Record<NotaDCStatus, "warning" | "success" | "danger"> = {
@@ -89,6 +95,12 @@ export function NotasTab({
     pesoTotal: "",
     totalVolumes: "1",
     destinatarioNome: "",
+    destinatarioDocumento: "",
+    destinatarioTelefone: "",
+    arquivoNome: "",
+    arquivoUrl: "",
+    arquivoHash: "",
+    arquivoTamanho: null,
   });
   const documentos = documentosApi?.length
     ? documentosApi.map(mapDocumentoNota)
@@ -148,6 +160,14 @@ export function NotasTab({
       setErro("Informe o numero da NF/DC.");
       return;
     }
+    if (!manualForm.destinatarioNome.trim() || !manualForm.destinatarioDocumento.trim() || !manualForm.destinatarioTelefone.trim()) {
+      setErro("Informe nome, CPF/CNPJ e telefone do destinatario.");
+      return;
+    }
+    if (manualForm.tipo !== "DC" && !manualForm.arquivoHash) {
+      setErro("Anexe o arquivo da nota fiscal para NF-e/NFC-e.");
+      return;
+    }
     const totalVolumes = Math.max(1, Number.parseInt(manualForm.totalVolumes, 10) || 1);
     setManualSaving(true);
     try {
@@ -162,15 +182,56 @@ export function NotasTab({
         pesoTotal: parseNumber(manualForm.pesoTotal),
         totalVolumes,
         clientUuid: crypto.randomUUID(),
+        destinatarioDocumento: manualForm.destinatarioDocumento.trim(),
+        destinatarioTelefone: manualForm.destinatarioTelefone.trim(),
+        arquivoUrl: manualForm.arquivoUrl || undefined,
+        arquivoHash: manualForm.arquivoHash || undefined,
       });
       await refreshTmsCore();
-      setManualForm((prev) => ({ ...prev, numero: "", valor: "", pesoTotal: "", totalVolumes: "1", destinatarioNome: "", cidadeOrigemSigla: "", cidadeDestinoSigla: "" }));
+      setManualForm((prev) => ({
+        ...prev,
+        numero: "",
+        valor: "",
+        pesoTotal: "",
+        totalVolumes: "1",
+        destinatarioNome: "",
+        destinatarioDocumento: "",
+        destinatarioTelefone: "",
+        cidadeOrigemSigla: "",
+        cidadeDestinoSigla: "",
+        arquivoNome: "",
+        arquivoUrl: "",
+        arquivoHash: "",
+        arquivoTamanho: null,
+      }));
       setShowManual(false);
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Nao foi possivel lancar o documento manual.");
     } finally {
       setManualSaving(false);
     }
+  }
+
+  async function anexarManualFile(file?: File) {
+    setErro(null);
+    if (!file) {
+      setManualForm((prev) => ({ ...prev, arquivoNome: "", arquivoUrl: "", arquivoHash: "", arquivoTamanho: null }));
+      return;
+    }
+    const maxBytes = 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setErro("Arquivo da nota fiscal deve ter ate 10 MB.");
+      return;
+    }
+    const hash = await sha256Hex(file);
+    const safeName = encodeURIComponent(file.name.replace(/[^\w.\- ]/g, "_"));
+    setManualForm((prev) => ({
+      ...prev,
+      arquivoNome: file.name,
+      arquivoUrl: `manual-upload://${hash}/${safeName}`,
+      arquivoHash: hash,
+      arquivoTamanho: file.size,
+    }));
   }
 
   async function etiquetarDocumento(documento?: NotaDC) {
@@ -253,8 +314,17 @@ export function NotasTab({
             <FormInput label="Valor declarado" value={manualForm.valor} onChange={(value) => setManualForm((prev) => ({ ...prev, valor: value }))} inputMode="decimal" placeholder="0,00" />
             <FormInput label="Peso total" value={manualForm.pesoTotal} onChange={(value) => setManualForm((prev) => ({ ...prev, pesoTotal: value }))} inputMode="decimal" placeholder="kg" />
             <FormInput label="Volumes" value={manualForm.totalVolumes} onChange={(value) => setManualForm((prev) => ({ ...prev, totalVolumes: value }))} inputMode="numeric" />
+            <FormInput label="Destinatario" value={manualForm.destinatarioNome} onChange={(value) => setManualForm((prev) => ({ ...prev, destinatarioNome: value }))} placeholder="Nome/razao social" />
+            <FormInput label="CPF/CNPJ destinatario" value={manualForm.destinatarioDocumento} onChange={(value) => setManualForm((prev) => ({ ...prev, destinatarioDocumento: value }))} placeholder="000.000.000-00" />
+            <FormInput label="Telefone destinatario" value={manualForm.destinatarioTelefone} onChange={(value) => setManualForm((prev) => ({ ...prev, destinatarioTelefone: value }))} placeholder="(91) 99999-9999" />
             <div className="md:col-span-2">
-              <FormInput label="Destinatario" value={manualForm.destinatarioNome} onChange={(value) => setManualForm((prev) => ({ ...prev, destinatarioNome: value }))} placeholder="Nome/razao social" />
+              <FormFile
+                label="Upload da nota fiscal"
+                fileName={manualForm.arquivoNome}
+                fileHash={manualForm.arquivoHash}
+                fileSize={manualForm.arquivoTamanho}
+                onChange={anexarManualFile}
+              />
             </div>
             <div className="flex items-end gap-2">
               <PrimaryButton icon={Upload} onClick={salvarManual} disabled={manualSaving || !(clientes?.length)}>
@@ -321,7 +391,7 @@ export function NotasTab({
             <SelectRow label="Modalidade" value="CIF ou FOB" />
             <SelectRow label="Valor declarado" value="R$ -" />
             <SelectRow label="Agendamento" value="Dia + janela de 30 min" />
-            <p className="text-[11px] text-muted-foreground">Estados: vazio, carregando, erro e sucesso. Upload/storage real entra quando o provedor de arquivos estiver definido.</p>
+            <p className="text-[11px] text-muted-foreground">Estados: vazio, carregando, erro e sucesso. Buckets pendentes e hospedagem do object storage ficam registrados em `docs/infra/BUCKETS-PENDENTES.md`.</p>
           </div>
         </div>
       </div>
@@ -508,6 +578,18 @@ function parseNumber(value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+async function sha256Hex(file: File) {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function formatBytes(bytes: number | null) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function FormInput({
   label,
   value,
@@ -559,6 +641,40 @@ function FormSelect({
       >
         {children}
       </select>
+    </label>
+  );
+}
+
+function FormFile({
+  label,
+  fileName,
+  fileHash,
+  fileSize,
+  onChange,
+}: {
+  label: string;
+  fileName: string;
+  fileHash: string;
+  fileSize: number | null;
+  onChange: (file?: File) => void | Promise<void>;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
+      <div className="mt-1 flex min-h-10 items-center gap-3 rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 py-2 text-sm text-foreground transition-colors focus-within:border-[color:var(--brand)]">
+        <Upload className="h-4 w-4 shrink-0 text-[color:var(--brand)]" />
+        <input
+          type="file"
+          accept=".pdf,.xml,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,image/jpeg,image/png"
+          onChange={(event) => void onChange(event.target.files?.[0])}
+          className="min-w-0 flex-1 text-xs text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-[color:var(--brand)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+        />
+        {fileName && (
+          <span className="hidden max-w-[220px] truncate text-[11px] text-muted-foreground md:inline">
+            {fileName} {formatBytes(fileSize)} {fileHash ? `- ${fileHash.slice(0, 8)}` : ""}
+          </span>
+        )}
+      </div>
     </label>
   );
 }

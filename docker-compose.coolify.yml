@@ -16,6 +16,26 @@ services:
     networks:
       - ajc_internal
 
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?defina MINIO_ROOT_USER no Coolify}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?defina MINIO_ROOT_PASSWORD no Coolify}
+    volumes:
+      - ajc_minio_data:/data
+    expose:
+      - "9000"
+      - "9001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - ajc_internal
+
   api:
     build:
       context: .
@@ -24,6 +44,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_started
     environment:
       NODE_ENV: production
       API_PORT: 3000
@@ -36,6 +58,12 @@ services:
       BPE_MODE: ${BPE_MODE:-stub}
       WHATSAPP_MODE: ${WHATSAPP_MODE:-stub}
       BLUETOOTH_PRINT_MODE: ${BLUETOOTH_PRINT_MODE:-stub}
+      OBJECT_STORAGE_DRIVER: ${OBJECT_STORAGE_DRIVER:-minio}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
+      OBJECT_STORAGE_PUBLIC_URL: ${OBJECT_STORAGE_PUBLIC_URL:-https://storage-ajc.byteintelligence.com.br}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?defina OBJECT_STORAGE_ACCESS_KEY no Coolify}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?defina OBJECT_STORAGE_SECRET_KEY no Coolify}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
     expose:
       - "3000"
     networks:
@@ -49,15 +77,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_started
     command: ["node", "apps/api/dist/apps/api/src/worker.js"]
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-ajc}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ajc}
+      OBJECT_STORAGE_DRIVER: ${OBJECT_STORAGE_DRIVER:-minio}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?defina OBJECT_STORAGE_ACCESS_KEY no Coolify}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?defina OBJECT_STORAGE_SECRET_KEY no Coolify}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
     networks:
       - ajc_internal
 
 volumes:
   ajc_postgres_data:
+  ajc_minio_data:
 
 networks:
   ajc_internal:

@@ -93,6 +93,10 @@ export interface CreateDocumentoManualInput {
   pesoTotal?: number;
   totalVolumes?: number;
   destinatarioNome?: string;
+  destinatarioDocumento?: string;
+  destinatarioTelefone?: string;
+  arquivoUrl?: string;
+  arquivoHash?: string;
   clientUuid?: string;
 }
 

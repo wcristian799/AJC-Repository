@@ -114,3 +114,9 @@ Sistema de gestão (ERP + TMS) para a **AJC**, empresa de transporte fluvial no 
 - **⚠️ Armadilha de SSR resolvida (não reintroduzir):** TanStack Start faz SSR. (1) `useInView` do motion pode ficar preso em `false` no SSR → não use para disparar contadores; o `CountUp` anima no mount com salvaguarda de `setTimeout` para abas em background. (2) Coordenadas com `Math.cos/sin` (ex.: RadarSweep) precisam ser **arredondadas** senão o constant-folding diverge entre bundle servidor e cliente, causando hydration mismatch que quebra os `useEffect` do subtree (sintoma: KPIs presos em 0). Mantenha conteúdo não-determinístico determinístico ou client-only.
 - É projeto conectado ao **Lovable** (designer) — `AGENTS.md`/`.lovable/` presentes. Não reescrever histórico git publicado; manter a branch funcional.
 - Migrations: SQL puro em infra/migrations/, controle via tabela schema_migrations + runner infra/migrations/run.mjs (node run.mjs [--status|--baseline]); pg ancorado em apps/api. Decisao Prisma-vs-TypeORM encerrada: sem ORM.
+
+## Uploads e object storage
+- Todo fluxo novo de upload/blob (arquivo, foto, assinatura, comprovante, XML, PDF) deve atualizar docs/infra/BUCKETS-PENDENTES.md no mesmo bloco de trabalho.
+- Se o bucket real ainda nao estiver ligado, registrar como pendente; nao deixar upload implicito.
+- Diretriz atual do MVP: usar **MinIO self-hosted** na stack Docker/Coolify do VPS para fotos, assinaturas e documentos.
+- Naming fino, policy e lifecycle podem evoluir depois, mas o inventario canonico de buckets fica em docs/infra/BUCKETS-PENDENTES.md.

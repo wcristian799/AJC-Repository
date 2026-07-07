@@ -80,6 +80,8 @@ A etiqueta de carga/veículo e recibos operacionais devem considerar impressão 
 
 **Ressalva crítica — backup:** o VPS só faz backup **semanal**. Para um ERP/TMS isso é pouco. Configurar **`pg_dump` diário** (formato `-Fc`), **enviar para fora do VPS** (object storage: S3/GCS/Backblaze), e idealmente **WAL archiving + PITR** (pgBackRest/WAL-G). Testar restauração — backup não testado não conta.
 
+**Decisao complementar de object storage (jul/2026):** para o MVP no VPS, o caminho preferencial passa a ser **MinIO self-hosted** junto da stack Docker/Coolify. Ele cobre fotos, assinaturas, NF/DC e anexos com API S3-compatible, sem amarrar a AJC a provedor externo agora. O inventario oficial de buckets fica em `docs/infra/BUCKETS-PENDENTES.md` e toda nova feature com upload deve registrar ali o bucket pendente antes de fechar a tarefa.
+
 **Alternativa se a operação for crítica desde o dia 1:** colocar **só o Postgres** num gerenciado externo (Neon/Supabase) e manter api+worker no VPS. Já entrega PITR/backups automáticos e adianta o desacoplamento que facilita a migração futura.
 
 ### Segurança (obrigatório)

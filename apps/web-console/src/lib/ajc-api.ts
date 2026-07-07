@@ -695,6 +695,8 @@ export type TmsDocumentoApi = {
   peso_total: number | null;
   total_volumes?: number | null;
   destinatario_nome?: string | null;
+  destinatario_documento?: string | null;
+  destinatario_telefone?: string | null;
   cliente_nome: string | null;
   lancado_por_nome: string | null;
 };
@@ -709,6 +711,10 @@ export type CreateTmsDocumentoManualInput = {
   pesoTotal?: number;
   totalVolumes?: number;
   destinatarioNome?: string;
+  destinatarioDocumento?: string;
+  destinatarioTelefone?: string;
+  arquivoUrl?: string;
+  arquivoHash?: string;
   clientUuid?: string;
 };
 
