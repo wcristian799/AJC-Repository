@@ -343,9 +343,9 @@ function TMS() {
               documentosSelecionados={documentosSelecionados}
               onOpen={() => setShowDocumentosModal(true)}
             />
-            <FormSelect label="Recebimento" value={novaCargaForm.tipoRecebimento} onChange={(tipoRecebimento) => setNovaCargaForm((prev) => ({ ...prev, tipoRecebimento: tipoRecebimento as NovaCargaForm["tipoRecebimento"] }))}>
-              <option value="porto_balsa">Porto/balsa</option>
-              <option value="direto">Agente</option>
+            <FormSelect label="Entrega" value={novaCargaForm.tipoRecebimento} onChange={(tipoRecebimento) => setNovaCargaForm((prev) => ({ ...prev, tipoRecebimento: tipoRecebimento as NovaCargaForm["tipoRecebimento"] }))}>
+              <option value="porto_balsa">Porto x Porto</option>
+              <option value="direto">Porto x Agente</option>
             </FormSelect>
           </div>
 
