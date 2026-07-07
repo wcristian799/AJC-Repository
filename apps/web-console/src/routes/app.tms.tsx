@@ -22,7 +22,6 @@ import {
   type ClienteApi,
   type EmbarcacaoApi,
   type NavegacaoViagemApi,
-  type TmsAgendamentoSlotApi,
   type TmsCargaApi,
   type TmsDocumentoApi,
   type TmsEntregaApi,
@@ -31,7 +30,6 @@ import {
   type TmsVolumeApi,
   type VeiculoEnvioApi,
   createTmsCarga,
-  listTmsAgendamentoDisponibilidade,
   listCidades,
   listEmbarcacoes,
   listClientes,
@@ -61,8 +59,6 @@ type NovaCargaForm = {
   cidadeOrigemSigla: string;
   cidadeDestinoSigla: string;
   tipoRecebimento: "porto_balsa" | "direto";
-  agendamentoData: string;
-  agendadoPara: string;
   valorCobrado: string;
 };
 
@@ -73,8 +69,6 @@ const initialNovaCargaForm: NovaCargaForm = {
   cidadeOrigemSigla: "",
   cidadeDestinoSigla: "",
   tipoRecebimento: "porto_balsa",
-  agendamentoData: "",
-  agendadoPara: "",
   valorCobrado: "",
 };
 
@@ -102,8 +96,6 @@ function TMS() {
   const [clienteBusca, setClienteBusca] = useState("");
   const [savingNovaCarga, setSavingNovaCarga] = useState(false);
   const [novaCargaError, setNovaCargaError] = useState<string | null>(null);
-  const [agendamentoSlots, setAgendamentoSlots] = useState<TmsAgendamentoSlotApi[]>([]);
-  const [loadingAgendamento, setLoadingAgendamento] = useState(false);
   const [data, setData] = useState<TmsData>({
     cargas: [],
     cidades: [],
@@ -175,38 +167,9 @@ function TMS() {
         clienteRemetenteId: prev.clienteRemetenteId,
         cidadeOrigemSigla: prev.cidadeOrigemSigla || paradas[0]?.sigla || viagem?.origemSigla || "",
         cidadeDestinoSigla: prev.cidadeDestinoSigla || paradas[paradas.length - 1]?.sigla || viagem?.destinoSigla || "",
-        agendamentoData: prev.agendamentoData || todayDateInput(),
       };
     });
   }, [data.viagens, data.clientes, data.cidades]);
-
-  useEffect(() => {
-    if (!showNovaCarga || !novaCargaForm.agendamentoData) return;
-    let active = true;
-    setLoadingAgendamento(true);
-    listTmsAgendamentoDisponibilidade(novaCargaForm.agendamentoData)
-      .then((slots) => {
-        if (!active) return;
-        const normalized = ensureArray(slots);
-        setAgendamentoSlots(normalized);
-        setNovaCargaForm((prev) => {
-          if (prev.agendamentoData !== novaCargaForm.agendamentoData) return prev;
-          const selected = normalized.find((slot) => slot.inicio === prev.agendadoPara);
-          if (selected && !selected.bloqueada) return prev;
-          const next = normalized.find((slot) => !slot.bloqueada);
-          return { ...prev, agendadoPara: next?.inicio ?? "" };
-        });
-      })
-      .catch(() => {
-        if (active) setAgendamentoSlots([]);
-      })
-      .finally(() => {
-        if (active) setLoadingAgendamento(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [showNovaCarga, novaCargaForm.agendamentoData]);
 
   const total = data.volumes.length;
   const conferidos = data.volumes.filter((v) => v.status !== "recebido").length;
@@ -227,7 +190,7 @@ function TMS() {
   const primeiroDocumentoSelecionado = documentosSelecionados[0];
   const viagemSelecionada = data.viagens.find((viagem) => viagem.id === novaCargaForm.viagemId) ?? null;
   const paradasViagem = useMemo(() => buildParadasViagem(viagemSelecionada, data.cidades), [viagemSelecionada, data.cidades]);
-  const novaCargaPreview = useMemo(() => buildNovaCargaPreview(data, novaCargaForm, clienteSelecionado, documentosSelecionados, agendamentoSlots), [data, novaCargaForm, clienteSelecionado, documentosSelecionados, agendamentoSlots]);
+  const novaCargaPreview = useMemo(() => buildNovaCargaPreview(data, novaCargaForm, clienteSelecionado, documentosSelecionados), [data, novaCargaForm, clienteSelecionado, documentosSelecionados]);
 
   async function submitNovaCarga(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -246,10 +209,6 @@ function TMS() {
     }
     if (!novaCargaForm.cidadeDestinoSigla.trim()) {
       setNovaCargaError("Informe o destino.");
-      return;
-    }
-    if (!novaCargaForm.agendadoPara) {
-      setNovaCargaError("Selecione uma janela de agendamento com vaga.");
       return;
     }
     setSavingNovaCarga(true);
@@ -271,7 +230,6 @@ function TMS() {
         numeroPedido: novaCargaPreview.pedido,
         documentoIds: novaCargaForm.documentoIds,
         numeroDocumento: primeiroDocumentoSelecionado?.numero ?? undefined,
-        agendadoPara: novaCargaForm.agendadoPara,
         clientUuid: crypto.randomUUID(),
       });
       const [cargas, documentos, volumes] = await Promise.all([listTmsCargas(), listTmsDocumentos(), listTmsVolumes()]);
@@ -282,8 +240,6 @@ function TMS() {
         clienteRemetenteId: "",
         cidadeOrigemSigla: prev.cidadeOrigemSigla,
         cidadeDestinoSigla: prev.cidadeDestinoSigla,
-        agendamentoData: prev.agendamentoData,
-        agendadoPara: prev.agendadoPara,
       }));
       setClienteBusca("");
       setShowDocumentosModal(false);
@@ -445,14 +401,6 @@ function TMS() {
               hint="primeira NF define o pedido"
             />
             <FormInput label="Frete cobrado" value={novaCargaForm.valorCobrado} onChange={(valorCobrado) => setNovaCargaForm((prev) => ({ ...prev, valorCobrado }))} placeholder="1200,00" inputMode="decimal" />
-            <AgendamentoRecebimentoField
-              data={novaCargaForm.agendamentoData}
-              agendadoPara={novaCargaForm.agendadoPara}
-              slots={agendamentoSlots}
-              loading={loadingAgendamento}
-              onDataChange={(agendamentoData) => setNovaCargaForm((prev) => ({ ...prev, agendamentoData, agendadoPara: "" }))}
-              onSlotChange={(agendadoPara) => setNovaCargaForm((prev) => ({ ...prev, agendadoPara }))}
-            />
           </div>
 
           {novaCargaError && <p className="mt-3 rounded-md bg-[color:var(--danger)]/10 px-3 py-2 text-xs text-[color:var(--danger)] ring-1 ring-[color:var(--danger)]/30">{novaCargaError}</p>}
@@ -796,56 +744,6 @@ function CidadeParadaSelect({
   );
 }
 
-function AgendamentoRecebimentoField({
-  data,
-  agendadoPara,
-  slots,
-  loading,
-  onDataChange,
-  onSlotChange,
-}: {
-  data: string;
-  agendadoPara: string;
-  slots: TmsAgendamentoSlotApi[];
-  loading: boolean;
-  onDataChange: (value: string) => void;
-  onSlotChange: (value: string) => void;
-}) {
-  const selected = slots.find((slot) => slot.inicio === agendadoPara);
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Agendamento de recebimento</p>
-        <span className="text-[9px] text-muted-foreground/70">max 5 caminhoes/janela</span>
-      </div>
-      <div className="mt-1 grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-2">
-        <input
-          type="date"
-          value={data}
-          onChange={(event) => onDataChange(event.target.value)}
-          className="h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors focus:border-[color:var(--brand)]"
-        />
-        <select
-          value={agendadoPara}
-          onChange={(event) => onSlotChange(event.target.value)}
-          disabled={loading || slots.length === 0}
-          className="h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground focus:border-[color:var(--brand)]"
-        >
-          <option value="">{loading ? "consultando..." : "Selecionar horario"}</option>
-          {slots.map((slot) => (
-            <option key={slot.inicio} value={slot.inicio} disabled={slot.bloqueada}>
-              {formatSlotTime(slot.inicio)} - {slot.disponiveis}/{slot.capacidade} vagas
-            </option>
-          ))}
-        </select>
-      </div>
-      <p className="mt-1 text-[10px] text-muted-foreground">
-        {selected ? `${selected.ocupadas} agendado(s), ${selected.disponiveis} vaga(s) livres.` : "Janelas de 30 minutos consultadas no sistema."}
-      </p>
-    </div>
-  );
-}
-
 function parseMoney(value: string) {
   const normalized = value.trim().replace(/\./g, "").replace(",", ".");
   if (!normalized) return undefined;
@@ -898,7 +796,6 @@ function buildNovaCargaPreview(
   form: NovaCargaForm,
   cliente: ClienteApi | null,
   documentosSelecionados: TmsDocumentoApi[],
-  agendamentoSlots: TmsAgendamentoSlotApi[],
 ) {
   const carga = data.cargas[0];
   const volume = data.volumes.find((v) => v.carga_id === carga?.id) ?? data.volumes[0];
@@ -919,7 +816,6 @@ function buildNovaCargaPreview(
       : "selecione NF/DC do cliente",
     peso: typeof pesoSelecionado === "number" ? `${pesoSelecionado.toLocaleString("pt-BR")} kg` : carga?.peso_total ? `${carga.peso_total.toLocaleString("pt-BR")} kg` : "aguardando NF/DC",
     valor: typeof valorSelecionado === "number" ? formatCurrency(valorSelecionado) : carga?.valor_declarado ? formatCurrency(carga.valor_declarado) : "aguardando NF/DC",
-    agenda: formatAgendamentoPreview(form.agendadoPara, agendamentoSlots),
   };
 }
 
@@ -938,15 +834,6 @@ function formatCurrency(value: number) {
 function safeShortId(...values: Array<unknown>) {
   const value = values.find((item) => typeof item === "string" && item.trim().length > 0);
   return typeof value === "string" ? value.slice(0, 8) : "sem-uuid";
-}
-
-function todayDateInput() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
 }
 
 function cidadeToOption(cidade: CidadeApi): CidadeOption {
@@ -969,24 +856,4 @@ function normalizeAllowedSigla(value: string | null | undefined, paradas: Cidade
   if (!sigla) return null;
   if (paradas.length === 0) return sigla;
   return paradas.some((parada) => parada.sigla === sigla) ? sigla : null;
-}
-
-function formatSlotTime(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatAgendamentoPreview(value: string, slots: TmsAgendamentoSlotApi[]) {
-  if (!value) return "selecione dia e horario";
-  const slot = slots.find((item) => item.inicio === value);
-  const date = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-  }).format(new Date(value));
-  const time = formatSlotTime(value);
-  return slot ? `${date}, ${time} - ${slot.disponiveis}/${slot.capacidade} vagas` : `${date}, ${time}`;
 }

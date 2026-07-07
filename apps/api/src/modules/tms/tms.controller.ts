@@ -36,7 +36,6 @@ export class TmsController {
     this.require(body.viagemId, 'viagemId');
     this.require(body.clienteRemetenteId, 'clienteRemetenteId');
     this.require(body.cidadeDestinoSigla, 'cidadeDestinoSigla');
-    this.require(body.agendadoPara, 'agendadoPara');
     return this.repository.createCarga(body, user.sub);
   }
 
@@ -51,6 +50,7 @@ export class TmsController {
   createDocumentoManual(@Body() body: CreateDocumentoManualInput, @CurrentUser() user: AuthTokenPayload) {
     this.require(body.clienteRemetenteId, 'clienteRemetenteId');
     this.require(body.numero, 'numero');
+    this.require(body.agendadoPara, 'agendadoPara');
     return this.repository.createDocumentoManual(body, user.sub);
   }
 
@@ -97,9 +97,8 @@ export class TmsController {
 
   @Post('paletes')
   @RequirePermissions('tms.criar')
-  createPalete(@Body() body: { codigo?: string; proprietario?: string; terceiroId?: string }) {
-    this.require(body.codigo, 'codigo');
-    return this.repository.createPalete(body.codigo!, body.proprietario, body.terceiroId);
+  createPalete(@Body() body: { proprietario?: string; terceiroId?: string }) {
+    return this.repository.createPalete(body.proprietario, body.terceiroId);
   }
 
   @Post('paletes/:id/alocacoes')

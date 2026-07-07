@@ -1,4 +1,5 @@
--- Agenda de recebimento da Nova Carga.
+-- Legado da primeira tentativa de agenda na Nova Carga.
+-- A regra ativa foi movida para documento_fiscal em 0023.
 -- Regra operacional MVP: janelas de 30 minutos, maximo 5 caminhoes por janela.
 
 BEGIN;

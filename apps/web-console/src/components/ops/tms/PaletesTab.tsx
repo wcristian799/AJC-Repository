@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Layers, Plus, MapPin } from "lucide-react";
 import {
   SectionHeader,
@@ -55,7 +55,7 @@ export function PaletesTab({
 }) {
   const [filtro, setFiltro] = useState<PaleteStatus | "todos">("todos");
   const [prop, setProp] = useState<"todos" | "AJC" | "terceiro">("todos");
-  const [draft, setDraft] = useState({ codigo: "", proprietario: "AJC" as "AJC" | "terceiro", terceiroId: "" });
+  const [draft, setDraft] = useState({ proprietario: "AJC" as "AJC" | "terceiro", terceiroId: "" });
   const [alocacao, setAlocacao] = useState<{ paleteId: string; viagemId: string; cidadeDestinoSigla: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -65,6 +65,10 @@ export function PaletesTab({
     (p) => (filtro === "todos" || p.status === filtro) && (prop === "todos" || p.proprietario === prop),
   );
   const viagensAtivas = (viagens ?? []).filter((viagem) => viagem.id && viagem.codigo);
+  const codigoPreview = useMemo(
+    () => nextPaleteCodigo(paletes ?? [], draft.proprietario),
+    [draft.proprietario, paletes],
+  );
 
   async function refreshPaletes(changed: TmsPaleteApi) {
     const current = paletes ?? [];
@@ -74,20 +78,15 @@ export function PaletesTab({
   }
 
   async function handleCreatePalete() {
-    if (!draft.codigo.trim()) {
-      setErro("Informe o codigo do palete.");
-      return;
-    }
     setSaving(true);
     setErro(null);
     try {
       const created = await createTmsPalete({
-        codigo: draft.codigo.trim(),
         proprietario: draft.proprietario,
         terceiroId: draft.proprietario === "terceiro" && draft.terceiroId.trim() ? draft.terceiroId.trim() : undefined,
       });
       await refreshPaletes(created);
-      setDraft({ codigo: "", proprietario: "AJC", terceiroId: "" });
+      setDraft({ proprietario: "AJC", terceiroId: "" });
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Nao foi possivel cadastrar o palete.");
     } finally {
@@ -148,19 +147,19 @@ export function PaletesTab({
       <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr]">
         <div className="surface-card grid gap-3 p-4 md:grid-cols-[1fr_150px_1fr]">
           <label className="space-y-1 text-xs text-muted-foreground">
-            Codigo do palete
+            Codigo automatico do palete
             <input
-              value={draft.codigo}
-              onChange={(event) => setDraft((prev) => ({ ...prev, codigo: event.target.value }))}
-              placeholder="AJC-024"
-              className="h-10 w-full rounded-md bg-[color:var(--muted)] px-3 font-mono text-xs text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
+              value={codigoPreview}
+              readOnly
+              aria-readonly="true"
+              className="h-10 w-full select-none rounded-md bg-[color:color-mix(in_oklab,var(--muted)_78%,var(--brand)_8%)] px-3 font-mono text-xs text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none"
             />
           </label>
           <label className="space-y-1 text-xs text-muted-foreground">
             Proprietario
             <select
               value={draft.proprietario}
-              onChange={(event) => setDraft((prev) => ({ ...prev, proprietario: event.target.value as "AJC" | "terceiro" }))}
+              onChange={(event) => setDraft((prev) => ({ ...prev, proprietario: event.target.value as "AJC" | "terceiro", terceiroId: event.target.value === "AJC" ? "" : prev.terceiroId }))}
               className="h-10 w-full rounded-md bg-[color:var(--muted)] px-3 text-xs text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
             >
               <option value="AJC">AJC</option>
@@ -270,6 +269,15 @@ export function PaletesTab({
       />
     </div>
   );
+}
+
+function nextPaleteCodigo(paletes: TmsPaleteApi[], proprietario: "AJC" | "terceiro") {
+  const prefix = proprietario === "terceiro" ? "TER" : "AJC";
+  const next = paletes.reduce((max, palete) => {
+    const match = palete.codigo.match(new RegExp(`^${prefix}-(\\d+)$`, "i"));
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0) + 1;
+  return `${prefix}-${String(next).padStart(3, "0")}`;
 }
 
 function mapPalete(palete: TmsPaleteApi, volumes: TmsVolumeApi[]): Palete {

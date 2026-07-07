@@ -6,6 +6,7 @@ import {
 import {
   conferirTmsDocumento,
   createTmsDocumentoManual,
+  listTmsAgendamentoDisponibilidade,
   listTmsCargas,
   listTmsDocumentos,
   listTmsVolumes,
@@ -13,6 +14,7 @@ import {
   type CidadeApi,
   type ClienteApi,
   type NavegacaoViagemApi,
+  type TmsAgendamentoSlotApi,
   type TmsCargaApi,
   type TmsDocumentoApi,
   type TmsVolumeApi,
@@ -46,6 +48,8 @@ type ManualDocumentoForm = {
   destinatarioNome: string;
   destinatarioDocumento: string;
   destinatarioTelefone: string;
+  agendamentoData: string;
+  agendadoPara: string;
   arquivoNome: string;
   arquivoUrl: string;
   arquivoHash: string;
@@ -100,11 +104,15 @@ export function NotasTab({
     destinatarioNome: "",
     destinatarioDocumento: "",
     destinatarioTelefone: "",
+    agendamentoData: todayDateInput(),
+    agendadoPara: "",
     arquivoNome: "",
     arquivoUrl: "",
     arquivoHash: "",
     arquivoTamanho: null,
   });
+  const [agendamentoSlots, setAgendamentoSlots] = useState<TmsAgendamentoSlotApi[]>([]);
+  const [loadingAgendamento, setLoadingAgendamento] = useState(false);
   const documentos = documentosApi?.length
     ? documentosApi.map(mapDocumentoNota)
     : cargas?.length ? cargas.map(mapCargaNota) : [];
@@ -122,6 +130,34 @@ export function NotasTab({
       };
     });
   }, [clientes]);
+
+  useEffect(() => {
+    if (!showManual || !manualForm.agendamentoData) return;
+    let active = true;
+    setLoadingAgendamento(true);
+    listTmsAgendamentoDisponibilidade(manualForm.agendamentoData)
+      .then((slots) => {
+        if (!active) return;
+        const normalized = Array.isArray(slots) ? slots : [];
+        setAgendamentoSlots(normalized);
+        setManualForm((prev) => {
+          if (prev.agendamentoData !== manualForm.agendamentoData) return prev;
+          const selected = normalized.find((slot) => slot.inicio === prev.agendadoPara);
+          if (selected && !selected.bloqueada) return prev;
+          const next = normalized.find((slot) => !slot.bloqueada);
+          return { ...prev, agendadoPara: next?.inicio ?? "" };
+        });
+      })
+      .catch(() => {
+        if (active) setAgendamentoSlots([]);
+      })
+      .finally(() => {
+        if (active) setLoadingAgendamento(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [showManual, manualForm.agendamentoData]);
 
   async function marcarDocumento(id: string, status: "conferida" | "divergente") {
     setSavingId(id);
@@ -171,6 +207,10 @@ export function NotasTab({
       setErro("Anexe o arquivo da nota fiscal para NF-e/NFC-e.");
       return;
     }
+    if (!manualForm.agendadoPara) {
+      setErro("Selecione uma janela de agendamento com vaga.");
+      return;
+    }
     const totalVolumes = Math.max(1, Number.parseInt(manualForm.totalVolumes, 10) || 1);
     setManualSaving(true);
     try {
@@ -185,6 +225,7 @@ export function NotasTab({
         valor: parseNumber(manualForm.valor),
         pesoTotal: parseNumber(manualForm.pesoTotal),
         totalVolumes,
+        agendadoPara: manualForm.agendadoPara,
         clientUuid: crypto.randomUUID(),
         destinatarioDocumento: manualForm.destinatarioDocumento.trim(),
         destinatarioTelefone: manualForm.destinatarioTelefone.trim(),
@@ -204,6 +245,8 @@ export function NotasTab({
         destinatarioTelefone: "",
         cidadeOrigemSigla: "",
         cidadeDestinoSigla: "",
+        agendamentoData: prev.agendamentoData,
+        agendadoPara: prev.agendadoPara,
         arquivoNome: "",
         arquivoUrl: "",
         arquivoHash: "",
@@ -320,6 +363,14 @@ export function NotasTab({
               <option value="">Selecionar</option>
               {(cidades ?? []).map((cidade) => <option key={`destino-${cidade.sigla}`} value={cidade.sigla}>{cidade.sigla} - {cidade.nome}</option>)}
             </FormSelect>
+            <AgendamentoRecebimentoField
+              data={manualForm.agendamentoData}
+              agendadoPara={manualForm.agendadoPara}
+              slots={agendamentoSlots}
+              loading={loadingAgendamento}
+              onDataChange={(agendamentoData) => setManualForm((prev) => ({ ...prev, agendamentoData, agendadoPara: "" }))}
+              onSlotChange={(agendadoPara) => setManualForm((prev) => ({ ...prev, agendadoPara }))}
+            />
             <FormInput label="Valor declarado" value={manualForm.valor} onChange={(value) => setManualForm((prev) => ({ ...prev, valor: value }))} inputMode="decimal" placeholder="0,00" />
             <FormInput label="Peso total" value={manualForm.pesoTotal} onChange={(value) => setManualForm((prev) => ({ ...prev, pesoTotal: value }))} inputMode="decimal" placeholder="kg" />
             <FormInput label="Volumes" value={manualForm.totalVolumes} onChange={(value) => setManualForm((prev) => ({ ...prev, totalVolumes: value }))} inputMode="numeric" />
@@ -500,13 +551,19 @@ function normalizeDocumentoStatus(status: string): NotaDCStatus {
 }
 
 function buildAgenda(documentos?: TmsDocumentoApi[], cargas?: TmsCargaApi[]) {
-  const fonte = documentos?.length
-    ? documentos.slice(0, 4).map((d, index) => ({
-      janela: nextJanela(index),
-      usados: Math.min(5, Math.max(1, Math.ceil(Number(d.peso_total ?? 1) / 20))),
-      empresa: d.cliente_nome ?? "Cliente nao informado",
-      doc: d.numero ?? d.carga_codigo ?? "sem numero",
-    }))
+  const agendados = (documentos ?? []).filter((documento) => documento.agendado_para);
+  const fonte = agendados.length
+    ? Object.values(agendados.reduce<Record<string, { janela: string; usados: number; empresa: string; doc: string }>>((acc, documento) => {
+      const key = documento.agendado_para!;
+      const atual = acc[key];
+      acc[key] = {
+        janela: formatAgendaDateTime(key),
+        usados: Math.min(5, (atual?.usados ?? 0) + 1),
+        empresa: documento.cliente_nome ?? atual?.empresa ?? "Cliente nao informado",
+        doc: atual ? `${atual.usados + 1} NF/DC` : documento.numero ?? documento.carga_codigo ?? "sem numero",
+      };
+      return acc;
+    }, {})).slice(0, 6)
     : cargas?.slice(0, 4).map((c, index) => ({
       janela: nextJanela(index),
       usados: Math.min(5, Math.max(1, Number(c.total_volumes ?? 1))),
@@ -589,6 +646,32 @@ function parseNumber(value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+function todayDateInput() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function formatSlotTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatAgendaDateTime(value: string) {
+  const date = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(new Date(value));
+  return `${date}, ${formatSlotTime(value)}`;
+}
+
 async function sha256Hex(file: File) {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest("SHA-256", buffer);
@@ -653,6 +736,56 @@ function FormSelect({
         {children}
       </select>
     </label>
+  );
+}
+
+function AgendamentoRecebimentoField({
+  data,
+  agendadoPara,
+  slots,
+  loading,
+  onDataChange,
+  onSlotChange,
+}: {
+  data: string;
+  agendadoPara: string;
+  slots: TmsAgendamentoSlotApi[];
+  loading: boolean;
+  onDataChange: (value: string) => void;
+  onSlotChange: (value: string) => void;
+}) {
+  const selected = slots.find((slot) => slot.inicio === agendadoPara);
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Agendamento</p>
+        <span className="text-[9px] text-muted-foreground/70">5 vagas / 30 min</span>
+      </div>
+      <div className="mt-1 grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-2">
+        <input
+          type="date"
+          value={data}
+          onChange={(event) => onDataChange(event.target.value)}
+          className="h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors focus:border-[color:var(--brand)]"
+        />
+        <select
+          value={agendadoPara}
+          onChange={(event) => onSlotChange(event.target.value)}
+          disabled={loading || slots.length === 0}
+          className="h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground focus:border-[color:var(--brand)]"
+        >
+          <option value="">{loading ? "consultando..." : "Selecionar horario"}</option>
+          {slots.map((slot) => (
+            <option key={slot.inicio} value={slot.inicio} disabled={slot.bloqueada}>
+              {formatSlotTime(slot.inicio)} - {slot.disponiveis}/{slot.capacidade} vagas
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        {selected ? `${selected.ocupadas} NF/DC agendada(s), ${selected.disponiveis} vaga(s) livres.` : "Consulta disponibilidade do sistema."}
+      </p>
+    </div>
   );
 }
 

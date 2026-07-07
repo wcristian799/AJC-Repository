@@ -621,7 +621,6 @@ export type TmsCargaApi = {
   cidade_origem_sigla: string | null;
   cidade_destino_sigla: string;
   tipo_recebimento: string | null;
-  agendado_para?: string | null;
   observacoes?: string | null;
   criado_em: string;
   viagem_codigo: string;
@@ -640,7 +639,6 @@ export type CreateEncomendaInput = {
   pesoTotal?: number;
   totalVolumes?: number;
   numeroDocumento?: string;
-  agendadoPara?: string;
   observacoes?: string;
   clientUuid?: string;
   documento?: {
@@ -697,6 +695,7 @@ export type TmsDocumentoApi = {
   arquivo_hash: string | null;
   status: "pendente" | "conferida" | "divergente" | string;
   origem: "cliente" | "agente" | "manual" | string | null;
+  agendado_para?: string | null;
   criado_em: string;
   atualizado_em: string;
   carga_codigo: string | null;
@@ -726,6 +725,7 @@ export type CreateTmsDocumentoManualInput = {
   destinatarioNome?: string;
   destinatarioDocumento?: string;
   destinatarioTelefone?: string;
+  agendadoPara?: string;
   arquivoUrl?: string;
   arquivoHash?: string;
   clientUuid?: string;
@@ -771,7 +771,6 @@ export type TmsPaleteApi = {
 };
 
 export type CreateTmsPaleteInput = {
-  codigo: string;
   proprietario?: "AJC" | "terceiro";
   terceiroId?: string;
 };

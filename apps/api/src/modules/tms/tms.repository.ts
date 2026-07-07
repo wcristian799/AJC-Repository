@@ -15,7 +15,7 @@ export class TmsRepository {
       SELECT c.id, c.codigo, c.numero_pedido, c.categoria, c.status::text, c.viagem_id,
              c.destinatario_nome, c.valor_declarado, c.valor_cobrado, c.peso_total,
              c.cidade_origem_sigla, c.cidade_destino_sigla, c.tipo_recebimento::text,
-             c.agendado_para, c.observacoes, c.criado_em,
+             c.observacoes, c.criado_em,
              v.codigo AS viagem_codigo, cr.nome AS remetente_nome,
              count(vol.id)::int AS total_volumes
       FROM carga c
@@ -52,12 +52,11 @@ export class TmsRepository {
         slots.inicio AS inicio,
         slots.inicio + interval '30 minutes' AS fim,
         5::int AS capacidade,
-        count(c.id)::int AS ocupadas
+        count(df.id)::int AS ocupadas
       FROM slots
-      LEFT JOIN carga c
-        ON c.agendado_para >= slots.inicio
-       AND c.agendado_para < slots.inicio + interval '30 minutes'
-       AND c.status <> 'cancelada'
+      LEFT JOIN documento_fiscal df
+        ON df.agendado_para >= slots.inicio
+       AND df.agendado_para < slots.inicio + interval '30 minutes'
       GROUP BY slots.inicio
       ORDER BY slots.inicio
       `,
@@ -111,7 +110,7 @@ export class TmsRepository {
       `
       SELECT df.id, df.tipo::text, df.numero, df.valor, df.cliente_id, df.carga_id,
              df.arquivo_url, df.arquivo_hash, df.status::text, df.origem,
-             df.criado_em, df.atualizado_em,
+             df.agendado_para, df.criado_em, df.atualizado_em,
              c.codigo AS carga_codigo, c.numero_pedido, c.tipo_recebimento::text,
              COALESCE(c.cidade_origem_sigla, ${manualOrigem}) AS cidade_origem_sigla,
              COALESCE(c.cidade_destino_sigla, ${manualDestino}) AS cidade_destino_sigla,
@@ -154,9 +153,13 @@ export class TmsRepository {
     if (!(await this.hasDocumentoManualPaymentField())) {
       throw new BadRequestException('Migration 0021_documento_manual_pagamento pendente no banco');
     }
+    if (!(await this.hasDocumentoAgendamentoField())) {
+      throw new BadRequestException('Migration 0023_documento_agendamento_recebimento pendente no banco');
+    }
     const totalVolumes = Math.max(1, input.totalVolumes ?? 1);
     const cidadeOrigemSigla = await this.normalizeCidadeSigla(input.cidadeOrigemSigla, 'origem');
     const cidadeDestinoSigla = await this.normalizeCidadeSigla(input.cidadeDestinoSigla, 'destino');
+    const agendadoPara = input.agendadoPara ? normalizeAgendaSlot(input.agendadoPara) : null;
     if (input.clientUuid) {
       const existing = await this.db.one<{ id: string }>(
         'SELECT entidade_id AS id FROM audit_evento WHERE entidade = $1 AND client_uuid = $2 LIMIT 1',
@@ -165,15 +168,30 @@ export class TmsRepository {
       if (existing?.id) return this.findDocumento(existing.id);
     }
     const documentoId = await this.db.tx(async (client) => {
+      if (agendadoPara) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`documento-agenda:${agendadoPara}`]);
+        const agenda = await client.query<{ ocupadas: string }>(
+          `
+          SELECT count(*)::text AS ocupadas
+          FROM documento_fiscal
+          WHERE agendado_para >= $1::timestamptz
+            AND agendado_para < $1::timestamptz + interval '30 minutes'
+          `,
+          [agendadoPara],
+        );
+        if (Number(agenda.rows[0]?.ocupadas ?? 0) >= 5) {
+          throw new BadRequestException('Janela de agendamento sem vagas');
+        }
+      }
       const result = await client.query<{ id: string }>(
         `
         INSERT INTO documento_fiscal (
           tipo, numero, valor, cliente_id, origem, lancado_por,
           cidade_origem_sigla, cidade_destino_sigla, peso_total, total_volumes,
           destinatario_nome, destinatario_documento, destinatario_telefone,
-          arquivo_url, arquivo_hash, pagamento
+          arquivo_url, arquivo_hash, pagamento, agendado_para
         )
-        VALUES ($1::tipo_documento_fiscal, $2, $3, $4, 'manual', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1::tipo_documento_fiscal, $2, $3, $4, 'manual', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING id
         `,
         [
@@ -192,6 +210,7 @@ export class TmsRepository {
           input.arquivoUrl?.trim() || null,
           input.arquivoHash?.trim() || null,
           input.pagamento ?? 'CIF',
+          agendadoPara,
         ],
       );
       const documentoId = result.rows[0]?.id;
@@ -216,6 +235,7 @@ export class TmsRepository {
             destinatarioNome: input.destinatarioNome?.trim() || null,
             destinatarioDocumento: input.destinatarioDocumento?.trim() || null,
             destinatarioTelefone: input.destinatarioTelefone?.trim() || null,
+            agendadoPara,
             arquivoUrl: input.arquivoUrl?.trim() || null,
             arquivoHash: input.arquivoHash?.trim() || null,
             pagamento: input.pagamento ?? 'CIF',
@@ -292,7 +312,7 @@ export class TmsRepository {
       `
       SELECT df.id, df.tipo::text, df.numero, df.valor, df.cliente_id, df.carga_id,
              df.arquivo_url, df.arquivo_hash, df.status::text, df.origem,
-             df.criado_em, df.atualizado_em,
+             df.agendado_para, df.criado_em, df.atualizado_em,
              c.codigo AS carga_codigo, c.numero_pedido, c.tipo_recebimento::text,
              COALESCE(c.cidade_origem_sigla, ${manualOrigem}) AS cidade_origem_sigla,
              COALESCE(c.cidade_destino_sigla, ${manualDestino}) AS cidade_destino_sigla,
@@ -370,6 +390,20 @@ export class TmsRepository {
     return row?.ready === true;
   }
 
+  private async hasDocumentoAgendamentoField() {
+    const row = await this.db.one<{ ready: boolean }>(
+      `
+      SELECT count(*) = 1 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'documento_fiscal'
+        AND column_name = $1
+      `,
+      ['agendado_para'],
+    );
+    return row?.ready === true;
+  }
+
   private async normalizeCidadeSigla(value: string | undefined, fieldLabel: 'origem' | 'destino') {
     const sigla = value?.trim().toUpperCase();
     if (!sigla) return null;
@@ -422,7 +456,6 @@ export class TmsRepository {
     const codigo = await this.nextCodigo(categoria === 'encomenda' ? 'ENC' : 'CG');
     const documentosSelecionados = await this.findDocumentosSelecionados(input.documentoIds, input.clienteRemetenteId);
     const primeiroDocumento = documentosSelecionados[0];
-    const agendadoPara = input.agendadoPara ? normalizeAgendaSlot(input.agendadoPara) : null;
     const numeroPedido = input.numeroPedido ?? (await this.buildPedido(
       input.clienteRemetenteId,
       primeiroDocumento?.numero ?? input.documento?.numero ?? input.numeroDocumento,
@@ -430,31 +463,15 @@ export class TmsRepository {
     ));
 
     const cargaId = await this.db.tx(async (client) => {
-      if (agendadoPara) {
-        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`carga-agenda:${agendadoPara}`]);
-        const agenda = await client.query<{ ocupadas: string }>(
-          `
-          SELECT count(*)::text AS ocupadas
-          FROM carga
-          WHERE agendado_para >= $1::timestamptz
-            AND agendado_para < $1::timestamptz + interval '30 minutes'
-            AND status <> 'cancelada'
-          `,
-          [agendadoPara],
-        );
-        if (Number(agenda.rows[0]?.ocupadas ?? 0) >= 5) {
-          throw new BadRequestException('Janela de agendamento sem vagas');
-        }
-      }
       const inserted = await client.query<{ id: string }>(
         `
         INSERT INTO carga (
           codigo, numero_pedido, categoria, viagem_id, cliente_remetente_id, destinatario_id,
           destinatario_nome, cidade_origem_sigla, cidade_destino_sigla, tipo_recebimento,
-          valor_declarado, valor_cobrado, peso_total, agendado_para, client_uuid, criado_por, atualizado_por, observacoes
+          valor_declarado, valor_cobrado, peso_total, client_uuid, criado_por, atualizado_por, observacoes
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::tipo_recebimento_carga,
-                $11, $12, $13, $14, $15, $16, $16, $17)
+                $11, $12, $13, $14, $15, $15, $16)
         ON CONFLICT (client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING
         RETURNING id
         `,
@@ -472,7 +489,6 @@ export class TmsRepository {
           input.valorDeclarado ?? null,
           input.valorCobrado ?? null,
           input.pesoTotal ?? null,
-          agendadoPara,
           input.clientUuid ?? null,
           userId,
           input.observacoes ?? null,
@@ -540,7 +556,6 @@ export class TmsRepository {
             clienteRemetenteId: input.clienteRemetenteId,
             cidadeOrigemSigla: input.cidadeOrigemSigla ?? null,
             cidadeDestinoSigla: input.cidadeDestinoSigla,
-            agendadoPara,
             totalVolumes,
             documentoIds: documentosSelecionados.map((documento) => documento.id),
             documento: primeiroDocumento
@@ -655,17 +670,35 @@ export class TmsRepository {
     return result.rows;
   }
 
-  async createPalete(codigo: string, proprietario = 'AJC', terceiroId?: string) {
-    const row = await this.db.one(
-      `
-      INSERT INTO palete (codigo, proprietario, terceiro_id)
-      VALUES ($1, $2::proprietario_palete, $3)
-      ON CONFLICT (codigo) DO UPDATE SET atualizado_em = now()
-      RETURNING *
-      `,
-      [codigo, proprietario, terceiroId ?? null],
-    );
-    return row;
+  async createPalete(proprietario = 'AJC', terceiroId?: string) {
+    const owner = proprietario === 'terceiro' ? 'terceiro' : 'AJC';
+    const prefix = owner === 'terceiro' ? 'TER' : 'AJC';
+
+    return this.db.tx(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`palete_codigo_${prefix}`]);
+      const sequence = await client.query<{ next_number: string }>(
+        `
+        SELECT COALESCE(
+          max((regexp_match(codigo, $1))[1]::int),
+          0
+        ) + 1 AS next_number
+        FROM palete
+        WHERE codigo ~ $2
+        `,
+        [`^${prefix}-(\\d+)$`, `^${prefix}-[0-9]+$`],
+      );
+      const nextNumber = Number(sequence.rows[0]?.next_number ?? 1);
+      const codigo = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+      const row = await client.query(
+        `
+        INSERT INTO palete (codigo, proprietario, terceiro_id)
+        VALUES ($1, $2::proprietario_palete, $3)
+        RETURNING *
+        `,
+        [codigo, owner, terceiroId ?? null],
+      );
+      return row.rows[0];
+    });
   }
 
   async allocatePalete(paleteId: string, input: AllocatePaleteInput, userId: string) {

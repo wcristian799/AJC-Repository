@@ -23,7 +23,6 @@ export interface CreateCargaInput {
   numeroDocumento?: string;
   numeroPedido?: string;
   documentoIds?: string[];
-  agendadoPara?: string;
   observacoes?: string;
   clientUuid?: string;
   documento?: DocumentoFiscalInput;
@@ -97,6 +96,7 @@ export interface CreateDocumentoManualInput {
   destinatarioNome?: string;
   destinatarioDocumento?: string;
   destinatarioTelefone?: string;
+  agendadoPara?: string;
   arquivoUrl?: string;
   arquivoHash?: string;
   clientUuid?: string;
