@@ -65,6 +65,8 @@ export class TmsRepository {
     const hasManualRecipientFields = await this.hasDocumentoManualRecipientFields();
     const manualDestinatarioDocumento = hasManualRecipientFields ? 'df.destinatario_documento' : 'NULL::varchar';
     const manualDestinatarioTelefone = hasManualRecipientFields ? 'df.destinatario_telefone' : 'NULL::varchar';
+    const hasManualPaymentField = await this.hasDocumentoManualPaymentField();
+    const manualPagamento = hasManualPaymentField ? "COALESCE(df.pagamento, 'CIF')" : "'CIF'";
     const result = await this.db.query(
       `
       SELECT df.id, df.tipo::text, df.numero, df.valor, df.cliente_id, df.carga_id,
@@ -78,6 +80,7 @@ export class TmsRepository {
              COALESCE(c.destinatario_nome, ${manualDestinatario}) AS destinatario_nome,
              ${manualDestinatarioDocumento} AS destinatario_documento,
              ${manualDestinatarioTelefone} AS destinatario_telefone,
+             ${manualPagamento} AS pagamento,
              cli.nome AS cliente_nome,
              u.nome AS lancado_por_nome
       FROM documento_fiscal df
@@ -108,6 +111,9 @@ export class TmsRepository {
     if (!(await this.hasDocumentoManualRecipientFields())) {
       throw new BadRequestException('Migration 0020_documento_manual_destinatario pendente no banco');
     }
+    if (!(await this.hasDocumentoManualPaymentField())) {
+      throw new BadRequestException('Migration 0021_documento_manual_pagamento pendente no banco');
+    }
     const totalVolumes = Math.max(1, input.totalVolumes ?? 1);
     const cidadeOrigemSigla = await this.normalizeCidadeSigla(input.cidadeOrigemSigla, 'origem');
     const cidadeDestinoSigla = await this.normalizeCidadeSigla(input.cidadeDestinoSigla, 'destino');
@@ -125,9 +131,9 @@ export class TmsRepository {
           tipo, numero, valor, cliente_id, origem, lancado_por,
           cidade_origem_sigla, cidade_destino_sigla, peso_total, total_volumes,
           destinatario_nome, destinatario_documento, destinatario_telefone,
-          arquivo_url, arquivo_hash
+          arquivo_url, arquivo_hash, pagamento
         )
-        VALUES ($1::tipo_documento_fiscal, $2, $3, $4, 'manual', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1::tipo_documento_fiscal, $2, $3, $4, 'manual', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING id
         `,
         [
@@ -145,6 +151,7 @@ export class TmsRepository {
           input.destinatarioTelefone?.trim() || null,
           input.arquivoUrl?.trim() || null,
           input.arquivoHash?.trim() || null,
+          input.pagamento ?? 'CIF',
         ],
       );
       const documentoId = result.rows[0]?.id;
@@ -171,6 +178,7 @@ export class TmsRepository {
             destinatarioTelefone: input.destinatarioTelefone?.trim() || null,
             arquivoUrl: input.arquivoUrl?.trim() || null,
             arquivoHash: input.arquivoHash?.trim() || null,
+            pagamento: input.pagamento ?? 'CIF',
             origem: 'manual',
           }),
           input.clientUuid ?? null,
@@ -238,6 +246,8 @@ export class TmsRepository {
     const hasManualRecipientFields = await this.hasDocumentoManualRecipientFields();
     const manualDestinatarioDocumento = hasManualRecipientFields ? 'df.destinatario_documento' : 'NULL::varchar';
     const manualDestinatarioTelefone = hasManualRecipientFields ? 'df.destinatario_telefone' : 'NULL::varchar';
+    const hasManualPaymentField = await this.hasDocumentoManualPaymentField();
+    const manualPagamento = hasManualPaymentField ? "COALESCE(df.pagamento, 'CIF')" : "'CIF'";
     const result = await this.db.query(
       `
       SELECT df.id, df.tipo::text, df.numero, df.valor, df.cliente_id, df.carga_id,
@@ -251,6 +261,7 @@ export class TmsRepository {
              COALESCE(c.destinatario_nome, ${manualDestinatario}) AS destinatario_nome,
              ${manualDestinatarioDocumento} AS destinatario_documento,
              ${manualDestinatarioTelefone} AS destinatario_telefone,
+             ${manualPagamento} AS pagamento,
              cli.nome AS cliente_nome,
              u.nome AS lancado_por_nome
       FROM documento_fiscal df
@@ -301,6 +312,20 @@ export class TmsRepository {
         AND column_name = ANY($1::text[])
       `,
       [['destinatario_documento', 'destinatario_telefone']],
+    );
+    return row?.ready === true;
+  }
+
+  private async hasDocumentoManualPaymentField() {
+    const row = await this.db.one<{ ready: boolean }>(
+      `
+      SELECT count(*) = 1 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'documento_fiscal'
+        AND column_name = $1
+      `,
+      ['pagamento'],
     );
     return row?.ready === true;
   }

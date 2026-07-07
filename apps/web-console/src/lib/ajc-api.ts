@@ -677,6 +677,7 @@ export type TmsVolumeApi = {
 export type TmsDocumentoApi = {
   id: string;
   tipo: "NFe" | "NFCe" | "DC" | string;
+  pagamento?: "CIF" | "FOB" | string | null;
   numero: string | null;
   valor: number | null;
   cliente_id: string | null;
@@ -704,6 +705,7 @@ export type TmsDocumentoApi = {
 export type CreateTmsDocumentoManualInput = {
   clienteRemetenteId: string;
   tipo: "NFe" | "NFCe" | "DC";
+  pagamento?: "CIF" | "FOB";
   numero: string;
   cidadeOrigemSigla?: string;
   cidadeDestinoSigla?: string;

@@ -22,6 +22,7 @@ type NotaDCStatus = "pendente" | "conferida" | "divergente";
 type NotaDC = {
   id: string;
   tipo: "DC" | "NFe";
+  pagamento: "CIF" | "FOB";
   numero: string;
   cliente: string;
   valor: number;
@@ -35,6 +36,7 @@ type NotaDC = {
 type ManualDocumentoForm = {
   clienteRemetenteId: string;
   tipo: "NFe" | "NFCe" | "DC";
+  pagamento: "CIF" | "FOB";
   numero: string;
   cidadeOrigemSigla: string;
   cidadeDestinoSigla: string;
@@ -88,6 +90,7 @@ export function NotasTab({
   const [manualForm, setManualForm] = useState<ManualDocumentoForm>({
     clienteRemetenteId: "",
     tipo: "NFe",
+    pagamento: "CIF",
     numero: "",
     cidadeOrigemSigla: "",
     cidadeDestinoSigla: "",
@@ -177,6 +180,7 @@ export function NotasTab({
         cidadeOrigemSigla: manualForm.cidadeOrigemSigla.trim().toUpperCase() || undefined,
         cidadeDestinoSigla: manualForm.cidadeDestinoSigla.trim().toUpperCase() || undefined,
         tipo: manualForm.tipo,
+        pagamento: manualForm.pagamento,
         numero: manualForm.numero.trim(),
         valor: parseNumber(manualForm.valor),
         pesoTotal: parseNumber(manualForm.pesoTotal),
@@ -191,6 +195,7 @@ export function NotasTab({
       setManualForm((prev) => ({
         ...prev,
         numero: "",
+        pagamento: "CIF",
         valor: "",
         pesoTotal: "",
         totalVolumes: "1",
@@ -302,6 +307,10 @@ export function NotasTab({
               <option value="NFCe">NFC-e</option>
               <option value="DC">Declaracao de Conteudo</option>
             </FormSelect>
+            <FormSelect label="Pagamento" value={manualForm.pagamento} onChange={(value) => setManualForm((prev) => ({ ...prev, pagamento: value as ManualDocumentoForm["pagamento"] }))}>
+              <option value="CIF">CIF</option>
+              <option value="FOB">FOB</option>
+            </FormSelect>
             <FormInput label="Numero NF/DC" value={manualForm.numero} onChange={(value) => setManualForm((prev) => ({ ...prev, numero: value }))} placeholder="NF/DC" />
             <FormSelect label="Origem" value={manualForm.cidadeOrigemSigla} onChange={(value) => setManualForm((prev) => ({ ...prev, cidadeOrigemSigla: value }))}>
               <option value="">Selecionar</option>
@@ -352,7 +361,7 @@ export function NotasTab({
           { key: "tipo", header: "Tipo", render: (r) => <Tag tone={r.tipo === "DC" ? "info" : "brand"}>{r.tipo}</Tag> },
           { key: "numero", header: "Numero / chave", render: (r) => <span className="font-mono text-[11px] text-muted-foreground">{r.numero}</span> },
           { key: "cliente", header: "Cliente", render: (r) => <span className="font-medium">{r.cliente}</span> },
-          { key: "modalidade", header: "CIF/FOB", render: (r) => <Tag tone={r.tipo === "DC" ? "warning" : "info"}>{r.tipo === "DC" ? "FOB" : "CIF"}</Tag> },
+          { key: "modalidade", header: "CIF/FOB", render: (r) => <Tag tone={r.pagamento === "FOB" ? "warning" : "info"}>{r.pagamento}</Tag> },
           { key: "valor", header: "Valor", align: "right", render: (r) => <span className="font-mono text-xs">{brl(r.valor)}</span> },
           { key: "cargaId", header: "Carga", render: (r) => r.cargaId
             ? <span className="font-mono text-xs">{r.cargaId}</span>
@@ -457,6 +466,7 @@ function mapDocumentoNota(doc: TmsDocumentoApi): NotaDC {
   return {
     id: doc.id,
     tipo: doc.tipo === "DC" ? "DC" : "NFe",
+    pagamento: doc.pagamento === "FOB" ? "FOB" : "CIF",
     numero: doc.numero ?? doc.numero_pedido ?? doc.carga_codigo ?? doc.id,
     cliente: doc.cliente_nome ?? "Cliente nao informado",
     valor: doc.valor ?? 0,
@@ -472,6 +482,7 @@ function mapCargaNota(carga: TmsCargaApi): NotaDC {
   return {
     id: carga.id,
     tipo: carga.numero_pedido?.toUpperCase().includes("DC") ? "DC" : "NFe",
+    pagamento: "CIF",
     numero: carga.numero_pedido ?? carga.codigo ?? carga.id,
     cliente: carga.remetente_nome,
     valor: carga.valor_declarado ?? 0,

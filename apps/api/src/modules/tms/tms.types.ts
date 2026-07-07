@@ -86,6 +86,7 @@ export interface ConferirDocumentoInput {
 export interface CreateDocumentoManualInput {
   clienteRemetenteId: string;
   tipo: 'NFe' | 'NFCe' | 'DC';
+  pagamento?: 'CIF' | 'FOB';
   numero: string;
   cidadeOrigemSigla?: string;
   cidadeDestinoSigla?: string;
