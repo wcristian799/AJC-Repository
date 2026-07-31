@@ -345,7 +345,7 @@ function Navegacao() {
 
       {tab === "viagens" && (
         <div className="mt-4">
-          <DataTable
+          <DataTable<NavegacaoViagemApi>
             rows={filteredTrips}
             onRowClick={(trip) => {
               setSelectedId(trip.id);
@@ -423,7 +423,7 @@ function Navegacao() {
               {notifying ? "Registrando…" : "Notificar pendentes"}
             </PrimaryButton>
           </div>
-          <DataTable
+          <DataTable<NavegacaoEscalaColaboradorApi>
             rows={escalas}
             columns={[
               {
@@ -484,26 +484,6 @@ function Navegacao() {
                   </StatusChip>
                 ),
               },
-              {
-                key: "actions",
-                header: "Ações",
-                align: "right",
-                render: (boat) => (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setEditingBoatId(boat.id);
-                      setBoatModal(true);
-                    }}
-                    className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs font-medium text-foreground/80 transition-colors hover:bg-[color:var(--accent)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
-                    aria-label={`Editar embarcação ${boat.nome}`}
-                  >
-                    <PenLine className="h-3.5 w-3.5" strokeWidth={1.8} />
-                    Editar
-                  </button>
-                ),
-              },
             ]}
           />
         </div>
@@ -511,7 +491,7 @@ function Navegacao() {
 
       {tab === "embarcacoes" && (
         <div className="mt-4">
-          <DataTable
+          <DataTable<EmbarcacaoApi>
             rows={embarcacoes}
             onRowClick={(boat) => {
               setEditingBoatId(boat.id);
@@ -564,6 +544,26 @@ function Navegacao() {
                   >
                     {boat.status}
                   </StatusChip>
+                ),
+              },
+              {
+                key: "actions",
+                header: "Ações",
+                align: "right",
+                render: (boat) => (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditingBoatId(boat.id);
+                      setBoatModal(true);
+                    }}
+                    className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs font-medium text-foreground/80 transition-colors hover:bg-[color:var(--accent)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
+                    aria-label={`Editar embarcação ${boat.nome}`}
+                  >
+                    <PenLine className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    Editar
+                  </button>
                 ),
               },
             ]}
@@ -1086,7 +1086,7 @@ function TripFormModal({
         observacoes: notes || undefined,
         rotaTemplateId: route.id,
         configVersaoId: route.configVersaoId,
-        cicloUuid,
+        cicloUuid: cycleUuid,
         escalas: stops.map((stop) => ({
           cidadeSigla: stop.cidadeSigla,
           dataHoraPrevista: stop.date.toISOString(),
@@ -1096,7 +1096,9 @@ function TripFormModal({
         ? await updateNavegacaoViagem(trip.id, payload)
         : await createNavegacaoViagem({ ...payload, clientUuid: crypto.randomUUID() });
       let linked: NavegacaoViagemApi | undefined;
-      if (linkedId && cycleUuid) linked = await updateNavegacaoViagem(linkedId, { cicloUuid });
+      if (linkedId && cycleUuid) {
+        linked = await updateNavegacaoViagem(linkedId, { cicloUuid: cycleUuid });
+      }
       onSaved(saved, linked);
     } catch (err) {
       setError(apiMessage(err));

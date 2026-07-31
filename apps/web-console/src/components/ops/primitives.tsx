@@ -347,16 +347,19 @@ export function PrimaryButton({
 }
 
 export function GhostButton({
-  children, onClick, icon: Icon,
+  children, onClick, icon: Icon, disabled,
 }: {
   children: ReactNode;
   onClick?: () => void;
   icon?: ComponentType<{ className?: string; strokeWidth?: number }>;
+  disabled?: boolean;
 }) {
   return (
     <button
+      type="button"
+      disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-10 items-center gap-2 rounded-md bg-[color:var(--surface-elev)] px-4 text-sm font-medium text-foreground/85 ring-1 ring-[color:var(--hairline)] backdrop-blur-md transition-colors hover:bg-[color:var(--accent)] hover:text-foreground"
+      className="inline-flex h-10 items-center gap-2 rounded-md bg-[color:var(--surface-elev)] px-4 text-sm font-medium text-foreground/85 ring-1 ring-[color:var(--hairline)] backdrop-blur-md transition-colors hover:bg-[color:var(--accent)] hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
     >
       {Icon && <Icon className="h-4 w-4" strokeWidth={1.7} />}
       {children}
