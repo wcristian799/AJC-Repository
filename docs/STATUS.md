@@ -1,5 +1,38 @@
 # STATUS — Diário vivo do projeto AJC
 
+## Trabalho 2026-07-31 - Etapa 01 da validação de telas: Início operacional
+- Contexto: a Etapa 01 do documento vivo de 09/jul exige manutenção explícita de alertas e caixas em tempo real separados por Porto, Embarcações e Agentes, com consistência entre os indicadores e as fontes operacionais.
+- O que foi feito: `/app/inicio` ganhou uma Central de Alertas completa sobre a API real, com cadastro, edição, resolução, reabertura, busca, histórico, severidade, módulo, RBAC e distinção entre alertas manuais e alertas automáticos derivados das fontes operacionais. Nenhuma ação usa mock ou altera dados apenas no navegador.
+- Dashboard resiliente: a carga das oito fontes passou a usar tolerância a falhas parciais, sinalização das fontes indisponíveis, horário da última atualização, atualização manual e polling a cada 30 segundos. Viagens planejadas deixaram de ser apresentadas como viagens em curso; indicadores radiais sem dado real e a ação sem comportamento `Escuta operacional` foram removidos.
+- Caixas: a visão usa dados reais e sempre apresenta Porto, Embarcações, Agentes e Apoio, inclusive zerados, com filtro, quantidade, saldo, entradas, saídas, movimento líquido, operador e situação de cada caixa.
+- QA: Prettier e ESLint focados nos arquivos alterados sem achados; `bun run build` exit 0; inspeção no navegador autenticado em desktop e mobile, sem overflow horizontal e sem mutação de dados de produção.
+- Decisão pendente antes de considerar o fluxo de caixa totalmente encerrado: existe `POST /api/caixa/abrir`, mas não há interface de abertura e o modelo atual guarda apenas `operador_id`, `tipo` e `referencia` livres. É necessário decidir o vínculo formal do caixa com Porto/cidade, Embarcação ou Agente, mantendo operador como responsável separado; depois implementar migration, contrato da API e abertura/edição em Financeiro. Não será criado um cadastro baseado em texto livre porque isso impediria consistência operacional.
+- Pendência técnica separada: o relógio ao vivo da tela de login gera hydration mismatch entre SSR e cliente quando o segundo muda durante a hidratação. Corrigir sem alterar o visual aprovado do login.
+- Próximo passo: fechar a decisão de propriedade/origem dos caixas e concluir essa fatia vertical; em seguida avançar para a Etapa 02 do documento vivo.
+## Trabalho 2026-07-25 - Catalogo Excel de automoveis no Brasil (2000+)
+- Contexto: solicitado um Excel amplo de marcas e modelos de carros presentes no Brasil desde o ano/modelo 2000 para apoiar a construcao de uma tabela propria de precos.
+- O que foi feito: gerado `outputs/019f9b7f-8ca7-7e13-b542-097301aec487/catalogo-carros-brasil-2000-mais.xlsx` a partir do snapshot publico fipeX/FIPE de julho/2026, filtrando `tipo_veiculo=carro` e ano/modelo a partir de 2000, com inclusao das versoes Zero KM disponiveis.
+- Conteudo: 24.040 combinacoes de marca, modelo/versao e ano/modelo; 90 marcas; 6.394 modelos/versoes; combustivel, codigo FIPE, preco FIPE de referencia e colunas editaveis para preco proprio e observacoes. O workbook inclui abas `Leia-me`, `Catalogo` e `Resumo por marca`.
+- Limite documentado: a lista representa o catalogo FIPE vigente, nao a frota individual registrada/circulante no Brasil; motos e caminhoes ficaram fora do recorte.
+- QA: dados-chave inspecionados, varredura sem erros de formula e renderizacao visual conferida nas tres abas.
+- Proximo passo: se este catalogo for incorporado ao modulo Veiculos/Maquinas do AJC, definir regra de importacao/versionamento mensal e separar preco FIPE de preco operacional configurado pela empresa.
+## Trabalho 2026-07-25 - Documento vivo da validação de telas de 09/jul
+- Contexto: o cliente enviou `VALIDAÇÃO DO CORE DE TODAS AS TELAS 09.07 (1).docx` com novas correções, porém o arquivo original estava sem estrutura editorial adequada para execução e acompanhamento.
+- O que foi feito: criado `docs/feedback/2026-07-09-validacao-core-todas-telas-diagramado.docx`, preservando todos os 176 parágrafos não vazios do Word original e mantendo grafia, pontuação, caixa alta, marcações `OKOKOK`, exclusões e dependências.
+- Camadas adicionadas: capa e metadados, guia de uso, leitura de status, mapa de 23 áreas/telas, solicitações originais destacadas, requisitos consolidados, critérios de aceite, protocolo para novas alterações e transcrição integral preservada ao final.
+- QA documental: validação automática confirmou que todo o texto original está presente; auditoria de acessibilidade ficou sem achados altos após os ajustes finais. O renderizador oficial de DOCX não pôde executar porque LibreOffice/Word não está instalado nesta máquina, portanto a conferência foi estrutural, sem validação visual rasterizada.
+- Governança: este DOCX passa a ser o documento vivo e a fonte mais recente para a rodada de alterações de telas de 09/jul; a validação consolidada de 25/jun permanece como histórico.
+- Próximo passo: continuar adicionando ao mesmo documento os novos pontos que o cliente enviar, sempre preservando a fala original e acrescentando tela, requisito, critério de aceite, dependência e evidência de fechamento.
+
+## Trabalho 2026-07-23 - Modelo de implantação operacional por setores
+- Contexto: foi solicitado um documento de passo a passo para implantar o sistema na operação real da AJC, cobrindo setores/módulos, usuários, login mobile, equipamentos, impressoras térmicas Bluetooth e todas as configurações necessárias.
+- O que foi feito: criado `docs/implementacao/01-MODELO-IMPLANTACAO-OPERACIONAL-AJC.md`, organizado em ondas desde governança e levantamento até infraestrutura, cadastros/configurações, equipamentos, implantação por setor, migração, homologação, treinamento, go-live e operação assistida.
+- Conteúdo operacional: o playbook inclui modelos preenchíveis para responsáveis, unidades, usuários, matriz de acesso, inventário de equipamentos, impressoras, migração, treinamento, contingência, aceite por setor e incidentes. Os setores detalhados incluem Administração/Cadastros, Navegação, CRM/Comercial, Vendas/PDV/Portal/Totem, TMS administrativo, Portaria, Conferência porto/balsa, Encomendas, Veículos/Máquinas, Entregas, Bilheteiro, Prestação de Contas, Financeiro mínimo e Diretoria.
+- Governança de escopo: gateway, BP-e/SEFAZ, WhatsApp/SMS, Bluetooth real, offline-sync completo, GPS background e buckets MinIO foram marcados conforme seu estado real, sem apresentar adapters/stubs como integrações concluídas. Financeiro completo, Compras e DRE permanecem pós-MVP.
+- Documentação estrutural: o novo playbook foi adicionado ao mapa de documentação do `AGENTS.md`.
+- Próximo passo recomendado: realizar uma reunião de implantação com os donos de cada setor e preencher primeiro as seções 3, 4, 6.1, 7.1 e 14; depois escolher a unidade e a viagem-piloto para transformar o modelo em cronograma executivo com datas e responsáveis.
+- Entrega em PDF: gerado `docs/implementacao/Modelo-Implantacao-Operacional-AJC.pdf` em A4 paisagem, com capa, sumário navegável, 67 páginas, tabelas formatadas, cabeçalhos e paginação; conteúdo textual e amostras visuais conferidos.
+
 ## Trabalho 2026-07-07 - Agenda movida da Nova Carga para NF/DC
 - Contexto: a agenda de recebimento foi inicialmente implementada em Nova Carga, mas a regra operacional correta e reservar a janela na NF/DC/documento, antes da formacao da carga.
 - O que foi corrigido: `/app/tms` removeu o seletor de agendamento da Nova Carga; `NotasTab` agora coloca o seletor de dia + horario no `Lancamento manual de NF/DC`, consulta disponibilidade real e envia `agendadoPara` no `POST /api/tms/documentos/manual`.
@@ -706,3 +739,15 @@ Integrar front?back removendo mocks residuais por m�dulo (prioridade: `/campo/*`
 - **Pagamento + fiscal do portal:** escolher gateway e mapear o caminho do BP-e. PFX recebido, mas ainda depende de senha/validade/credenciamento/fornecedor fiscal. Derriscar antes de construir o portal funcional.
 - GPS background em celular real (paralelo; afeta só rastreamento).
 - Impressão Bluetooth com a impressora definida.
+
+## Trabalho 2026-07-31 - Etapa 02: navegacao, calendario e programacao configuravel
+- Fonte: Etapa 02 do documento vivo de 09/jul + `FAQ 2026 (1).pdf` recebido em 31/jul. O FAQ foi tratado como carga inicial; suas divergencias internas de horario permanecem sinalizadas para revisao humana no painel.
+- Configuracao operacional: `Cadastros` ganhou a area `Configuracoes operacionais`, com rotas, origem/destino, dia/hora de saida, embarcacao padrao, intertrechos por offset, ativacao, revisao de divergencias e publicacao versionada com confirmacao. Nenhum horario, parada ou embarcacao padrao e inferido pelo front.
+- Persistencia: migration `0024_navegacao_configuravel_calendario.sql` cria a chave versionada `navegacao_rotas_horarios`, importa seis sentidos do FAQ e adiciona a `viagem` o snapshot da versao/template, `ciclo_uuid` e motivo de cancelamento. Banco local conferido em 24/24 migrations.
+- Backend: novas viagens exigem rota e versao validas; embarcacoes fora de operacao e sobreposicao de agenda sao bloqueadas. O ciclo operacional possui transicoes auditaveis `iniciar`, `concluir` e `cancelar`, esta ultima com motivo. Somente viagens planejadas podem ser editadas.
+- UX: `/app/navegacao` foi reconstruida com agenda semanal por embarcacao, filtros reais, barras multi-dia, abertura de detalhe sem perder a agenda, linha do tempo prevista/real dos intertrechos, vinculo opcional de ida/volta e formulario que calcula chegada e paradas a partir da configuracao publicada. Lista, agenda, escalas e frota usam apenas API real.
+- Embarcacoes: cadastro/edicao agora permite escolher classes suportadas e informar capacidades reais; ausencia de capacidade e exibida como `nao informada`, sem inventar zero ou usar ocupacao por cabine como lotacao.
+- Infra de desenvolvimento: `infra/apply-wsl.sh` passou a usar o runner oficial `schema_migrations`, evitando reaplicacao destrutiva de SQL historico. O proxy de desenvolvimento aceita `VITE_DEV_API_PROXY` sem mudar o destino padrao de producao.
+- QA: backend build verde; 5 testes Jest verdes; frontend SSR/Vercel build verde; API local retornou 6 rotas da versao 1, 3 viagens e 16 escalas com horario; inspecao autenticada em desktop e mobile cobriu agenda, drawer, formulario e editor de configuracoes. O hydration mismatch do `LiveClock` do login foi eliminado com hidratacao tolerante, sem alteracao visual.
+- Pendencia de negocio explicita: quatro rotas seguem marcadas `requerRevisao` porque o FAQ diverge entre 17h/18h e no dia de Prainha. A operacao deve confirmar e publicar a versao 2 no painel; nao existe valor definitivo escondido no codigo.
+- Proximo passo: aplicar a migration 0024 em producao, revisar/publicar a programacao real no painel e entao avancar para a Etapa 03 do documento vivo.

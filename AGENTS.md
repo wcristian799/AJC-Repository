@@ -8,7 +8,7 @@
 3. **Nunca tome decisão de arquitetura já fechada de novo** — elas estão na seção "Decisões fechadas". Se for mudar uma, registre o porquê em `docs/STATUS.md` e no ADR correspondente.
 4. **Toda decisão nova relevante vira registro** em `docs/arquitetura/` (ADR) ou no doc do módulo. Documentar é parte da tarefa, não um extra.
 5. O papel do assistente aqui é de **CTO/engenharia**: recomendar com posição, contestar quando o usuário estiver errado, e não terceirizar decisões óbvias.
-6. **Fonte mais recente manda:** a reunião/transcrição de validação do cliente em `docs/feedback/2026-06-25-validacao-core-telas.md` é a referência vigente para a rodada atual. Se ela divergir de docs antigos, atualize os docs antigos; não trate como conflito a rediscutir.
+6. **Fonte mais recente manda:** o documento vivo `docs/feedback/2026-07-09-validacao-core-todas-telas-diagramado.docx` é a referência vigente para as alterações de telas da rodada atual; ele preserva integralmente o Word recebido do cliente e acrescenta requisitos/critérios de aceite. A validação anterior em `docs/feedback/2026-06-25-validacao-core-telas.md` continua como histórico. Se a fonte de 09/jul divergir de docs antigos, atualize os docs antigos; não trate como conflito a rediscutir.
 
 ## O que é o projeto
 Sistema de gestão (ERP + TMS) para a **AJC**, empresa de transporte fluvial no Pará: passageiros, carga, encomendas e veículos em balsas/barcos entre Belém e 7 cidades. Dores centrais: vazamento de receita na carga, risco jurídico em encomendas, e operação offline (internet ruim no rio).
@@ -73,7 +73,9 @@ Sistema de gestão (ERP + TMS) para a **AJC**, empresa de transporte fluvial no 
 - `docs/ux/00-Fundacao...` — design system, shell, componentes, acesso/RBAC, setup inicial. **Contrato visual de tudo.**
 - `docs/ux/01..05` — UX detalhada (telas, wireframes) de TMS, Vendas, CRM, Cadastros, Navegação-core.
 - `docs/ROADMAP-Pos-MVP.md` — o que fica fora do MVP e quando entra.
-- `docs/feedback/2026-06-25-validacao-core-telas.md` — consolidação da reunião de validação do cliente sobre o front mockado; fonte mais recente e autoritativa da rodada atual; ler antes de mexer nas telas pós-mockup.
+- `docs/implementacao/01-MODELO-IMPLANTACAO-OPERACIONAL-AJC.md` — playbook de implantação por ondas e setores: levantamento, usuários, configurações, equipamentos, treinamento, homologação, go-live e operação assistida.
+- `docs/feedback/2026-07-09-validacao-core-todas-telas-diagramado.docx` — documento vivo e diagramado da rodada mais recente de alterações de telas; preserva a transcrição integral do Word do cliente e adiciona requisitos, critérios de aceite e protocolo para novos itens. Fonte vigente para correções da rodada atual.
+- `docs/feedback/2026-06-25-validacao-core-telas.md` — consolidação histórica da reunião anterior de validação do front mockado; consultar como contexto, subordinada à validação de 09/jul quando houver evolução do pedido.
 - `docs/feedback/2026-06-29-auditoria-transcricao-bruta-e-pendencias.md` — auditoria da transcrição bruta `C:\Users\Administrador\Desktop\texto.txrt.txt` contra a consolidação; lista nuances e pendências ainda atribuídas ao cliente/Lucas.
 - `docs/feedback/2026-06-29-modelo-prestacao-contas-gerentes-am-vi.md` — modelo real de prestação de contas recebido do cliente; resolve a pendência do formulário em papel e guia o refinamento do `PrestacaoTab`.
 - `docs/feedback/2026-06-29-certificado-digital-ajc-pfx.md` — registro do certificado digital PFX recebido; não copiar/commitar o PFX; BP-e ainda depende de senha, validade, credenciamento e fornecedor/API.
