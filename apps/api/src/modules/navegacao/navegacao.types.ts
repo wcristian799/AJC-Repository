@@ -12,6 +12,9 @@ export interface CreateViagemInput {
   dataHoraRetorno?: string;
   capacidadePaxDisponivel?: Record<string, unknown>;
   observacoes?: string;
+  rotaTemplateId?: string;
+  configVersaoId?: string;
+  cicloUuid?: string;
   clientUuid?: string;
   escalas: ViagemEscalaInput[];
 }
@@ -27,6 +30,15 @@ export interface UpdateViagemInput {
   capacidadePaxDisponivel?: Record<string, unknown>;
   observacoes?: string | null;
   escalas?: ViagemEscalaInput[];
+  rotaTemplateId?: string;
+  configVersaoId?: string;
+  cicloUuid?: string | null;
+}
+
+export interface TransicionarViagemInput {
+  acao?: 'iniciar' | 'concluir' | 'cancelar';
+  motivo?: string;
+  clientUuid?: string;
 }
 
 export interface NotifyEscalasInput {

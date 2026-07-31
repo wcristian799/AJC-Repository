@@ -11,7 +11,7 @@ export default defineConfig({
     server: {
       proxy: {
         "/api": {
-          target: "https://apiajc.byteintelligence.com.br",
+          target: process.env.VITE_DEV_API_PROXY ?? "https://apiajc.byteintelligence.com.br",
           changeOrigin: true,
           secure: true,
         },

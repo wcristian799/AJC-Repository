@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, TrendingUp, Percent, ArrowDownUp, Check, X } from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
+import { OperationalNavigationConfig } from "@/components/ops/cadastros/OperationalNavigationConfig";
 import {
   SectionHeader, DataTable, FilterBar, FilterChip, PrimaryButton, GhostButton,
   StatusChip, brl,
@@ -35,7 +36,7 @@ export const Route = createFileRoute("/app/cadastros")({
   component: Cadastros,
 });
 
-type Tab = "usuarios" | "perfis" | "precos_passagem" | "precos_carga" | "fornecedores" | "colaboradores";
+type Tab = "config_operacional" | "usuarios" | "perfis" | "precos_passagem" | "precos_carga" | "fornecedores" | "colaboradores";
 
 function Cadastros() {
   const [tab, setTab] = useState<Tab>("usuarios");
@@ -185,6 +186,7 @@ function Cadastros() {
   }
 
   function abrirNovoCadastroGeral() {
+    if (tab === "config_operacional") return;
     if (tab === "usuarios") {
       abrirNovoUsuario();
       return;
@@ -291,6 +293,7 @@ function Cadastros() {
   }
 
   const tabs: [Tab, string][] = [
+    ["config_operacional", "Configurações operacionais"],
     ["usuarios", "Usuários"],
     ["perfis", "Perfis e permissões"],
     ["precos_passagem", "Preços · Passagem"],
@@ -304,8 +307,8 @@ function Cadastros() {
       <SectionHeader
         eyebrow="Dados-mestre"
         title="Cadastros e motor de preços"
-        description="RBAC, preços com reajuste em massa, fornecedores, agentes e colaboradores."
-        actions={<PrimaryButton icon={Plus} onClick={abrirNovoCadastroGeral}>Novo cadastro</PrimaryButton>}
+        description="Parâmetros operacionais versionados, acessos, preços e dados-mestre — sem regras presas no código."
+        actions={tab !== "config_operacional" ? <PrimaryButton icon={Plus} onClick={abrirNovoCadastroGeral}>Novo cadastro</PrimaryButton> : undefined}
       />
 
       <div className="mt-6 flex flex-wrap items-center gap-1 border-b border-[color:var(--hairline)]">
@@ -323,6 +326,8 @@ function Cadastros() {
         ))}
       </div>
       {erro && <p className="mt-3 text-xs text-[color:var(--danger)]">{erro}</p>}
+
+      {tab === "config_operacional" && <div className="mt-5"><OperationalNavigationConfig cidades={cidades} /></div>}
 
       {tab === "usuarios" && (
         <div className="mt-5 space-y-4">

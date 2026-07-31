@@ -4,6 +4,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthTokenPayload } from '../auth/auth.types';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { ConfigRepository } from './config.repository';
+import { validateNavegacaoRoutesConfig } from '../navegacao/navegacao-config.validator';
 
 interface PublishConfigBody {
   valor?: unknown;
@@ -42,6 +43,9 @@ export class ConfigController {
     }
     if (body.valor === undefined) {
       throw new BadRequestException('valor obrigatorio');
+    }
+    if (chave.trim() === 'navegacao_rotas_horarios') {
+      validateNavegacaoRoutesConfig(body.valor);
     }
     return this.repository.publish(chave.trim(), body.valor, user.sub);
   }

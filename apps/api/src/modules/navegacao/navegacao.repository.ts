@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { CreateViagemInput, NotifyEscalasInput, UpdateViagemInput } from './navegacao.types';
+import { CreateViagemInput, NotifyEscalasInput, TransicionarViagemInput, UpdateViagemInput } from './navegacao.types';
 
 export interface ViagemDto {
   id: string;
@@ -15,6 +15,11 @@ export interface ViagemDto {
   situacao: string | null;
   capacidadePaxDisponivel: Record<string, unknown>;
   observacoes: string | null;
+  rotaTemplateId: string | null;
+  configVersaoId: string | null;
+  configVersao: number | null;
+  cicloUuid: string | null;
+  motivoCancelamento: string | null;
   escalas: {
     id: string;
     cidadeSigla: string;
@@ -84,13 +89,21 @@ export class NavegacaoRepository {
       situacao: string | null;
       capacidade_pax_disponivel: Record<string, unknown>;
       observacoes: string | null;
+      rota_template_id: string | null;
+      config_versao_id: string | null;
+      config_versao: number | null;
+      ciclo_uuid: string | null;
+      motivo_cancelamento: string | null;
     }>(
       `
       SELECT v.id, v.codigo, v.embarcacao_id, e.nome AS embarcacao_nome,
              v.origem_sigla, v.destino_sigla, v.data_hora_saida, v.data_hora_retorno,
-             v.status::text, v.situacao::text, v.capacidade_pax_disponivel, v.observacoes
+             v.status::text, v.situacao::text, v.capacidade_pax_disponivel, v.observacoes,
+             v.rota_template_id, v.config_versao_id, cv.versao AS config_versao,
+             v.ciclo_uuid, v.motivo_cancelamento
       FROM viagem v
       JOIN embarcacao e ON e.id = v.embarcacao_id
+      LEFT JOIN config_versao cv ON cv.id = v.config_versao_id
       WHERE v.id = $1
       LIMIT 1
       `,
@@ -128,6 +141,11 @@ export class NavegacaoRepository {
       situacao: row.situacao,
       capacidadePaxDisponivel: row.capacidade_pax_disponivel ?? {},
       observacoes: row.observacoes,
+      rotaTemplateId: row.rota_template_id,
+      configVersaoId: row.config_versao_id,
+      configVersao: row.config_versao,
+      cicloUuid: row.ciclo_uuid,
+      motivoCancelamento: row.motivo_cancelamento,
       escalas: escalas.rows.map((escala) => ({
         id: escala.id,
         cidadeSigla: escala.cidade_sigla,
@@ -140,16 +158,21 @@ export class NavegacaoRepository {
   }
 
   async routeTemplates(): Promise<unknown> {
-    const row = await this.db.one<{ valor: unknown }>(
+    const row = await this.db.one<{ id: string; versao: number; valor: { rotas?: unknown[] } }>(
       `
-      SELECT v.valor
+      SELECT v.id, v.versao, v.valor
       FROM config_chave c
       JOIN config_versao v ON v.chave_id = c.id AND v.ativo = true
-      WHERE c.chave = 'route_templates_faq_2026'
+      WHERE c.chave = 'navegacao_rotas_horarios'
       LIMIT 1
       `,
     );
-    return row?.valor ?? [];
+    if (!row) return [];
+    return (row.valor?.rotas ?? []).map((rota) => ({
+      ...(rota && typeof rota === 'object' ? rota : {}),
+      configVersaoId: row.id,
+      configVersao: row.versao,
+    }));
   }
 
   async listEscalasColaboradores(): Promise<EscalaColaboradorDto[]> {
@@ -306,6 +329,14 @@ export class NavegacaoRepository {
       throw new BadRequestException('Ao menos uma escala/parada e obrigatoria');
     }
     const destinoSigla = input.destinoSigla ?? input.escalas[input.escalas.length - 1].cidadeSigla;
+    const capacidade = sanitizeCapacidade(input.capacidadePaxDisponivel ?? {});
+    await this.validatePlanejamento({
+      embarcacaoId: input.embarcacaoId,
+      dataHoraSaida: input.dataHoraSaida,
+      dataHoraRetorno: input.dataHoraRetorno,
+      rotaTemplateId: input.rotaTemplateId,
+      configVersaoId: input.configVersaoId,
+    });
 
     const viagemId = await this.db.tx(async (client) => {
       if (input.clientUuid) {
@@ -321,9 +352,11 @@ export class NavegacaoRepository {
         `
         INSERT INTO viagem (
           codigo, embarcacao_id, origem_sigla, destino_sigla, data_hora_saida,
-          data_hora_retorno, capacidade_pax_disponivel, observacoes, client_uuid, criado_por
+          data_hora_retorno, capacidade_pax_disponivel, observacoes, client_uuid, criado_por,
+          rota_template_id, config_versao_id, ciclo_uuid
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, COALESCE($9::uuid, gen_random_uuid()), $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, COALESCE($9::uuid, gen_random_uuid()), $10,
+                $11, $12::uuid, $13::uuid)
         ON CONFLICT (client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING
         RETURNING id
         `,
@@ -334,10 +367,13 @@ export class NavegacaoRepository {
           destinoSigla,
           input.dataHoraSaida,
           input.dataHoraRetorno ?? null,
-          JSON.stringify(input.capacidadePaxDisponivel ?? {}),
+          JSON.stringify(capacidade),
           input.observacoes ?? null,
           input.clientUuid ?? null,
           userId,
+          input.rotaTemplateId,
+          input.configVersaoId,
+          input.cicloUuid ?? null,
         ],
       );
       const id = viagemResult.rows[0]?.id;
@@ -374,6 +410,9 @@ export class NavegacaoRepository {
     if (!before) {
       throw new BadRequestException('Viagem nao encontrada');
     }
+    if (before.status !== 'planejada') {
+      throw new BadRequestException('Somente viagens planejadas podem ser editadas');
+    }
 
     const capacidade = input.capacidadePaxDisponivel === undefined
       ? before.capacidadePaxDisponivel
@@ -387,6 +426,13 @@ export class NavegacaoRepository {
     if (Date.parse(nextRetorno) <= Date.parse(nextSaida)) {
       throw new BadRequestException('dataHoraRetorno deve ser posterior a dataHoraSaida');
     }
+    await this.validatePlanejamento({
+      embarcacaoId: input.embarcacaoId ?? before.embarcacaoId,
+      dataHoraSaida: nextSaida,
+      dataHoraRetorno: nextRetorno,
+      rotaTemplateId: input.rotaTemplateId ?? before.rotaTemplateId ?? undefined,
+      configVersaoId: input.configVersaoId ?? before.configVersaoId ?? undefined,
+    }, id);
 
     await this.db.tx(async (client) => {
       await client.query(
@@ -401,6 +447,9 @@ export class NavegacaoRepository {
             situacao = $8::situacao_viagem,
             capacidade_pax_disponivel = $9::jsonb,
             observacoes = $10,
+            rota_template_id = COALESCE($11, rota_template_id),
+            config_versao_id = COALESCE($12::uuid, config_versao_id),
+            ciclo_uuid = $13::uuid,
             atualizado_em = now()
         WHERE id = $1::uuid
         `,
@@ -415,6 +464,9 @@ export class NavegacaoRepository {
           input.situacao === undefined ? before.situacao ?? null : input.situacao,
           JSON.stringify(capacidade),
           input.observacoes === undefined ? before.observacoes : emptyToNull(input.observacoes),
+          input.rotaTemplateId ?? null,
+          input.configVersaoId ?? null,
+          input.cicloUuid === undefined ? before.cicloUuid : input.cicloUuid,
         ],
       );
 
@@ -445,6 +497,87 @@ export class NavegacaoRepository {
       throw new BadRequestException('Viagem atualizada mas nao encontrada');
     }
     return viagem;
+  }
+
+  async transicionarViagem(id: string, input: TransicionarViagemInput, userId: string): Promise<ViagemDto> {
+    const before = await this.findViagem(id);
+    if (!before) throw new BadRequestException('Viagem nao encontrada');
+
+    const transitions: Record<string, Partial<Record<'iniciar' | 'concluir' | 'cancelar', string>>> = {
+      planejada: { iniciar: 'em_curso', cancelar: 'cancelada' },
+      em_curso: { concluir: 'concluida', cancelar: 'cancelada' },
+    };
+    const nextStatus = input.acao ? transitions[before.status]?.[input.acao] : undefined;
+    if (!nextStatus) throw new BadRequestException(`Transicao ${input.acao} invalida para viagem ${before.status}`);
+
+    await this.db.tx(async (client) => {
+      if (input.clientUuid) {
+        const duplicate = await client.query('SELECT 1 FROM audit_evento WHERE client_uuid = $1::uuid LIMIT 1', [input.clientUuid]);
+        if (duplicate.rows[0]) return;
+      }
+      await client.query(
+        `UPDATE viagem
+            SET status = $2::status_viagem,
+                situacao = CASE WHEN $2 = 'em_curso' THEN 'no_prazo'::situacao_viagem ELSE situacao END,
+                motivo_cancelamento = CASE WHEN $2 = 'cancelada' THEN $3 ELSE motivo_cancelamento END,
+                atualizado_em = now()
+          WHERE id = $1::uuid`,
+        [id, nextStatus, emptyToNull(input.motivo)],
+      );
+      await client.query(
+        `INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_antes, dados_depois, client_uuid)
+         VALUES ('viagem', $1, 'atualizar', $2, $3::jsonb, $4::jsonb, $5::uuid)
+         ON CONFLICT (client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING`,
+        [id, userId, JSON.stringify({ status: before.status }), JSON.stringify({ status: nextStatus, acao: input.acao, motivo: emptyToNull(input.motivo) }), input.clientUuid ?? null],
+      );
+    });
+    const viagem = await this.findViagem(id);
+    if (!viagem) throw new BadRequestException('Viagem atualizada mas nao encontrada');
+    return viagem;
+  }
+
+  private async validatePlanejamento(
+    input: {
+      embarcacaoId: string;
+      dataHoraSaida: string;
+      dataHoraRetorno?: string | null;
+      rotaTemplateId?: string;
+      configVersaoId?: string;
+    },
+    excludeId?: string,
+  ): Promise<void> {
+    if (!input.rotaTemplateId || !input.configVersaoId) {
+      throw new BadRequestException('Rota e versao da configuracao sao obrigatorias');
+    }
+    const boat = await this.db.one<{ status: string }>(
+      'SELECT status::text FROM embarcacao WHERE id = $1::uuid AND excluido_em IS NULL',
+      [input.embarcacaoId],
+    );
+    if (!boat) throw new BadRequestException('Embarcacao nao encontrada');
+    if (boat.status !== 'ativa') throw new BadRequestException('Embarcacao indisponivel para planejamento');
+
+    const config = await this.db.one<{ valor: { rotas?: Array<{ id?: string }> } }>(
+      `SELECT cv.valor
+         FROM config_versao cv
+         JOIN config_chave cc ON cc.id = cv.chave_id
+        WHERE cv.id = $1::uuid AND cc.chave = 'navegacao_rotas_horarios'`,
+      [input.configVersaoId],
+    );
+    if (!config?.valor?.rotas?.some((rota) => rota.id === input.rotaTemplateId)) {
+      throw new BadRequestException('Rota nao pertence a versao informada');
+    }
+
+    const conflict = await this.db.one<{ codigo: string | null }>(
+      `SELECT codigo FROM viagem
+        WHERE embarcacao_id = $1::uuid
+          AND status <> 'cancelada'
+          AND id <> COALESCE($4::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+          AND tstzrange(data_hora_saida, COALESCE(data_hora_retorno, data_hora_saida + interval '8 hours'), '[)')
+              && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+        LIMIT 1`,
+      [input.embarcacaoId, input.dataHoraSaida, input.dataHoraRetorno, excludeId ?? null],
+    );
+    if (conflict) throw new BadRequestException(`Embarcacao ja alocada na viagem ${conflict.codigo ?? 'existente'} nesse periodo`);
   }
 
   private async nextCodigo(): Promise<string> {

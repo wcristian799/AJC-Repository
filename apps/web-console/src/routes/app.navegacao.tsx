@@ -1,27 +1,49 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { Ship, Plus, CalendarRange, Send, AlertTriangle, Clock, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Link2,
+  Play,
+  Plus,
+  RotateCcw,
+  Search,
+  Send,
+  Ship,
+  Trash2,
+  X,
+} from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
 import {
-  SectionHeader, KPIStat, StatusChip, ViagemStatusChip, ViagemSituacaoChip,
-  DataTable, FilterBar, FilterChip, PrimaryButton, GhostButton,
+  DataTable,
+  GhostButton,
+  PrimaryButton,
+  SectionHeader,
+  StatusChip,
+  ViagemSituacaoChip,
+  ViagemStatusChip,
 } from "@/components/ops/primitives";
-import { ShimmerBar } from "@/components/ops/motion-bits";
 import {
   AjcApiError,
-  type EmbarcacaoApi,
-  type NavegacaoEscalaColaboradorApi,
-  type NavegacaoViagemApi,
-  type RotaTemplateApi,
   createEmbarcacao,
-  listEmbarcacoes,
   createNavegacaoViagem,
-  updateEmbarcacao,
-  updateNavegacaoViagem,
+  listCidades,
+  listEmbarcacoes,
   listNavegacaoEscalasColaboradores,
   listNavegacaoTemplatesRotas,
   listNavegacaoViagens,
   notifyNavegacaoEscalas,
+  transitionNavegacaoViagem,
+  updateEmbarcacao,
+  updateNavegacaoViagem,
+  type CidadeApi,
+  type EmbarcacaoApi,
+  type NavegacaoEscalaColaboradorApi,
+  type NavegacaoViagemApi,
+  type RotaTemplateApi,
 } from "@/lib/ajc-api";
 
 export const Route = createFileRoute("/app/navegacao")({
@@ -29,1190 +51,1483 @@ export const Route = createFileRoute("/app/navegacao")({
   component: Navegacao,
 });
 
-type Tab = "operacao" | "viagens" | "capacidade" | "escalas" | "embarcacoes";
-type ViagemStatus = "planejada" | "em_curso" | "concluida" | "cancelada";
-type ViagemSituacao = "no_prazo" | "atencao" | "atrasado";
+type Tab = "agenda" | "viagens" | "escalas" | "embarcacoes";
+type TripAction = "iniciar" | "concluir" | "cancelar";
 
-type ViagemView = {
-  id: string;
-  codigo: string;
-  embarcacaoId: string;
-  embarcacaoNome: string;
-  origem: string;
-  destino: string;
-  saida: string;
-  retorno: string;
-  status: ViagemStatus;
-  situacao?: ViagemSituacao;
-  ocupacaoPct: number;
-  cargaPct: number;
-  passageiros: number;
-  volumes: number;
-  escalas: Array<{ cidade: string; horaPrevista: string; horaReal?: string | null }>;
-  capacidadePaxDisponivel: Record<string, unknown>;
+const DAY_NAMES = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const STATUS_LABELS: Record<string, string> = {
+  planejada: "Planejada",
+  em_curso: "Em curso",
+  concluida: "Concluída",
+  cancelada: "Cancelada",
 };
-
-type RotaView = {
-  id: string;
-  rotulo: string;
-  origemSigla: string;
-  destinoSigla: string;
-  embarcacao: string;
-  saida: string;
-  paradas: string[];
-  saidaDiaSemana: number;
-  saidaHora: string;
-  retornoDias: number;
-  retornoHora: string;
-  cicloLabel: string;
-};
-
-/** Lista oficial de embarcações (Lucas, 30/jun) — substitui os nomes-fantasia do mock antigo. */
-const FROTA_LUCAS = [
-  "F/B Amazonas II",
-  "F/B Amazonas III",
-  "F/B Amazonas IV",
-  "F/B Amazonas V",
-  "F/B Amazonas VI",
-  "F/B Paru (cargas)",
-] as const;
-
-/** Classes por embarcação (matriz do Lucas). Capacidade numérica real ainda pendente. */
-const CLASSES_POR_EMBARCACAO: Record<string, string[]> = {
-  "F/B Amazonas II": ["Rede", "Suíte Comum", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
-  "F/B Amazonas III": ["Rede", "Suíte Comum", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
-  "F/B Amazonas IV": ["Rede", "Suíte Comum", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
-  "F/B Amazonas V": ["Rede", "Rede Sala VIP", "Camarote", "Suíte Comum", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
-  "F/B Amazonas VI": ["Rede", "Suíte Comum", "Suíte Comum VIP", "Suíte Master", "Suíte Master VIP", "Mega Suíte"],
-  "F/B Paru (cargas)": [],
-};
-const CLASSE_API_BY_LABEL: Record<string, string> = {
-  "Rede": "rede",
-  "Rede Sala VIP": "rede_sala_vip",
-  "Rede VIP": "rede_sala_vip",
-  "Camarote": "camarote",
-  "SuÃ­te Comum": "suite_comum",
-  "Suite Comum": "suite_comum",
-  "SuÃ­te Comum VIP": "suite_comum_vip",
-  "Suite Comum VIP": "suite_comum_vip",
-  "SuÃ­te Master": "suite_master",
-  "Suite Master": "suite_master",
-  "SuÃ­te Master VIP": "suite_master_vip",
-  "Suite Master VIP": "suite_master_vip",
-  "Mega SuÃ­te": "mega_suite",
-  "Mega Suite": "mega_suite",
-};
-
-/** Templates de cronograma/paradas do FAQ 2026 — alimentam o preenchimento automático das paradas. */
-const CLASSES_FORM_EMBARCACAO = [
-  "Rede",
-  "Rede Sala VIP",
-  "Camarote",
-  "Suite Comum",
-  "Suite Comum VIP",
-  "Suite Master",
-  "Suite Master VIP",
-  "Mega Suite",
-];
-
-const ROTAS_FAQ: RotaView[] = [
-  {
-    id: "bel-alm", rotulo: "Belém ⇄ Almeirim (terça)", embarcacao: "F/B Amazonas V",
-    origemSigla: "BEL", destinoSigla: "ALM",
-    saida: "Terça · 17h/18h (validar)",
-    paradas: ["Breves · qua 09h", "Gurupá · qua 20h", "Porto de Moz · qui 08h", "Almeirim · qui 14h (chegada)"],
-    saidaDiaSemana: 2,
-    saidaHora: "17:00",
-    retornoDias: 2,
-    retornoHora: "14:00",
-    cicloLabel: "Saída terça 17h em Belém; fechamento previsto quinta 14h em Almeirim.",
-  },
-  {
-    id: "bel-stm-qua", rotulo: "Belém ⇄ Santarém (quarta)", embarcacao: "F/B Amazonas VI",
-    origemSigla: "BEL", destinoSigla: "STM",
-    saida: "Quarta · 17h/18h (validar)",
-    paradas: ["Breves · qui 09h", "Gurupá · qui 20h", "Almeirim · sex 09h", "Prainha · sex 17h", "Monte Alegre · sex 23h", "Santarém · sáb 10h/início tarde"],
-    saidaDiaSemana: 3,
-    saidaHora: "17:00",
-    retornoDias: 3,
-    retornoHora: "10:00",
-    cicloLabel: "Saída quarta 17h em Belém; fechamento previsto sábado 10h em Santarém.",
-  },
-  {
-    id: "bel-stm-sex", rotulo: "Belém ⇄ Santarém (sexta)", embarcacao: "F/B Amazonas IV",
-    origemSigla: "BEL", destinoSigla: "STM",
-    saida: "Sexta · 17h/18h (validar)",
-    paradas: ["Breves · sáb 09h", "Gurupá · sáb 20h", "Almeirim · dom 09h", "Prainha · dom 17h", "Monte Alegre · dom 23h", "Santarém · seg 19h/início tarde"],
-    saidaDiaSemana: 5,
-    saidaHora: "17:00",
-    retornoDias: 3,
-    retornoHora: "19:00",
-    cicloLabel: "Saída sexta 17h em Belém; fechamento previsto segunda 19h em Santarém.",
-  },
-  {
-    id: "stm-bel-sab", rotulo: "Santarém ⇄ Belém (retorno sábado)", embarcacao: "F/B Amazonas VI",
-    origemSigla: "STM", destinoSigla: "BEL",
-    saida: "Sábado · 16h",
-    paradas: ["Prainha · 00h (dia a validar)", "Almeirim · dom 08h", "Gurupá · dom 16h", "Breves · seg 02h", "Belém · seg 19h (chegada)"],
-    saidaDiaSemana: 6,
-    saidaHora: "16:00",
-    retornoDias: 2,
-    retornoHora: "19:00",
-    cicloLabel: "Saída sábado 16h em Santarém; fechamento previsto segunda 19h em Belém.",
-  },
+const PASSENGER_CLASSES = [
+  "rede",
+  "rede_sala_vip",
+  "camarote",
+  "suite_comum",
+  "suite_comum_vip",
+  "suite_master",
+  "suite_master_vip",
+  "mega_suite",
 ];
 
 function Navegacao() {
-  const [tab, setTab] = useState<Tab>("operacao");
-  const [showNovaViagem, setShowNovaViagem] = useState(false);
-  const [showNovaEmbarcacao, setShowNovaEmbarcacao] = useState(false);
-  const [viagemEditandoId, setViagemEditandoId] = useState<string | null>(null);
-  const [embarcacaoEditandoId, setEmbarcacaoEditandoId] = useState<string | null>(null);
-  const [showCalendario, setShowCalendario] = useState(false);
-  const [rotaSel, setRotaSel] = useState(ROTAS_FAQ[1].id);
-  const [salvandoViagem, setSalvandoViagem] = useState(false);
-  const [viagemError, setViagemError] = useState<string | null>(null);
-  const [embarcacaoError, setEmbarcacaoError] = useState<string | null>(null);
-  const [salvandoEmbarcacao, setSalvandoEmbarcacao] = useState(false);
-  const [notificandoEscalas, setNotificandoEscalas] = useState(false);
-  const [escalaMensagem, setEscalaMensagem] = useState<string | null>(null);
-  const [viagemForm, setViagemForm] = useState({
-    embarcacaoId: "",
-    dataHoraSaida: defaultDateTimeLocal(),
-    dataHoraRetorno: "",
-    status: "planejada" as ViagemStatus,
-    situacao: "no_prazo" as ViagemSituacao,
-    capacidade: {} as Record<string, string>,
-  });
-  const [embarcacaoForm, setEmbarcacaoForm] = useState({
-    nome: "",
-    tipo: "passeio_carga" as "passeio_carga" | "carga",
-    status: "ativa" as "ativa" | "manutencao" | "alugada",
-    capacidadeCarga: "",
-    capacidadePax: {} as Record<string, string>,
-  });
-  const [viagensApi, setViagensApi] = useState<NavegacaoViagemApi[]>([]);
+  const [tab, setTab] = useState<Tab>("agenda");
+  const [viagens, setViagens] = useState<NavegacaoViagemApi[]>([]);
   const [embarcacoes, setEmbarcacoes] = useState<EmbarcacaoApi[]>([]);
-  const [templatesApi, setTemplatesApi] = useState<RotaTemplateApi[]>([]);
-  const [escalasColaboradores, setEscalasColaboradores] = useState<NavegacaoEscalaColaboradorApi[]>([]);
+  const [rotas, setRotas] = useState<RotaTemplateApi[]>([]);
+  const [cidades, setCidades] = useState<CidadeApi[]>([]);
+  const [escalas, setEscalas] = useState<NavegacaoEscalaColaboradorApi[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tripModal, setTripModal] = useState(false);
+  const [editingTripId, setEditingTripId] = useState<string | null>(null);
+  const [boatModal, setBoatModal] = useState(false);
+  const [editingBoatId, setEditingBoatId] = useState<string | null>(null);
+  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
+  const [query, setQuery] = useState("");
+  const [boatFilter, setBoatFilter] = useState("");
+  const [routeFilter, setRouteFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [transitioning, setTransitioning] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [showCancel, setShowCancel] = useState(false);
+  const [notifying, setNotifying] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function reload() {
+    setLoading(true);
+    const results = await Promise.allSettled([
+      listNavegacaoViagens(),
+      listEmbarcacoes(),
+      listNavegacaoTemplatesRotas(),
+      listNavegacaoEscalasColaboradores(),
+      listCidades(),
+    ]);
+    const failures: string[] = [];
+    const apply = <T,>(index: number, setter: (value: T) => void) => {
+      const result = results[index];
+      if (result.status === "fulfilled") setter(result.value as T);
+      else
+        failures.push(
+          result.reason instanceof Error ? result.reason.message : "Falha de carregamento",
+        );
+    };
+    apply<NavegacaoViagemApi[]>(0, setViagens);
+    apply<EmbarcacaoApi[]>(1, setEmbarcacoes);
+    apply<RotaTemplateApi[]>(2, setRotas);
+    apply<NavegacaoEscalaColaboradorApi[]>(3, setEscalas);
+    apply<CidadeApi[]>(4, setCidades);
+    setError(
+      failures.length
+        ? `Parte dos dados não carregou: ${[...new Set(failures)].join(" · ")}`
+        : null,
+    );
+    setLoading(false);
+  }
 
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    Promise.all([listNavegacaoViagens(), listEmbarcacoes(), listNavegacaoTemplatesRotas(), listNavegacaoEscalasColaboradores()])
-      .then(([viagens, frota, templates, escalas]) => {
-        if (!active) return;
-        setViagensApi(viagens);
-        setEmbarcacoes(frota);
-        setTemplatesApi(Array.isArray(templates) ? templates : []);
-        setEscalasColaboradores(escalas);
-        setLoadError(null);
-        if (templates[0]?.id) {
-          setRotaSel((current) => (templates.some((template) => template.id === current) ? current : templates[0].id));
-        }
-        const rotaAtual = (Array.isArray(templates) && templates.length ? normalizeRotas(templates) : ROTAS_FAQ).find((template) => template.id === rotaSel) ?? ROTAS_FAQ[1];
-        const embarcacaoDoTemplate = frota.find((e) => normalizeBoatName(e.nome) === normalizeBoatName(rotaAtual.embarcacao)) ?? frota[0];
-        if (embarcacaoDoTemplate) {
-          setViagemForm((prev) => ({ ...prev, embarcacaoId: prev.embarcacaoId || embarcacaoDoTemplate.id }));
-        }
-      })
-      .catch((err) => {
-        if (!active) return;
-        setLoadError(err instanceof AjcApiError ? err.message : "Nao foi possivel carregar a navegacao.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+    void reload();
   }, []);
 
-  const rotas = useMemo(() => normalizeRotas(templatesApi), [templatesApi]);
-  const viagens = useMemo(() => viagensApi.map(mapViagemView), [viagensApi]);
-  const rota = rotas.find((r) => r.id === rotaSel) ?? rotas[0] ?? ROTAS_FAQ[0];
-  const embSel = rota.embarcacao;
-  const embarcacaoTemplate = embarcacoes.find((e) => normalizeBoatName(e.nome) === normalizeBoatName(embSel));
-  const embarcacaoSelecionada = embarcacoes.find((e) => e.id === viagemForm.embarcacaoId) ?? embarcacaoTemplate ?? embarcacoes[0];
-  const classesEmb = classesFromCapacidade(embarcacaoSelecionada?.capacidadePax) ?? CLASSES_POR_EMBARCACAO[embarcacaoSelecionada?.nome ?? embSel] ?? CLASSES_POR_EMBARCACAO[embSel] ?? [];
-  const ativas = embarcacoes.filter((e) => e.status === "ativa").length;
-  const emCurso = viagens.filter((v) => v.status === "em_curso");
-  const colaboradoresEscala = useMemo(
-    () => escalasColaboradores.map((escala) => ({
-      id: escala.colaboradorId,
-      nome: escala.colaboradorNome,
-      whatsapp: escala.colaboradorWhatsapp ?? "sem WhatsApp",
-    })),
-    [escalasColaboradores],
+  const selected = viagens.find((trip) => trip.id === selectedId) ?? null;
+  const filteredTrips = useMemo(
+    () =>
+      viagens.filter((trip) => {
+        const haystack =
+          `${trip.codigo ?? ""} ${trip.embarcacaoNome} ${trip.origemSigla} ${trip.destinoSigla ?? ""}`.toLocaleLowerCase(
+            "pt-BR",
+          );
+        return (
+          (!query || haystack.includes(query.toLocaleLowerCase("pt-BR"))) &&
+          (!boatFilter || trip.embarcacaoId === boatFilter) &&
+          (!routeFilter || trip.rotaTemplateId === routeFilter) &&
+          (!statusFilter || trip.status === statusFilter)
+        );
+      }),
+    [viagens, query, boatFilter, routeFilter, statusFilter],
   );
 
-  const tabs: [Tab, string][] = [
-    ["operacao", "Painel operacional"],
-    ["viagens", "Cronograma de viagens"],
-    ["capacidade", "Capacidade & ocupação"],
-    ["escalas", "Escala de colaboradores"],
+  const activeBoats = embarcacoes.filter((boat) => boat.status === "ativa");
+  const reviewRoutes = rotas.filter((route) => route.requerRevisao);
+
+  async function runTransition(action: TripAction) {
+    if (!selected || transitioning) return;
+    if (action === "cancelar" && cancelReason.trim().length < 5) {
+      setMessage("Informe o motivo do cancelamento com pelo menos 5 caracteres.");
+      return;
+    }
+    setTransitioning(true);
+    setMessage(null);
+    try {
+      const saved = await transitionNavegacaoViagem(selected.id, {
+        acao: action,
+        motivo: action === "cancelar" ? cancelReason : undefined,
+        clientUuid: crypto.randomUUID(),
+      });
+      setViagens((current) => current.map((trip) => (trip.id === saved.id ? saved : trip)));
+      setShowCancel(false);
+      setCancelReason("");
+    } catch (err) {
+      setMessage(apiMessage(err));
+    } finally {
+      setTransitioning(false);
+    }
+  }
+
+  async function notifyPendingScales() {
+    const ids = escalas
+      .filter(
+        (scale) => !scale.conflito && !["confirmada", "cancelada"].includes(scale.statusOriginal),
+      )
+      .map((scale) => scale.id);
+    if (!ids.length) {
+      setMessage("Nenhuma escala pendente para notificar.");
+      return;
+    }
+    setNotifying(true);
+    try {
+      await notifyNavegacaoEscalas({ escalaIds: ids, clientUuid: crypto.randomUUID() });
+      setEscalas(await listNavegacaoEscalasColaboradores());
+      setMessage(
+        `${ids.length} escala(s) registrada(s) para envio. O provedor de WhatsApp continua identificado como stub.`,
+      );
+    } catch (err) {
+      setMessage(apiMessage(err));
+    } finally {
+      setNotifying(false);
+    }
+  }
+
+  const tabs: Array<[Tab, string]> = [
+    ["agenda", "Agenda operacional"],
+    ["viagens", "Viagens"],
+    ["escalas", "Escalas"],
     ["embarcacoes", "Embarcações"],
   ];
-
-  function selecionarRota(id: string) {
-    setRotaSel(id);
-    const nextRota = rotas.find((r) => r.id === id);
-    const embarcacaoDaRota = nextRota
-      ? embarcacoes.find((e) => normalizeBoatName(e.nome) === normalizeBoatName(nextRota.embarcacao))
-      : null;
-    const datas = nextRota ? defaultDatesForRota(nextRota) : null;
-    setViagemForm((prev) => ({
-      ...prev,
-      embarcacaoId: embarcacaoDaRota?.id ?? prev.embarcacaoId,
-      dataHoraSaida: datas?.dataHoraSaida ?? prev.dataHoraSaida,
-      dataHoraRetorno: datas?.dataHoraRetorno ?? prev.dataHoraRetorno,
-    }));
-  }
-
-  function setCapacidadeClasse(label: string, value: string) {
-    const key = classeKeyFromLabel(label);
-    setViagemForm((prev) => ({ ...prev, capacidade: { ...prev.capacidade, [key]: value } }));
-  }
-
-  function abrirNovaViagem() {
-    const datas = defaultDatesForRota(rota);
-    setViagemEditandoId(null);
-    setViagemError(null);
-    setViagemForm((prev) => ({
-      ...prev,
-      dataHoraSaida: datas.dataHoraSaida,
-      dataHoraRetorno: datas.dataHoraRetorno,
-      status: "planejada",
-      situacao: "no_prazo",
-      capacidade: {},
-    }));
-    setShowNovaViagem(true);
-  }
-
-  function abrirEditarViagem(row: ViagemView) {
-    const original = viagensApi.find((viagem) => viagem.id === row.id);
-    if (!original) return;
-    setViagemEditandoId(original.id);
-    setViagemError(null);
-    setViagemForm({
-      embarcacaoId: original.embarcacaoId,
-      dataHoraSaida: toDateTimeLocalValue(new Date(original.dataHoraSaida)),
-      dataHoraRetorno: original.dataHoraRetorno ? toDateTimeLocalValue(new Date(original.dataHoraRetorno)) : "",
-      status: asViagemStatus(original.status),
-      situacao: asViagemSituacao(original.situacao) ?? "no_prazo",
-      capacidade: Object.fromEntries(Object.entries(original.capacidadePaxDisponivel ?? {}).map(([key, value]) => [key, String(value ?? "")])),
-    });
-    const matched = rotas.find((template) => template.origemSigla === original.origemSigla && template.destinoSigla === original.destinoSigla);
-    if (matched) setRotaSel(matched.id);
-    setShowNovaViagem(true);
-  }
-
-  function fecharViagemModal() {
-    setShowNovaViagem(false);
-    setViagemEditandoId(null);
-    setViagemError(null);
-  }
-
-  function abrirNovaEmbarcacao() {
-    setEmbarcacaoEditandoId(null);
-    setEmbarcacaoError(null);
-    setEmbarcacaoForm({
-      nome: "",
-      tipo: "passeio_carga",
-      status: "ativa",
-      capacidadeCarga: "",
-      capacidadePax: {},
-    });
-    setShowNovaEmbarcacao(true);
-  }
-
-  function abrirEditarEmbarcacao(row: EmbarcacaoApi) {
-    setEmbarcacaoEditandoId(row.id);
-    setEmbarcacaoError(null);
-    setEmbarcacaoForm({
-      nome: row.nome,
-      tipo: row.tipo === "carga" ? "carga" : "passeio_carga",
-      status: row.status === "manutencao" || row.status === "alugada" ? row.status : "ativa",
-      capacidadeCarga: row.capacidadeCarga === null || row.capacidadeCarga === undefined ? "" : String(row.capacidadeCarga),
-      capacidadePax: Object.fromEntries(Object.entries(row.capacidadePax ?? {}).map(([key, value]) => [key, String(value ?? "")])),
-    });
-    setShowNovaEmbarcacao(true);
-  }
-
-  function fecharEmbarcacaoModal() {
-    setShowNovaEmbarcacao(false);
-    setEmbarcacaoEditandoId(null);
-    setEmbarcacaoError(null);
-  }
-
-  function setEmbarcacaoCapacidade(label: string, value: string) {
-    const key = classeKeyFromLabel(label);
-    setEmbarcacaoForm((prev) => ({ ...prev, capacidadePax: { ...prev.capacidadePax, [key]: value } }));
-  }
-
-  async function salvarNovaViagem() {
-    if (salvandoViagem) return;
-    const embarcacao = embarcacaoSelecionada;
-    if (!embarcacao) {
-      setViagemError("Selecione uma embarcacao.");
-      return;
-    }
-    if (!viagemForm.dataHoraSaida) {
-      setViagemError("Informe a data e hora de saida.");
-      return;
-    }
-    if (!viagemForm.dataHoraRetorno) {
-      setViagemError("Informe a data e hora de retorno/fechamento da viagem.");
-      return;
-    }
-    if (new Date(viagemForm.dataHoraRetorno).getTime() <= new Date(viagemForm.dataHoraSaida).getTime()) {
-      setViagemError("O retorno precisa ser posterior a saida.");
-      return;
-    }
-    const capacidade = Object.fromEntries(
-      Object.entries(viagemForm.capacidade)
-        .map(([key, value]) => [key, Number(value)])
-        .filter(([, value]) => Number.isFinite(value) && Number(value) > 0),
-    );
-    if (classesEmb.length > 0 && Object.keys(capacidade).length === 0) {
-      setViagemError("Informe ao menos uma capacidade por classe.");
-      return;
-    }
-    setSalvandoViagem(true);
-    setViagemError(null);
-    try {
-      const payload = {
-        embarcacaoId: embarcacao.id,
-        origemSigla: rota.origemSigla,
-        destinoSigla: rota.destinoSigla,
-        dataHoraSaida: toIsoFromDateTimeLocal(viagemForm.dataHoraSaida),
-        dataHoraRetorno: toIsoFromDateTimeLocal(viagemForm.dataHoraRetorno),
-        capacidadePaxDisponivel: capacidade,
-        observacoes: `Criada a partir do template FAQ: ${rota.rotulo}. Saida FAQ: ${rota.saida}`,
-        escalas: rota.paradas.map((parada) => ({
-          cidadeSigla: cidadeSiglaFromParada(parada) ?? rota.destinoSigla,
-          observacao: parada,
-        })),
-      };
-      const salva = viagemEditandoId
-        ? await updateNavegacaoViagem(viagemEditandoId, payload)
-        : await createNavegacaoViagem({ ...payload, clientUuid: crypto.randomUUID() });
-      setViagensApi((prev) => [salva, ...prev.filter((v) => v.id !== salva.id)]);
-      fecharViagemModal();
-      setTab("viagens");
-      setViagemForm((prev) => ({ ...prev, capacidade: {} }));
-    } catch (error) {
-      console.error(error);
-      setViagemError(error instanceof Error ? error.message : "Falha ao salvar viagem");
-    } finally {
-      setSalvandoViagem(false);
-    }
-  }
-
-  async function notificarEscalasWhatsapp() {
-    const escalaIds = escalasColaboradores
-      .filter((escala) => !escala.conflito && escala.statusOriginal !== "confirmada" && escala.statusOriginal !== "cancelada")
-      .map((escala) => escala.id);
-    if (escalaIds.length === 0) {
-      setEscalaMensagem("Nenhuma escala pendente para notificar.");
-      return;
-    }
-    setNotificandoEscalas(true);
-    setEscalaMensagem(null);
-    try {
-      await notifyNavegacaoEscalas({ escalaIds, clientUuid: crypto.randomUUID() });
-      setEscalasColaboradores(await listNavegacaoEscalasColaboradores());
-      setEscalaMensagem(`${escalaIds.length} escala(s) enfileirada(s) no stub WhatsApp. Provedor real segue pendente.`);
-    } catch (error) {
-      setEscalaMensagem(error instanceof Error ? error.message : "Nao foi possivel notificar as escalas.");
-    } finally {
-      setNotificandoEscalas(false);
-    }
-  }
-
-  async function salvarNovaEmbarcacao() {
-    if (salvandoEmbarcacao) return;
-    const nome = embarcacaoForm.nome.trim();
-    if (!nome) {
-      setEmbarcacaoError("Informe o nome da embarcacao.");
-      return;
-    }
-    const capacidadePax = Object.fromEntries(
-      Object.entries(embarcacaoForm.capacidadePax)
-        .map(([key, value]) => [key, Number(value)])
-        .filter(([, value]) => Number.isFinite(value) && Number(value) > 0),
-    );
-    setSalvandoEmbarcacao(true);
-    setEmbarcacaoError(null);
-    try {
-      const payload = {
-        nome,
-        tipo: embarcacaoForm.tipo,
-        status: embarcacaoForm.status,
-        capacidadeCarga: parseOptionalNumber(embarcacaoForm.capacidadeCarga),
-        capacidadePax,
-      };
-      const salva = embarcacaoEditandoId
-        ? await updateEmbarcacao(embarcacaoEditandoId, payload)
-        : await createEmbarcacao(payload);
-      setEmbarcacoes((prev) => [salva, ...prev.filter((item) => item.id !== salva.id)].sort((a, b) => a.nome.localeCompare(b.nome)));
-      setViagemForm((prev) => ({ ...prev, embarcacaoId: prev.embarcacaoId || salva.id }));
-      fecharEmbarcacaoModal();
-      setTab("embarcacoes");
-      setEmbarcacaoForm({
-        nome: "",
-        tipo: "passeio_carga",
-        status: "ativa",
-        capacidadeCarga: "",
-        capacidadePax: {},
-      });
-    } catch (error) {
-      console.error(error);
-      setEmbarcacaoError(error instanceof Error ? error.message : "Falha ao salvar embarcacao");
-    } finally {
-      setSalvandoEmbarcacao(false);
-    }
-  }
 
   return (
     <AppShell crumb="Navegação">
       <SectionHeader
         eyebrow="Navegação-core"
-        title="Frota e cronograma"
-        description="Embarcações, viagens e cumprimento do cronograma. Tudo é vinculado a uma viagem."
+        title="Agenda de viagens"
+        description="Planejamento semanal, intertrechos e ciclo operacional com dados versionados."
         actions={
-          <>
-            <GhostButton icon={CalendarRange} onClick={() => setShowCalendario((v) => !v)}>Calendário</GhostButton>
-            <PrimaryButton icon={Plus} onClick={abrirNovaViagem}>Nova viagem</PrimaryButton>
-          </>
+          <div className="flex gap-2">
+            <GhostButton
+              icon={Ship}
+              onClick={() => {
+                setEditingBoatId(null);
+                setBoatModal(true);
+              }}
+            >
+              Nova embarcação
+            </GhostButton>
+            <PrimaryButton
+              icon={Plus}
+              disabled={!rotas.length || !activeBoats.length}
+              onClick={() => {
+                setEditingTripId(null);
+                setTripModal(true);
+              }}
+            >
+              Nova viagem
+            </PrimaryButton>
+          </div>
         }
       />
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KPIStat index={0} label="Embarcações ativas" value={`${ativas}/${embarcacoes.length}`} hint={loading ? "carregando frota" : "cadastros conectados"} icon={Ship} />
-        <KPIStat index={1} label="Viagens em curso" value={String(emCurso.length)} hint={`${viagens.length} viagens no cronograma`} />
-        <KPIStat index={2} label="Capacidade pax planejada" value={String(viagens.reduce((s, v) => s + v.passageiros, 0))} hint="soma das vagas por classe" delta={{ value: "API", positive: true }} />
-        <KPIStat index={3} label="Volumes em trânsito" value={String(emCurso.reduce((s, v) => s + v.volumes, 0))} hint="TMS integra no proximo bloco" delta={{ value: "pendente", positive: true }} />
-      </section>
-
-      {loadError && (
-        <div className="mt-4 rounded-lg border border-[color:var(--danger)]/30 bg-[color:var(--danger)]/10 px-4 py-3 text-sm text-foreground">
-          {loadError}
-        </div>
-      )}
-
-      {(showNovaViagem || showCalendario) && (
-        <section className={showNovaViagem ? "fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm" : "mt-6 grid gap-4 xl:grid-cols-[1.1fr_1fr]"}>
-          {showNovaViagem && (
-            <div className="surface-card brand-rail brand-rail-left max-h-[92vh] w-full max-w-3xl overflow-y-auto p-5 shadow-2xl">
-              <div className="flex items-center gap-2">
-                <Plus className="h-4 w-4 text-[color:var(--brand)]" />
-                <h3 className="font-display text-lg">{viagemEditandoId ? "Editar viagem" : "Nova viagem"}</h3>
-                <StatusChip tone="success">campos Lucas + FAQ 2026</StatusChip>
-                <button className="ml-auto rounded-md p-2 text-muted-foreground transition-colors hover:bg-[color:var(--accent)] hover:text-foreground" onClick={fecharViagemModal} aria-label="Fechar">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">Número gerado pelo sistema, FerryBoat em lista, saída, e paradas com preenchimento automático a partir do DOC FAQ. Camarotes/classes condicionais à embarcação.</p>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <MockField label="Numero da viagem (auto)" value="gerado pelo sistema" />
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">FerryBoat</p>
-                  <select
-                    value={embarcacaoSelecionada?.id ?? ""}
-                    onChange={(event) => setViagemForm((prev) => ({ ...prev, embarcacaoId: event.target.value }))}
-                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                  >
-                    {embarcacoes.length
-                      ? embarcacoes.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)
-                      : FROTA_LUCAS.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Trecho / rota (DOC FAQ)</p>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {rotas.map((r) => (
-                      <FilterChip key={r.id} active={r.id === rotaSel} onClick={() => selecionarRota(r.id)}>{r.rotulo}</FilterChip>
-                    ))}
-                  </div>
-                </div>
-                <div className="sm:col-span-2 rounded-lg bg-[color:var(--muted)] px-3 py-2.5 ring-1 ring-[color:var(--hairline)]">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Ciclo da viagem</p>
-                  <p className="mt-1 text-sm text-foreground">{rota.cicloLabel}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Toda viagem deve nascer com saida e retorno/fechamento previsto.</p>
-                </div>
-                <label>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Data e hora da saida</p>
-                  <input
-                    type="datetime-local"
-                    value={viagemForm.dataHoraSaida}
-                    onChange={(event) => setViagemForm((prev) => ({ ...prev, dataHoraSaida: event.target.value }))}
-                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                  />
-                  <span className="mt-1 block text-[10px] text-muted-foreground">FAQ: {rota.saida}</span>
-                </label>
-                <label>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Retorno / fechamento previsto</p>
-                  <input
-                    type="datetime-local"
-                    value={viagemForm.dataHoraRetorno}
-                    onChange={(event) => setViagemForm((prev) => ({ ...prev, dataHoraRetorno: event.target.value }))}
-                    className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                  />
-                  <span className="mt-1 block text-[10px] text-muted-foreground">Obrigatorio para fechar o ciclo da viagem.</span>
-                </label>
-                <div className="sm:col-span-2 rounded-lg bg-[color:var(--muted)] px-3 py-2.5 ring-1 ring-[color:var(--hairline)]">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status operacional</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <ViagemStatusChip s={viagemEditandoId ? viagemForm.status : "planejada"} />
-                    <ViagemSituacaoChip s={viagemEditandoId ? viagemForm.situacao : "no_prazo"} />
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Status e situacao sao alterados pelo sistema conforme o ciclo da viagem.</p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="flex items-center gap-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Paradas (preenchidas automaticamente · DOC FAQ)</p>
-                  <StatusChip tone="warning">horários do PDF a validar</StatusChip>
-                </div>
-                <ol className="mt-2 space-y-1.5">
-                  {rota.paradas.map((p, i) => (
-                    <li key={i} className="flex items-center gap-3 rounded-lg bg-[color:var(--muted)] px-3 py-2 text-sm ring-1 ring-[color:var(--hairline)]">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--brand)]/15 text-[10px] font-semibold text-[color:var(--brand)]">{i + 1}</span>
-                      <span className="text-foreground">{p}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              <div className="mt-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Capacidade disponivel por classe - {embarcacaoSelecionada?.nome ?? embSel}</p>
-                {classesEmb.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">Embarcacao so de carga - sem classes de passageiro.</p>
-                ) : (
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                    {classesEmb.map((classe) => {
-                      const key = classeKeyFromLabel(classe);
-                      return (
-                        <label key={classe}>
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{classe}</span>
-                          <input
-                            type="number"
-                            min="0"
-                            inputMode="numeric"
-                            value={viagemForm.capacidade[key] ?? ""}
-                            onChange={(event) => setCapacidadeClasse(classe, event.target.value)}
-                            className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                            placeholder="0"
-                          />
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <PrimaryButton icon={Plus} onClick={salvarNovaViagem} disabled={salvandoViagem || !embarcacaoSelecionada}>
-                  {salvandoViagem ? "Salvando..." : viagemEditandoId ? "Salvar viagem" : "Criar viagem"}
-                </PrimaryButton>
-                <GhostButton onClick={fecharViagemModal}>Cancelar</GhostButton>
-                {viagemError && <span className="text-xs text-[color:var(--danger)]">{viagemError}</span>}
-              </div>
-            </div>
-          )}
-
-          {showCalendario && (
-            <div className="surface-card p-5">
-              <div className="flex items-center gap-2">
-                <CalendarRange className="h-4 w-4 text-[color:var(--brand)]" />
-                <h3 className="font-display text-lg">Calendário operacional</h3>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">Visualização acionável do cronograma longo enquanto a regra final de calendário é definida.</p>
-              <div className="mt-4 space-y-2">
-                {viagens.slice(0, 5).map((v) => (
-                  <div key={v.id} className="flex items-center gap-3 rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
-                    <Clock className="h-4 w-4 text-[color:var(--brand)]" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{v.codigo} · {v.origem} → {v.destino}</p>
-                      <p className="text-[11px] text-muted-foreground">Saída {v.saida} · retorno {v.retorno}</p>
-                    </div>
-                    <ViagemStatusChip s={v.status} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {showNovaEmbarcacao && (
-        <section className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="surface-card brand-rail brand-rail-left max-h-[92vh] w-full max-w-3xl overflow-y-auto p-5 shadow-2xl">
-            <div className="flex items-center gap-2">
-              <Ship className="h-4 w-4 text-[color:var(--brand)]" />
-              <h3 className="font-display text-lg">{embarcacaoEditandoId ? "Editar embarcação" : "Nova embarcação"}</h3>
-              <StatusChip tone="success">cadastro real</StatusChip>
-              <button className="ml-auto rounded-md p-2 text-muted-foreground transition-colors hover:bg-[color:var(--accent)] hover:text-foreground" onClick={fecharEmbarcacaoModal} aria-label="Fechar">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Frota vem de `GET /api/cadastros/embarcacoes`. Alterações salvam no banco e atualizam capacidades usadas em Nova Viagem.
-            </p>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Nome</p>
-                <input
-                  value={embarcacaoForm.nome}
-                  onChange={(event) => setEmbarcacaoForm((prev) => ({ ...prev, nome: event.target.value }))}
-                  className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                  placeholder="F/B Amazonas VI"
-                />
-              </label>
-              <label>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tipo</p>
-                <select
-                  value={embarcacaoForm.tipo}
-                  onChange={(event) => setEmbarcacaoForm((prev) => ({ ...prev, tipo: event.target.value as "passeio_carga" | "carga" }))}
-                  className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                >
-                  <option value="passeio_carga">Passeio + carga</option>
-                  <option value="carga">Somente carga</option>
-                </select>
-              </label>
-              <label>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Status</p>
-                <select
-                  value={embarcacaoForm.status}
-                  onChange={(event) => setEmbarcacaoForm((prev) => ({ ...prev, status: event.target.value as "ativa" | "manutencao" | "alugada" }))}
-                  className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                >
-                  <option value="ativa">Ativa</option>
-                  <option value="manutencao">Manutenção</option>
-                  <option value="alugada">Alugada</option>
-                </select>
-              </label>
-              <label>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Capacidade carga (t)</p>
-                <input
-                  value={embarcacaoForm.capacidadeCarga}
-                  onChange={(event) => setEmbarcacaoForm((prev) => ({ ...prev, capacidadeCarga: event.target.value }))}
-                  inputMode="decimal"
-                  className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                  placeholder="0"
-                />
-              </label>
-            </div>
-
-            <div className="mt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Capacidade por classe</p>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                {CLASSES_FORM_EMBARCACAO.map((classe) => {
-                  const key = classeKeyFromLabel(classe);
-                  return (
-                    <label key={classe}>
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{classe}</span>
-                      <input
-                        type="number"
-                        min="0"
-                        inputMode="numeric"
-                        value={embarcacaoForm.capacidadePax[key] ?? ""}
-                        onChange={(event) => setEmbarcacaoCapacidade(classe, event.target.value)}
-                        className="mt-1 w-full rounded-lg bg-[color:var(--muted)] px-3 py-2.5 text-sm text-foreground ring-1 ring-[color:var(--hairline)]"
-                        placeholder="0"
-                      />
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              <PrimaryButton icon={Plus} onClick={salvarNovaEmbarcacao} disabled={salvandoEmbarcacao}>
-                {salvandoEmbarcacao ? "Salvando..." : embarcacaoEditandoId ? "Salvar embarcação" : "Criar embarcação"}
-              </PrimaryButton>
-              <GhostButton onClick={fecharEmbarcacaoModal}>Cancelar</GhostButton>
-              {embarcacaoError && <span className="text-xs text-[color:var(--danger)]">{embarcacaoError}</span>}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <div className="mt-6 flex flex-wrap items-center gap-2 border-b border-[color:var(--hairline)]">
-        {tabs.map(([k, label]) => (
+      <div className="mt-5 flex flex-wrap items-center gap-1 border-b border-[color:var(--hairline)]">
+        {tabs.map(([key, label]) => (
           <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`relative -mb-px px-4 py-3 text-sm font-medium transition-colors ${
-              tab === k ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
+            key={key}
+            onClick={() => setTab(key)}
+            className={`relative -mb-px px-3 py-2.5 text-sm font-medium ${tab === key ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
             {label}
-            {tab === k && <span className="absolute inset-x-2 -bottom-px h-[2px] bg-[color:var(--brand)]" />}
+            {tab === key && (
+              <span className="absolute inset-x-2 -bottom-px h-[2px] bg-[color:var(--brand)]" />
+            )}
           </button>
         ))}
       </div>
 
-      {tab === "operacao" && (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-          <div className="surface-card overflow-hidden">
-            <header className="border-b border-[color:var(--hairline)] px-5 py-4">
-              <h3 className="font-display text-lg text-foreground">Status × Situação · viagens em curso</h3>
-              <p className="mt-0.5 text-xs text-muted-foreground">Status = ciclo. Situação = saúde do cronograma. Nunca colapsam no mesmo chip.</p>
-            </header>
-            <ul className="divide-y divide-[color:var(--hairline)]">
-              {emCurso.map((v) => {
-                const emb = embarcacoes.find((e) => e.id === v.embarcacaoId);
-                return (
-                  <li key={v.id} className="px-5 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm">
-                          <span className="font-mono text-muted-foreground">{v.codigo}</span>{" "}
-                          <span className="font-display text-foreground">{v.origem} → {v.destino}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">{emb?.nome ?? v.embarcacaoNome}</span>
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">Saída {v.saida} · Retorno {v.retorno}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <ViagemStatusChip s={v.status} />
-                        <ViagemSituacaoChip s={v.situacao} />
-                      </div>
-                    </div>
-                    {/* Escalas */}
-                    <ol className="mt-3 flex flex-wrap gap-2">
-                      {v.escalas.map((e, i) => (
-                        <li key={i} className={`rounded-md px-2.5 py-1.5 text-[11px] ring-1 ${
-                          e.horaReal
-                            ? "bg-[color:color-mix(in_oklab,var(--success)_10%,transparent)] text-[color:var(--success)] ring-[color:color-mix(in_oklab,var(--success)_30%,transparent)]"
-                            : "bg-[color:var(--muted)] text-muted-foreground ring-[color:var(--hairline)]"
-                        }`}>
-                          <span className="font-semibold">{e.cidade}</span>
-                          <span className="ml-1 font-mono">{e.horaReal ?? e.horaPrevista}</span>
-                          {!e.horaReal && <span className="ml-1 text-[10px] opacity-70">previsto</span>}
-                        </li>
-                      ))}
-                    </ol>
-                  </li>
-                );
-              })}
-            </ul>
+      {(error || message) && (
+        <div
+          className={`mt-4 border-l-2 p-3 text-xs ${error ? "border-[color:var(--danger)] bg-[color:var(--danger)]/5" : "border-[color:var(--info)] bg-[color:var(--info)]/5"}`}
+        >
+          {error ?? message}
+        </div>
+      )}
+      {!rotas.length && !loading && (
+        <div className="mt-4 flex items-start gap-3 border-l-2 border-[color:var(--warning)] bg-[color:var(--warning)]/5 p-4">
+          <AlertTriangle className="h-5 w-5 text-[color:var(--warning)]" />
+          <div>
+            <p className="text-sm font-medium">Programação operacional ainda não aplicada</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Aplique a migration 0024 e revise as rotas em Cadastros → Configurações operacionais.
+            </p>
           </div>
+        </div>
+      )}
+      {reviewRoutes.length > 0 && (
+        <div className="mt-4 flex items-start gap-3 border-l-2 border-[color:var(--warning)] bg-[color:var(--warning)]/5 p-4">
+          <AlertTriangle className="h-5 w-5 text-[color:var(--warning)]" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">
+              {reviewRoutes.length} rota(s) aguardam confirmação do FAQ
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Continuam utilizáveis, mas a divergência está visível e deve ser encerrada no cadastro
+              operacional.
+            </p>
+          </div>
+          <StatusChip tone="warning">revisão pendente</StatusChip>
+        </div>
+      )}
 
-          <div className="surface-card overflow-hidden">
-            <header className="border-b border-[color:var(--hairline)] px-5 py-4">
-              <h3 className="font-display text-lg text-foreground">Frota agora</h3>
-            </header>
-            <ul className="divide-y divide-[color:var(--hairline)]">
-              {embarcacoes.map((e) => (
-                <li key={e.id} onClick={() => abrirEditarEmbarcacao(e)} className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-[color:color-mix(in_oklab,var(--brand)_5%,transparent)]">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{e.nome}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{e.tipo.replace("_", " + ")} · {lastTripLabel(viagens, e.id)}</p>
-                  </div>
-                  <StatusChip tone={e.status === "ativa" ? "success" : e.status === "manutencao" ? "warning" : "offline"}>
-                    {e.status === "ativa" ? "Ativa" : e.status === "manutencao" ? "Manutenção" : "Alugada"}
-                  </StatusChip>
-                </li>
-              ))}
-            </ul>
-          </div>
+      {(tab === "agenda" || tab === "viagens") && (
+        <TripFilters
+          query={query}
+          setQuery={setQuery}
+          boatFilter={boatFilter}
+          setBoatFilter={setBoatFilter}
+          routeFilter={routeFilter}
+          setRouteFilter={setRouteFilter}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          embarcacoes={embarcacoes}
+          rotas={rotas}
+        />
+      )}
+
+      {tab === "agenda" && (
+        <div
+          className={`mt-4 grid items-start gap-4 ${selected ? "xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1"}`}
+        >
+          <WeeklyCalendar
+            weekStart={weekStart}
+            setWeekStart={setWeekStart}
+            trips={filteredTrips}
+            boats={embarcacoes}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            loading={loading}
+          />
+          {selected && (
+            <TripDetail
+              trip={selected}
+              cities={cidades}
+              linkedTrip={
+                viagens.find(
+                  (trip) =>
+                    trip.id !== selected.id &&
+                    trip.cicloUuid &&
+                    trip.cicloUuid === selected.cicloUuid,
+                ) ?? null
+              }
+              onClose={() => setSelectedId(null)}
+              onEdit={() => {
+                setEditingTripId(selected.id);
+                setTripModal(true);
+              }}
+              onAction={(action) =>
+                action === "cancelar" ? setShowCancel(true) : void runTransition(action)
+              }
+              transitioning={transitioning}
+            />
+          )}
         </div>
       )}
 
       {tab === "viagens" && (
-        <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar por código, embarcação, trecho…" right={<PrimaryButton icon={Plus} onClick={abrirNovaViagem}>Nova viagem</PrimaryButton>}>
-            <FilterChip active>Todas</FilterChip>
-            <FilterChip>Em curso</FilterChip>
-            <FilterChip>Planejadas</FilterChip>
-            <FilterChip>Concluídas</FilterChip>
-          </FilterBar>
+        <div className="mt-4">
           <DataTable
-            rows={viagens}
-            onRowClick={abrirEditarViagem}
+            rows={filteredTrips}
+            onRowClick={(trip) => {
+              setSelectedId(trip.id);
+              setWeekStart(mondayOf(new Date(trip.dataHoraSaida)));
+              setTab("agenda");
+            }}
             columns={[
-              { key: "codigo", header: "Código", render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.codigo}</span> },
-              { key: "trecho", header: "Trecho", render: (r) => <span className="font-display text-sm">{r.origem} → {r.destino}</span> },
-              { key: "embarcacao", header: "Embarcação", render: (r) => r.embarcacaoNome },
-              { key: "saida", header: "Saída", render: (r) => <span className="font-mono text-xs">{r.saida}</span> },
-              { key: "retorno", header: "Retorno", render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.retorno}</span> },
-              { key: "status", header: "Status", render: (r) => <ViagemStatusChip s={r.status} /> },
-              { key: "situacao", header: "Situação", render: (r) => r.situacao ? <ViagemSituacaoChip s={r.situacao} /> : <span className="text-xs text-muted-foreground">—</span> },
-              { key: "ocupacao", header: "Ocupação", align: "right", render: (r) => <span className="font-mono">{r.ocupacaoPct}%</span> },
-              { key: "carga", header: "Carga", align: "right", render: (r) => <span className="font-mono">{r.cargaPct}%</span> },
+              {
+                key: "codigo",
+                header: "Viagem",
+                render: (trip) => (
+                  <div>
+                    <p className="font-mono text-xs font-medium">{trip.codigo ?? "Sem código"}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {trip.origemSigla} → {trip.destinoSigla ?? "—"}
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                key: "boat",
+                header: "Embarcação",
+                render: (trip) => <span className="text-xs">{trip.embarcacaoNome}</span>,
+              },
+              {
+                key: "departure",
+                header: "Saída",
+                render: (trip) => (
+                  <span className="font-mono text-xs">{formatDateTime(trip.dataHoraSaida)}</span>
+                ),
+              },
+              {
+                key: "arrival",
+                header: "Chegada prevista",
+                render: (trip) => (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {trip.dataHoraRetorno ? formatDateTime(trip.dataHoraRetorno) : "—"}
+                  </span>
+                ),
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (trip) => <ViagemStatusChip s={asTripStatus(trip.status)} />,
+              },
+              {
+                key: "situation",
+                header: "Situação",
+                render: (trip) =>
+                  trip.situacao ? (
+                    <ViagemSituacaoChip s={asTripSituation(trip.situacao)} />
+                  ) : (
+                    <span>—</span>
+                  ),
+              },
+              {
+                key: "version",
+                header: "Programação",
+                align: "right",
+                render: (trip) => (
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {trip.configVersao ? `v${trip.configVersao}` : "legado"}
+                  </span>
+                ),
+              },
             ]}
           />
-        </div>
-      )}
-
-      {tab === "capacidade" && (
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {embarcacoes.filter((e) => e.tipo !== "carga").map((e) => {
-            const viagem = viagens.find((v) => v.embarcacaoId === e.id && v.status === "em_curso");
-            const classes = capacityRows(e.capacidadePax);
-            const ocup = viagem?.ocupacaoPct ?? 0;
-            return (
-              <div key={e.id} className="surface-card brand-rail brand-rail-left p-5">
-                <div className="flex items-center justify-between">
-                  <p className="font-display text-lg text-foreground">{e.nome}</p>
-                  <StatusChip tone={e.status === "ativa" ? "success" : e.status === "manutencao" ? "warning" : "offline"}>
-                    {e.status === "ativa" ? "Ativa" : e.status === "manutencao" ? "Manutenção" : "Alugada"}
-                  </StatusChip>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {viagem ? `${viagem.codigo} · ${viagem.origem} → ${viagem.destino}` : "Sem viagem em curso"}
-                </p>
-                <div className="mt-4 space-y-3">
-                  {classes.map((c) => {
-                    const pct = c.cap ? Math.min(100, Math.round((ocup / 100) * 100)) : 0;
-                    const ocupados = Math.round((c.cap * ocup) / 100);
-                    return (
-                      <div key={c.label}>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-foreground/85">{c.label}</span>
-                          <span className="font-mono text-muted-foreground">{ocupados}/{c.cap}</span>
-                        </div>
-                        <div className="mt-1.5"><ShimmerBar pct={viagem ? pct : 0} tone={c.tone} /></div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 flex items-center justify-between border-t border-[color:var(--hairline)] pt-3 text-xs">
-                  <span className="text-muted-foreground">Carga</span>
-                  <span className="font-mono text-foreground/85">{e.capacidadeCarga ?? "—"} t · {viagem?.cargaPct ?? 0}% usado</span>
-                </div>
-              </div>
-            );
-          })}
         </div>
       )}
 
       {tab === "escalas" && (
-        <div className="mt-5 space-y-4">
-          <div className="surface-card brand-rail brand-rail-left flex flex-wrap items-start gap-3 p-4" style={{ background: "color-mix(in oklab, var(--danger) 7%, var(--card))" }}>
-            <AlertTriangle className="mt-0.5 h-5 w-5 text-[color:var(--danger)]" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground">Regra de conflito de escala</p>
-              <p className="mt-1 text-xs text-muted-foreground">Bloquear o mesmo colaborador no mesmo dia, horário ou período em duas embarcações/viagens diferentes.</p>
-              <p className="mt-2 font-mono text-[11px] text-[color:var(--danger)]">Exemplo: João Nonato · 25/06 18:00-22:00 · V-0418 e V-0420</p>
-            </div>
-            <StatusChip tone="danger" pulse>bloqueante</StatusChip>
+        <div className="mt-4 space-y-4">
+          <div className="flex justify-end">
+            <PrimaryButton icon={Send} disabled={notifying} onClick={notifyPendingScales}>
+              {notifying ? "Registrando…" : "Notificar pendentes"}
+            </PrimaryButton>
           </div>
-          <FilterBar searchPlaceholder="Buscar colaborador, viagem, função…" right={<PrimaryButton icon={Send} disabled={notificandoEscalas} onClick={notificarEscalasWhatsapp}>{notificandoEscalas ? "Enfileirando..." : "Notificar via WhatsApp"}</PrimaryButton>}>
-            <FilterChip active>Todas</FilterChip>
-            <FilterChip>Confirmadas</FilterChip>
-            <FilterChip>Pendentes</FilterChip>
-            <FilterChip>Conflitos</FilterChip>
-          </FilterBar>
           <DataTable
-            rows={escalasColaboradores}
+            rows={escalas}
             columns={[
-              { key: "colaborador", header: "Colaborador", render: (r) => {
-                const col = colaboradoresEscala.find((c) => c.id === r.colaboradorId);
-                return (
+              {
+                key: "name",
+                header: "Colaborador",
+                render: (scale) => (
                   <div>
-                    <p className="font-medium">{col?.nome ?? "—"}</p>
-                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{col?.whatsapp}</p>
+                    <p className="text-sm font-medium">{scale.colaboradorNome}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {scale.colaboradorWhatsapp ?? "WhatsApp não cadastrado"}
+                    </p>
                   </div>
-                );
-              } },
-              { key: "funcao", header: "Função", render: (r) => <span className="text-xs">{r.funcao}</span> },
-              { key: "viagem", header: "Viagem", render: (r) => <span className="font-mono text-xs">{viagens.find((v) => v.id === r.viagemId)?.codigo ?? "—"}</span> },
-              { key: "notificadoEm", header: "Notificado em", render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.notificadoEm}</span> },
-              { key: "status", header: "Status", render: (r) => {
-                const tone = r.status === "confirmada" ? "success" : r.status === "notificada" ? "info" : r.status === "conflito" ? "danger" : "warning";
-                return <StatusChip tone={tone as never} pulse={r.status === "conflito"}>{r.status}</StatusChip>;
-              } },
+                ),
+              },
+              {
+                key: "role",
+                header: "Função",
+                render: (scale) => (
+                  <span className="text-xs">
+                    {scale.funcao ?? scale.colaboradorFuncaoBase ?? "—"}
+                  </span>
+                ),
+              },
+              {
+                key: "trip",
+                header: "Viagem",
+                render: (scale) => (
+                  <span className="font-mono text-xs">{scale.viagemCodigo ?? "Por período"}</span>
+                ),
+              },
+              {
+                key: "period",
+                header: "Período",
+                render: (scale) => (
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {scale.dataHoraSaida
+                      ? formatDateTime(scale.dataHoraSaida)
+                      : scale.periodoInicio
+                        ? formatDateTime(scale.periodoInicio)
+                        : "—"}
+                  </span>
+                ),
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (scale) => (
+                  <StatusChip
+                    tone={
+                      scale.conflito
+                        ? "danger"
+                        : scale.status === "confirmada"
+                          ? "success"
+                          : "warning"
+                    }
+                  >
+                    {scale.conflito ? "Conflito" : scale.status}
+                  </StatusChip>
+                ),
+              },
             ]}
           />
-          {escalaMensagem && <p className="text-center text-[11px] text-muted-foreground">{escalaMensagem}</p>}
-          <p className="text-center text-[11px] text-muted-foreground">
-            Escala notifica o colaborador via WhatsApp. Conflito (mesmo colaborador em duas viagens) bloqueia até resolução.
-          </p>
         </div>
       )}
 
       {tab === "embarcacoes" && (
-        <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar embarcação…" right={<PrimaryButton icon={Plus} onClick={abrirNovaEmbarcacao}>Nova embarcação</PrimaryButton>}>
-            <FilterChip active>Todas</FilterChip>
-            <FilterChip>Ativas</FilterChip>
-            <FilterChip>Manutenção</FilterChip>
-            <FilterChip>Alugadas</FilterChip>
-          </FilterBar>
+        <div className="mt-4">
           <DataTable
             rows={embarcacoes}
-            onRowClick={abrirEditarEmbarcacao}
+            onRowClick={(boat) => {
+              setEditingBoatId(boat.id);
+              setBoatModal(true);
+            }}
             columns={[
-              { key: "nome", header: "Embarcação", render: (r) => <span className="font-medium">{r.nome}</span> },
-              { key: "tipo", header: "Tipo", render: (r) => <span className="text-xs">{r.tipo === "carga" ? "Só carga" : "Passeio + carga"}</span> },
-              { key: "capRede", header: "Rede", align: "right", render: (r) => capacityValue(r.capacidadePax, "rede") },
-              { key: "capVip", header: "VIP", align: "right", render: (r) => capacityValue(r.capacidadePax, "rede_sala_vip") },
-              { key: "capCamarote", header: "Camarote", align: "right", render: (r) => capacityValue(r.capacidadePax, "camarote") },
-              { key: "capacidadeCarga", header: "Carga (t)", align: "right", render: (r) => r.capacidadeCarga ?? "—" },
-              { key: "status", header: "Status", render: (r) => (
-                <StatusChip tone={r.status === "ativa" ? "success" : r.status === "manutencao" ? "warning" : "offline"}>
-                  {r.status === "ativa" ? "Ativa" : r.status === "manutencao" ? "Manutenção" : "Alugada"}
-                </StatusChip>
-              ) },
-              { key: "ultimaViagem", header: "Última viagem", render: (r) => <span className="font-mono text-xs">{lastTripLabel(viagens, r.id)}</span> },
+              {
+                key: "name",
+                header: "Embarcação",
+                render: (boat) => <span className="font-medium">{boat.nome}</span>,
+              },
+              {
+                key: "type",
+                header: "Tipo",
+                render: (boat) => (
+                  <span className="text-xs">
+                    {boat.tipo === "carga" ? "Somente carga" : "Passageiros + carga"}
+                  </span>
+                ),
+              },
+              {
+                key: "passengers",
+                header: "Classes configuradas",
+                render: (boat) => (
+                  <span className="text-xs text-muted-foreground">
+                    {boatClassSummary(boat.capacidadePax)}
+                  </span>
+                ),
+              },
+              {
+                key: "cargo",
+                header: "Capacidade de carga",
+                align: "right",
+                render: (boat) => (
+                  <span className="font-mono text-xs">{boat.capacidadeCarga ?? "—"}</span>
+                ),
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (boat) => (
+                  <StatusChip
+                    tone={
+                      boat.status === "ativa"
+                        ? "success"
+                        : boat.status === "manutencao"
+                          ? "warning"
+                          : "offline"
+                    }
+                  >
+                    {boat.status}
+                  </StatusChip>
+                ),
+              },
             ]}
           />
+        </div>
+      )}
+
+      {tripModal && (
+        <TripFormModal
+          trip={viagens.find((trip) => trip.id === editingTripId) ?? null}
+          rotas={rotas}
+          boats={activeBoats}
+          trips={viagens}
+          onClose={() => {
+            setTripModal(false);
+            setEditingTripId(null);
+          }}
+          onSaved={(saved, linked) => {
+            setViagens((current) =>
+              current
+                .map((trip) =>
+                  trip.id === linked?.id ? linked : trip.id === saved.id ? saved : trip,
+                )
+                .filter(
+                  (trip, index, array) =>
+                    array.findIndex((candidate) => candidate.id === trip.id) === index,
+                )
+                .concat(viagens.some((trip) => trip.id === saved.id) ? [] : [saved]),
+            );
+            setTripModal(false);
+            setEditingTripId(null);
+            setSelectedId(saved.id);
+            setTab("agenda");
+          }}
+        />
+      )}
+      {boatModal && (
+        <BoatFormModal
+          boat={embarcacoes.find((boat) => boat.id === editingBoatId) ?? null}
+          onClose={() => {
+            setBoatModal(false);
+            setEditingBoatId(null);
+          }}
+          onSaved={(saved) => {
+            setEmbarcacoes((current) =>
+              [...current.filter((boat) => boat.id !== saved.id), saved].sort((a, b) =>
+                a.nome.localeCompare(b.nome),
+              ),
+            );
+            setBoatModal(false);
+            setEditingBoatId(null);
+          }}
+        />
+      )}
+      {showCancel && selected && (
+        <div className="fixed inset-0 z-[90] grid place-items-center bg-black/75 p-4">
+          <div className="surface-card w-full max-w-lg p-6">
+            <p className="font-display text-xl">Cancelar {selected.codigo}?</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              O cancelamento fica na trilha de auditoria e libera a embarcação para outro
+              planejamento.
+            </p>
+            <textarea
+              autoFocus
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              placeholder="Motivo operacional obrigatório"
+              className="mt-4 min-h-24 w-full rounded-lg bg-[color:var(--muted)] p-3 text-sm ring-1 ring-[color:var(--hairline)]"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <GhostButton icon={X} onClick={() => setShowCancel(false)}>
+                Voltar
+              </GhostButton>
+              <PrimaryButton
+                icon={Trash2}
+                disabled={transitioning}
+                onClick={() => void runTransition("cancelar")}
+              >
+                Confirmar cancelamento
+              </PrimaryButton>
+            </div>
+          </div>
         </div>
       )}
     </AppShell>
   );
 }
 
-function mapViagemView(v: NavegacaoViagemApi): ViagemView {
-  const capacidade = v.capacidadePaxDisponivel ?? {};
-  const passageiros = Object.values(capacidade).reduce((sum, value) => sum + numericValue(value), 0);
-  return {
-    id: v.id,
-    codigo: v.codigo ?? "sem-codigo",
-    embarcacaoId: v.embarcacaoId,
-    embarcacaoNome: v.embarcacaoNome,
-    origem: v.origemSigla,
-    destino: v.destinoSigla ?? v.escalas.at(-1)?.cidadeSigla ?? "—",
-    saida: formatDateTime(v.dataHoraSaida),
-    retorno: v.dataHoraRetorno ? formatDateTime(v.dataHoraRetorno) : "—",
-    status: asViagemStatus(v.status),
-    situacao: asViagemSituacao(v.situacao),
-    ocupacaoPct: 0,
-    cargaPct: 0,
-    passageiros,
-    volumes: 0,
-    capacidadePaxDisponivel: capacidade,
-    escalas: v.escalas.map((escala) => ({
-      cidade: escala.cidadeSigla,
-      horaPrevista: escala.dataHoraPrevista ? formatShortDateTime(escala.dataHoraPrevista) : "—",
-      horaReal: escala.dataHoraReal ? formatShortDateTime(escala.dataHoraReal) : null,
-    })),
-  };
+function TripFilters(props: {
+  query: string;
+  setQuery: (value: string) => void;
+  boatFilter: string;
+  setBoatFilter: (value: string) => void;
+  routeFilter: string;
+  setRouteFilter: (value: string) => void;
+  statusFilter: string;
+  setStatusFilter: (value: string) => void;
+  embarcacoes: EmbarcacaoApi[];
+  rotas: RotaTemplateApi[];
+}) {
+  return (
+    <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--hairline)] bg-[color:var(--card)] p-3 md:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,220px))]">
+      <label className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={props.query}
+          onChange={(e) => props.setQuery(e.target.value)}
+          placeholder="Buscar viagem, trecho ou embarcação"
+          className="h-10 w-full rounded-lg bg-[color:var(--muted)] pl-9 pr-3 text-sm ring-1 ring-[color:var(--hairline)]"
+        />
+      </label>
+      <FilterSelect
+        value={props.boatFilter}
+        onChange={props.setBoatFilter}
+        label="Todas as embarcações"
+        options={props.embarcacoes.map((boat) => [boat.id, boat.nome])}
+      />
+      <FilterSelect
+        value={props.routeFilter}
+        onChange={props.setRouteFilter}
+        label="Todas as rotas"
+        options={props.rotas.map((route) => [route.id, route.nome])}
+      />
+      <FilterSelect
+        value={props.statusFilter}
+        onChange={props.setStatusFilter}
+        label="Todos os status"
+        options={Object.entries(STATUS_LABELS)}
+      />
+    </div>
+  );
 }
 
-function normalizeRotas(templates: RotaTemplateApi[]): RotaView[] {
-  if (!templates.length) return ROTAS_FAQ;
-  return templates.map((template) => {
-    const origemSigla = template.origemSigla ?? siglaFromLabel(template.origem) ?? "BEL";
-    const destinoSigla = template.destinoSigla ?? siglaFromLabel(template.destino) ?? "STM";
-    const schedule = scheduleForTemplate(template);
-    const rotuloBase = template.rotulo ?? template.label ?? `${origemSigla} -> ${destinoSigla}`;
-    return {
-      id: template.id,
-      rotulo: rotuloBase.includes("⇄") || rotuloBase.includes("<->") ? rotuloBase : `${rotuloBase.replace("→", "⇄").replace("->", "⇄")} (${schedule.dayLabel})`,
-      origemSigla,
-      destinoSigla,
-      embarcacao: template.embarcacaoNome ?? template.embarcacao ?? "F/B Amazonas VI",
-      saida: template.saidaTexto ?? template.saida ?? "horario a validar",
-      paradas: (template.paradas ?? []).map((parada) => {
-        if (typeof parada === "string") return parada;
-        const cidade = parada.cidadeSigla ?? parada.cidade ?? parada.label ?? "parada";
-        const texto = parada.texto ?? parada.hora ?? parada.dataHoraPrevista ?? "";
-        return texto ? `${cidade} · ${texto}` : cidade;
-      }),
-      saidaDiaSemana: schedule.saidaDiaSemana,
-      saidaHora: schedule.saidaHora,
-      retornoDias: schedule.retornoDias,
-      retornoHora: schedule.retornoHora,
-      cicloLabel: schedule.cicloLabel,
-    };
-  });
+function FilterSelect({
+  value,
+  onChange,
+  label,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  options: string[][];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-10 min-w-0 rounded-lg bg-[color:var(--muted)] px-3 text-sm ring-1 ring-[color:var(--hairline)]"
+    >
+      <option value="">{label}</option>
+      {options.map(([key, text]) => (
+        <option key={key} value={key}>
+          {text}
+        </option>
+      ))}
+    </select>
+  );
 }
 
-function defaultDateTimeLocal() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  date.setHours(17, 0, 0, 0);
-  return toDateTimeLocalValue(date);
+function WeeklyCalendar({
+  weekStart,
+  setWeekStart,
+  trips,
+  boats,
+  selectedId,
+  onSelect,
+  loading,
+}: {
+  weekStart: Date;
+  setWeekStart: (date: Date) => void;
+  trips: NavegacaoViagemApi[];
+  boats: EmbarcacaoApi[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  loading: boolean;
+}) {
+  const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const weekEnd = addDays(weekStart, 7);
+  const rows = boats.filter((boat) =>
+    trips.some((trip) => trip.embarcacaoId === boat.id && overlapsWeek(trip, weekStart, weekEnd)),
+  );
+  return (
+    <section className="surface-card min-w-0 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--hairline)] p-4">
+        <div>
+          <p className="text-sm font-medium">Semana operacional</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {formatDate(days[0])} a {formatDate(days[6])}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <GhostButton icon={ArrowLeft} onClick={() => setWeekStart(addDays(weekStart, -7))}>
+            Anterior
+          </GhostButton>
+          <GhostButton icon={RotateCcw} onClick={() => setWeekStart(mondayOf(new Date()))}>
+            Hoje
+          </GhostButton>
+          <GhostButton icon={ArrowRight} onClick={() => setWeekStart(addDays(weekStart, 7))}>
+            Próxima
+          </GhostButton>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[900px]">
+          <div className="grid grid-cols-[190px_repeat(7,minmax(100px,1fr))] border-b border-[color:var(--hairline)]">
+            <div className="p-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Embarcação
+            </div>
+            {days.map((day) => (
+              <div
+                key={day.toISOString()}
+                className={`border-l border-[color:var(--hairline)] p-3 text-center ${isSameDate(day, new Date()) ? "bg-[color:var(--brand)]/8" : ""}`}
+              >
+                <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                  {DAY_NAMES[day.getDay()]}
+                </p>
+                <p className="mt-1 font-mono text-sm">
+                  {day.getDate().toString().padStart(2, "0")}/
+                  {(day.getMonth() + 1).toString().padStart(2, "0")}
+                </p>
+              </div>
+            ))}
+          </div>
+          {rows.map((boat) => (
+            <div
+              key={boat.id}
+              className="grid min-h-24 grid-cols-[190px_minmax(0,1fr)] border-b border-[color:var(--hairline)] last:border-0"
+            >
+              <div className="p-4">
+                <p className="text-sm font-medium">{boat.nome}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {boat.status} ·{" "}
+                  {boat.tipo === "carga" ? "carga" : boatClassSummary(boat.capacidadePax)}
+                </p>
+              </div>
+              <div className="relative grid grid-cols-7">
+                {days.map((day) => (
+                  <div
+                    key={day.toISOString()}
+                    className={`border-l border-[color:var(--hairline)] ${isSameDate(day, new Date()) ? "bg-[color:var(--brand)]/5" : ""}`}
+                  />
+                ))}
+                {trips
+                  .filter(
+                    (trip) =>
+                      trip.embarcacaoId === boat.id && overlapsWeek(trip, weekStart, weekEnd),
+                  )
+                  .map((trip, index) => {
+                    const pos = calendarPosition(trip, weekStart, weekEnd);
+                    return (
+                      <button
+                        key={trip.id}
+                        onClick={() => onSelect(trip.id)}
+                        style={{
+                          left: `${pos.left}%`,
+                          width: `${pos.width}%`,
+                          top: `${12 + index * 38}px`,
+                        }}
+                        className={`absolute z-10 h-8 overflow-hidden border-l-2 px-2 text-left transition-all ${selectedId === trip.id ? "border-[color:var(--foreground)] bg-[color:var(--brand)] text-white" : tripTone(trip.status)}`}
+                        title={`${trip.codigo} · ${trip.origemSigla} → ${trip.destinoSigla}`}
+                      >
+                        <span className="block truncate text-[11px] font-medium">
+                          {trip.origemSigla} → {trip.destinoSigla} ·{" "}
+                          {formatHour(trip.dataHoraSaida)}
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          ))}
+          {!rows.length && (
+            <div className="grid min-h-40 place-items-center p-6 text-center text-sm text-muted-foreground">
+              {loading
+                ? "Carregando agenda…"
+                : "Nenhuma viagem encontrada nesta semana com os filtros atuais."}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-4 border-t border-[color:var(--hairline)] px-4 py-3 text-[11px] text-muted-foreground">
+        <Legend color="bg-[color:var(--info)]" label="Planejada" />
+        <Legend color="bg-[color:var(--warning)]" label="Em curso" />
+        <Legend color="bg-[color:var(--success)]" label="Concluída" />
+        <Legend color="bg-muted-foreground" label="Cancelada" />
+      </div>
+    </section>
+  );
 }
 
-function defaultDatesForRota(rota: RotaView) {
-  const saida = nextWeekdayDateTime(rota.saidaDiaSemana, rota.saidaHora);
-  const retorno = new Date(saida);
-  retorno.setDate(retorno.getDate() + rota.retornoDias);
-  const [retornoHora, retornoMinuto] = parseHourMinute(rota.retornoHora);
-  retorno.setHours(retornoHora, retornoMinuto, 0, 0);
-  return {
-    dataHoraSaida: toDateTimeLocalValue(saida),
-    dataHoraRetorno: toDateTimeLocalValue(retorno),
-  };
+function TripDetail({
+  trip,
+  cities,
+  linkedTrip,
+  onClose,
+  onEdit,
+  onAction,
+  transitioning,
+}: {
+  trip: NavegacaoViagemApi;
+  cities: CidadeApi[];
+  linkedTrip: NavegacaoViagemApi | null;
+  onClose: () => void;
+  onEdit: () => void;
+  onAction: (action: TripAction) => void;
+  transitioning: boolean;
+}) {
+  const cityName = (sigla: string) => cities.find((city) => city.sigla === sigla)?.nome ?? sigla;
+  return (
+    <aside className="surface-card sticky top-4 overflow-hidden xl:max-h-[calc(100vh-130px)] xl:overflow-y-auto">
+      <div className="border-b border-[color:var(--hairline)] bg-[color:var(--brand)]/10 p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Viagem selecionada · {trip.codigo}
+            </p>
+            <h2 className="mt-2 font-display text-2xl">
+              {cityName(trip.origemSigla)} <span className="text-muted-foreground">→</span>{" "}
+              {cityName(trip.destinoSigla ?? "")}
+            </h2>
+          </div>
+          <button aria-label="Fechar detalhe" onClick={onClose}>
+            <X className="h-5 w-5 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="mt-3 flex gap-2">
+          <ViagemStatusChip s={asTripStatus(trip.status)} />
+          {trip.situacao && <ViagemSituacaoChip s={asTripSituation(trip.situacao)} />}
+        </div>
+      </div>
+      <div className="p-5">
+        <div className="grid grid-cols-2 gap-4 border-b border-[color:var(--hairline)] pb-4">
+          <Info label="Embarcação" value={trip.embarcacaoNome} />
+          <Info
+            label="Programação"
+            value={trip.configVersao ? `Versão ${trip.configVersao}` : "Viagem legada"}
+          />
+          <Info label="Saída" value={formatDateTime(trip.dataHoraSaida)} />
+          <Info
+            label="Chegada prevista"
+            value={trip.dataHoraRetorno ? formatDateTime(trip.dataHoraRetorno) : "—"}
+          />
+        </div>
+        {linkedTrip && (
+          <div className="mt-4 flex w-full items-center gap-3 border-l-2 border-[color:var(--info)] bg-[color:var(--info)]/5 p-3">
+            <Link2 className="h-4 w-4 text-[color:var(--info)]" />
+            <div className="flex-1">
+              <p className="text-xs font-medium">Ciclo associado</p>
+              <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                {linkedTrip.codigo} · {linkedTrip.origemSigla} → {linkedTrip.destinoSigla}
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </div>
+        )}
+        <div className="mt-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Roteiro detalhado
+          </p>
+          <div className="mt-4">
+            <TimelinePoint
+              city={cityName(trip.origemSigla)}
+              label="Partida"
+              planned={trip.dataHoraSaida}
+              actual={null}
+              first
+            />
+            {trip.escalas.map((stop, index) => (
+              <TimelinePoint
+                key={stop.id}
+                city={cityName(stop.cidadeSigla)}
+                label={index === trip.escalas.length - 1 ? "Chegada" : `Intertrecho ${index + 1}`}
+                planned={stop.dataHoraPrevista}
+                actual={stop.dataHoraReal}
+                last={index === trip.escalas.length - 1}
+              />
+            ))}
+          </div>
+        </div>
+        {trip.motivoCancelamento && (
+          <div className="mt-4 border-l-2 border-[color:var(--danger)] p-3 text-xs">
+            <p className="font-medium">Motivo do cancelamento</p>
+            <p className="mt-1 text-muted-foreground">{trip.motivoCancelamento}</p>
+          </div>
+        )}
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-[color:var(--hairline)] pt-4">
+          {trip.status === "planejada" && (
+            <>
+              <GhostButton onClick={onEdit}>Editar</GhostButton>
+              <PrimaryButton
+                icon={Play}
+                disabled={transitioning}
+                onClick={() => onAction("iniciar")}
+              >
+                Iniciar viagem
+              </PrimaryButton>
+            </>
+          )}
+          {trip.status === "em_curso" && (
+            <PrimaryButton
+              icon={Check}
+              disabled={transitioning}
+              onClick={() => onAction("concluir")}
+            >
+              Concluir viagem
+            </PrimaryButton>
+          )}
+          {["planejada", "em_curso"].includes(trip.status) && (
+            <GhostButton
+              icon={Trash2}
+              disabled={transitioning}
+              onClick={() => onAction("cancelar")}
+            >
+              Cancelar
+            </GhostButton>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
 }
 
-function nextWeekdayDateTime(dayOfWeek: number, time: string) {
-  const date = new Date();
-  const [hour, minute] = parseHourMinute(time);
-  const diff = (dayOfWeek - date.getDay() + 7) % 7;
-  date.setDate(date.getDate() + diff);
-  date.setHours(hour, minute, 0, 0);
-  if (date.getTime() <= Date.now()) {
-    date.setDate(date.getDate() + 7);
+function TripFormModal({
+  trip,
+  rotas,
+  boats,
+  trips,
+  onClose,
+  onSaved,
+}: {
+  trip: NavegacaoViagemApi | null;
+  rotas: RotaTemplateApi[];
+  boats: EmbarcacaoApi[];
+  trips: NavegacaoViagemApi[];
+  onClose: () => void;
+  onSaved: (trip: NavegacaoViagemApi, linked?: NavegacaoViagemApi) => void;
+}) {
+  const initialRoute =
+    rotas.find((route) => route.id === trip?.rotaTemplateId) ??
+    rotas.find((route) => route.ativo) ??
+    rotas[0];
+  const [routeId, setRouteId] = useState(initialRoute?.id ?? "");
+  const [boatId, setBoatId] = useState(
+    trip?.embarcacaoId ?? initialRoute?.embarcacaoPadraoId ?? boats[0]?.id ?? "",
+  );
+  const [departure, setDeparture] = useState(() =>
+    trip
+      ? toLocalInput(trip.dataHoraSaida)
+      : initialRoute
+        ? toLocalInput(nextOccurrence(initialRoute))
+        : "",
+  );
+  const [linkedId, setLinkedId] = useState("");
+  const [notes, setNotes] = useState(trip?.observacoes ?? "");
+  const [capacity, setCapacity] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      Object.entries(trip?.capacidadePaxDisponivel ?? {}).map(([key, value]) => [
+        key,
+        String(numericCapacity(value) || ""),
+      ]),
+    ),
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const route = rotas.find((item) => item.id === routeId) ?? initialRoute;
+  const boat = boats.find((item) => item.id === boatId);
+  const classCaps = boat ? extractBoatCapacities(boat.capacidadePax) : {};
+  const departureDate = departure ? new Date(departure) : null;
+  const stops =
+    route && departureDate && Number.isFinite(departureDate.getTime())
+      ? route.paradas.map((stop) => ({
+          ...stop,
+          date: new Date(departureDate.getTime() + stop.offsetMinutos * 60_000),
+        }))
+      : [];
+  const arrival = stops.at(-1)?.date ?? null;
+  const possibleLinks = trips.filter(
+    (candidate) =>
+      candidate.id !== trip?.id &&
+      candidate.configVersaoId &&
+      candidate.rotaTemplateId &&
+      candidate.origemSigla === route?.destinoSigla &&
+      candidate.destinoSigla === route?.origemSigla &&
+      candidate.status === "planejada",
+  );
+
+  function selectRoute(id: string) {
+    const next = rotas.find((item) => item.id === id);
+    setRouteId(id);
+    if (!trip && next) {
+      setDeparture(toLocalInput(nextOccurrence(next)));
+      if (next.embarcacaoPadraoId) setBoatId(next.embarcacaoPadraoId);
+    }
   }
+  async function save() {
+    if (!route || !boat || !departureDate || !arrival) {
+      setError("Selecione rota, embarcação e saída válidas.");
+      return;
+    }
+    const capabilities = Object.keys(classCaps);
+    const selectedCapacity = Object.fromEntries(
+      capabilities
+        .map((key) => [key, Number(capacity[key] || classCaps[key])])
+        .filter(([, value]) => Number(value) > 0),
+    );
+    const cycleUuid = linkedId
+      ? (trips.find((candidate) => candidate.id === linkedId)?.cicloUuid ?? crypto.randomUUID())
+      : (trip?.cicloUuid ?? undefined);
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        embarcacaoId: boat.id,
+        origemSigla: route.origemSigla,
+        destinoSigla: route.destinoSigla,
+        dataHoraSaida: departureDate.toISOString(),
+        dataHoraRetorno: arrival.toISOString(),
+        capacidadePaxDisponivel: selectedCapacity,
+        observacoes: notes || undefined,
+        rotaTemplateId: route.id,
+        configVersaoId: route.configVersaoId,
+        cicloUuid,
+        escalas: stops.map((stop) => ({
+          cidadeSigla: stop.cidadeSigla,
+          dataHoraPrevista: stop.date.toISOString(),
+        })),
+      };
+      const saved = trip
+        ? await updateNavegacaoViagem(trip.id, payload)
+        : await createNavegacaoViagem({ ...payload, clientUuid: crypto.randomUUID() });
+      let linked: NavegacaoViagemApi | undefined;
+      if (linkedId && cycleUuid) linked = await updateNavegacaoViagem(linkedId, { cicloUuid });
+      onSaved(saved, linked);
+    } catch (err) {
+      setError(apiMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Modal
+      title={trip ? `Editar ${trip.codigo}` : "Planejar nova viagem"}
+      subtitle="A rota preenche os intertrechos e preserva a versão publicada."
+      onClose={onClose}
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <FormField label="Rota e frequência" wide>
+          <select value={routeId} onChange={(e) => selectRoute(e.target.value)}>
+            {rotas
+              .filter((item) => item.ativo || item.id === trip?.rotaTemplateId)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.nome} · {DAY_NAMES[item.diaSemana]} {item.horaSaida}
+                  {item.requerRevisao ? " · revisar" : ""}
+                </option>
+              ))}
+          </select>
+        </FormField>
+        <FormField label="Embarcação">
+          <select value={boatId} onChange={(e) => setBoatId(e.target.value)}>
+            {boats.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.nome}
+              </option>
+            ))}
+          </select>
+        </FormField>
+        <FormField label="Data e hora de saída">
+          <input
+            type="datetime-local"
+            value={departure}
+            onChange={(e) => setDeparture(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Chegada prevista">
+          <input
+            readOnly
+            value={arrival ? formatDateTime(arrival.toISOString()) : "Calculada pelos intertrechos"}
+          />
+        </FormField>
+        <FormField label="Vincular retorno ao ciclo" wide>
+          <select value={linkedId} onChange={(e) => setLinkedId(e.target.value)}>
+            <option value="">Sem vínculo por enquanto</option>
+            {possibleLinks.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.codigo} · {candidate.origemSigla} → {candidate.destinoSigla} ·{" "}
+                {formatDateTime(candidate.dataHoraSaida)}
+              </option>
+            ))}
+          </select>
+        </FormField>
+      </div>
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Intertrechos calculados
+          </p>
+          <div className="mt-3 space-y-2">
+            {stops.map((stop, index) => (
+              <div
+                key={`${stop.cidadeSigla}-${index}`}
+                className="flex items-center justify-between border-b border-[color:var(--hairline)] py-2 text-xs"
+              >
+                <span>
+                  {String(index + 1).padStart(2, "0")} · {stop.cidadeSigla}
+                </span>
+                <span className="font-mono text-muted-foreground">
+                  {formatDateTime(stop.date.toISOString())}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Capacidade desta viagem
+          </p>
+          <div className="mt-3 space-y-2">
+            {Object.entries(classCaps).map(([key, max]) => (
+              <label key={key} className="flex items-center justify-between gap-3 text-xs">
+                <span>
+                  {classLabel(key)}{" "}
+                  <span className="text-muted-foreground">
+                    · {max > 0 ? `máximo ${max}` : "não informada no cadastro"}
+                  </span>
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={max || undefined}
+                  value={capacity[key] ?? (max > 0 ? String(max) : "")}
+                  placeholder="informar"
+                  onChange={(e) =>
+                    setCapacity((current) => ({ ...current, [key]: e.target.value }))
+                  }
+                  className="h-9 w-24 rounded-lg bg-[color:var(--muted)] px-2 text-right font-mono ring-1 ring-[color:var(--hairline)]"
+                />
+              </label>
+            ))}
+            {!Object.keys(classCaps).length && (
+              <p className="text-xs text-muted-foreground">
+                Esta embarcação não possui capacidade de passageiros cadastrada.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+      <FormField label="Observações" wide>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-20" />
+      </FormField>
+      {error && <p className="mt-3 text-xs text-[color:var(--danger)]">{error}</p>}
+      <div className="mt-5 flex justify-end gap-2">
+        <GhostButton icon={X} onClick={onClose}>
+          Cancelar
+        </GhostButton>
+        <PrimaryButton icon={Check} disabled={saving} onClick={() => void save()}>
+          {saving ? "Salvando…" : trip ? "Salvar alterações" : "Criar viagem"}
+        </PrimaryButton>
+      </div>
+    </Modal>
+  );
+}
+
+function BoatFormModal({
+  boat,
+  onClose,
+  onSaved,
+}: {
+  boat: EmbarcacaoApi | null;
+  onClose: () => void;
+  onSaved: (boat: EmbarcacaoApi) => void;
+}) {
+  const [name, setName] = useState(boat?.nome ?? "");
+  const [type, setType] = useState<"passeio_carga" | "carga">(
+    boat?.tipo === "carga" ? "carga" : "passeio_carga",
+  );
+  const [status, setStatus] = useState<"ativa" | "manutencao" | "alugada">(
+    boat?.status === "manutencao" || boat?.status === "alugada" ? boat.status : "ativa",
+  );
+  const [cargo, setCargo] = useState(
+    boat?.capacidadeCarga == null ? "" : String(boat.capacidadeCarga),
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const initialClassData = extractBoatClassSettings(boat?.capacidadePax ?? {});
+  const [classSettings, setClassSettings] = useState<
+    Record<string, { supported: boolean; capacity: string }>
+  >(() =>
+    Object.fromEntries(
+      PASSENGER_CLASSES.map((key) => [
+        key,
+        {
+          supported: initialClassData[key]?.supported ?? false,
+          capacity: initialClassData[key]?.capacity ? String(initialClassData[key].capacity) : "",
+        },
+      ]),
+    ),
+  );
+  async function saveBoat() {
+    if (!name.trim()) {
+      setError("Informe o nome da embarcação.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const classes = PASSENGER_CLASSES.filter((key) => classSettings[key].supported);
+      const capacidadePorClasse = Object.fromEntries(
+        classes.map((key) => [
+          key,
+          {
+            supported: true,
+            capacidade: classSettings[key].capacity ? Number(classSettings[key].capacity) : null,
+          },
+        ]),
+      );
+      const payload = {
+        nome: name.trim(),
+        tipo: type,
+        status,
+        capacidadeCarga: cargo ? Number(cargo.replace(",", ".")) : null,
+        capacidadePax: { classes, capacidadePorClasse },
+      };
+      const saved = boat
+        ? await updateEmbarcacao(boat.id, payload)
+        : await createEmbarcacao(payload);
+      onSaved(saved);
+    } catch (err) {
+      setError(apiMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Modal
+      title={boat ? "Editar embarcação" : "Nova embarcação"}
+      subtitle="Cadastro mestre usado pelo planejamento e bloqueios de agenda."
+      onClose={onClose}
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <FormField label="Nome" wide>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </FormField>
+        <FormField label="Tipo">
+          <select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+            <option value="passeio_carga">Passageiros + carga</option>
+            <option value="carga">Somente carga</option>
+          </select>
+        </FormField>
+        <FormField label="Status">
+          <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+            <option value="ativa">Ativa</option>
+            <option value="manutencao">Manutenção</option>
+            <option value="alugada">Alugada</option>
+          </select>
+        </FormField>
+        <FormField label="Capacidade de carga">
+          <input inputMode="decimal" value={cargo} onChange={(e) => setCargo(e.target.value)} />
+        </FormField>
+      </div>
+      {type !== "carga" && (
+        <div className="mt-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Classes e capacidade de passageiros
+          </p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {PASSENGER_CLASSES.map((key) => (
+              <div
+                key={key}
+                className="flex items-center gap-3 border-b border-[color:var(--hairline)] py-2"
+              >
+                <label className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={classSettings[key].supported}
+                    onChange={(e) =>
+                      setClassSettings((current) => ({
+                        ...current,
+                        [key]: { ...current[key], supported: e.target.checked },
+                      }))
+                    }
+                  />
+                  <span>{classLabel(key)}</span>
+                </label>
+                <input
+                  aria-label={`Capacidade ${classLabel(key)}`}
+                  disabled={!classSettings[key].supported}
+                  type="number"
+                  min={0}
+                  value={classSettings[key].capacity}
+                  onChange={(e) =>
+                    setClassSettings((current) => ({
+                      ...current,
+                      [key]: { ...current[key], capacity: e.target.value },
+                    }))
+                  }
+                  placeholder="não informada"
+                  className="h-9 w-32 rounded-lg bg-[color:var(--muted)] px-2 text-right text-xs ring-1 ring-[color:var(--hairline)] disabled:opacity-40"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {error && <p className="mt-3 text-xs text-[color:var(--danger)]">{error}</p>}
+      <div className="mt-5 flex justify-end gap-2">
+        <GhostButton icon={X} onClick={onClose}>
+          Cancelar
+        </GhostButton>
+        <PrimaryButton icon={Check} disabled={saving} onClick={() => void saveBoat()}>
+          {saving ? "Salvando…" : "Salvar embarcação"}
+        </PrimaryButton>
+      </div>
+    </Modal>
+  );
+}
+
+function Modal({
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center overflow-hidden bg-black/75 p-4">
+      <section className="surface-card max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto p-6">
+        <div className="flex items-start justify-between gap-4 border-b border-[color:var(--hairline)] pb-4">
+          <div>
+            <h2 className="font-display text-2xl">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          </div>
+          <button aria-label="Fechar" onClick={onClose}>
+            <X className="h-5 w-5 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="mt-5">{children}</div>
+      </section>
+    </div>
+  );
+}
+function FormField({
+  label,
+  children,
+  wide,
+}: {
+  label: string;
+  children: ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <label className={`${wide ? "md:col-span-2" : ""} block`}>
+      <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </span>
+      <div className="[&_input]:h-10 [&_input]:w-full [&_input]:rounded-lg [&_input]:bg-[color:var(--muted)] [&_input]:px-3 [&_input]:text-sm [&_input]:ring-1 [&_input]:ring-[color:var(--hairline)] [&_select]:h-10 [&_select]:w-full [&_select]:rounded-lg [&_select]:bg-[color:var(--muted)] [&_select]:px-3 [&_select]:text-sm [&_select]:ring-1 [&_select]:ring-[color:var(--hairline)] [&_textarea]:w-full [&_textarea]:rounded-lg [&_textarea]:bg-[color:var(--muted)] [&_textarea]:p-3 [&_textarea]:text-sm [&_textarea]:ring-1 [&_textarea]:ring-[color:var(--hairline)]">
+        {children}
+      </div>
+    </label>
+  );
+}
+function TimelinePoint({
+  city,
+  label,
+  planned,
+  actual,
+  first,
+  last,
+}: {
+  city: string;
+  label: string;
+  planned: string | null;
+  actual: string | null;
+  first?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <div className="relative grid grid-cols-[20px_1fr_auto] gap-3 pb-5 last:pb-0">
+      <div className="relative flex justify-center">
+        <span
+          className={`mt-1 h-3 w-3 rounded-full border-2 ${actual ? "border-[color:var(--success)] bg-[color:var(--success)]/30" : "border-[color:var(--warning)] bg-[color:var(--card)]"}`}
+        />
+        {!last && (
+          <span className="absolute left-1/2 top-4 h-[calc(100%_-_8px)] w-px -translate-x-1/2 bg-[color:var(--hairline)]" />
+        )}
+      </div>
+      <div>
+        <p className="text-sm font-medium">{city}</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{first ? "Origem" : label}</p>
+      </div>
+      <div className="text-right">
+        <p className="font-mono text-[11px]">{planned ? formatDateTime(planned) : "—"}</p>
+        <p
+          className={`mt-0.5 font-mono text-[11px] ${actual ? "text-[color:var(--success)]" : "text-muted-foreground"}`}
+        >
+          {actual ? `Real ${formatDateTime(actual)}` : "Real —"}
+        </p>
+      </div>
+    </div>
+  );
+}
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xs font-medium">{value}</p>
+    </div>
+  );
+}
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <i className={`h-2 w-2 rounded-full ${color}`} />
+      {label}
+    </span>
+  );
+}
+
+function mondayOf(date: Date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  result.setDate(result.getDate() - ((result.getDay() + 6) % 7));
+  return result;
+}
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+function isSameDate(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+function overlapsWeek(trip: NavegacaoViagemApi, start: Date, end: Date) {
+  const departure = new Date(trip.dataHoraSaida).getTime();
+  const arrival = new Date(trip.dataHoraRetorno ?? trip.dataHoraSaida).getTime();
+  return departure < end.getTime() && arrival >= start.getTime();
+}
+function calendarPosition(trip: NavegacaoViagemApi, start: Date, end: Date) {
+  const total = end.getTime() - start.getTime();
+  const from = Math.max(start.getTime(), new Date(trip.dataHoraSaida).getTime());
+  const to = Math.min(
+    end.getTime(),
+    new Date(trip.dataHoraRetorno ?? trip.dataHoraSaida).getTime(),
+  );
+  return {
+    left: Math.max(0, ((from - start.getTime()) / total) * 100),
+    width: Math.max(3, ((Math.max(to, from + 3_600_000) - from) / total) * 100),
+  };
+}
+function nextOccurrence(route: RotaTemplateApi) {
+  const date = new Date();
+  const [hours, minutes] = route.horaSaida.split(":").map(Number);
+  const delta = (route.diaSemana - date.getDay() + 7) % 7;
+  date.setDate(date.getDate() + delta);
+  date.setHours(hours, minutes, 0, 0);
+  if (date.getTime() <= Date.now()) date.setDate(date.getDate() + 7);
   return date;
 }
-
-function parseHourMinute(time: string) {
-  const [hourRaw, minuteRaw = "0"] = time.split(":");
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-  return [Number.isFinite(hour) ? hour : 17, Number.isFinite(minute) ? minute : 0] as const;
-}
-
-function scheduleForTemplate(template: RotaTemplateApi) {
-  const haystack = `${template.id} ${template.rotulo ?? ""} ${template.label ?? ""} ${template.saidaTexto ?? ""} ${template.saida ?? ""}`
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  const origemSigla = template.origemSigla ?? siglaFromLabel(template.origem) ?? "BEL";
-  const destinoSigla = template.destinoSigla ?? siglaFromLabel(template.destino) ?? "STM";
-  if (haystack.includes("alm")) {
-    return {
-      dayLabel: "terça",
-      saidaDiaSemana: 2,
-      saidaHora: "17:00",
-      retornoDias: 2,
-      retornoHora: "14:00",
-      cicloLabel: `Saida terca 17h em ${origemSigla}; fechamento previsto quinta 14h em ${destinoSigla}.`,
-    };
-  }
-  if (haystack.includes("sexta") || haystack.includes("sex")) {
-    return {
-      dayLabel: "sexta",
-      saidaDiaSemana: 5,
-      saidaHora: "17:00",
-      retornoDias: 3,
-      retornoHora: "19:00",
-      cicloLabel: `Saida sexta 17h em ${origemSigla}; fechamento previsto segunda 19h em ${destinoSigla}.`,
-    };
-  }
-  if (haystack.includes("sabado") || haystack.includes("sab")) {
-    return {
-      dayLabel: "sábado",
-      saidaDiaSemana: 6,
-      saidaHora: "16:00",
-      retornoDias: 2,
-      retornoHora: "19:00",
-      cicloLabel: `Saida sabado 16h em ${origemSigla}; fechamento previsto segunda 19h em ${destinoSigla}.`,
-    };
-  }
-  return {
-    dayLabel: "quarta",
-    saidaDiaSemana: 3,
-    saidaHora: "17:00",
-    retornoDias: 3,
-    retornoHora: "10:00",
-    cicloLabel: `Saida quarta 17h em ${origemSigla}; fechamento previsto sabado 10h em ${destinoSigla}.`,
-  };
-}
-
-function toDateTimeLocalValue(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, "0");
+function toLocalInput(value: string | Date) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const pad = (part: number) => String(part).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
-
-function toIsoFromDateTimeLocal(value: string) {
-  return new Date(value).toISOString();
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(value);
 }
-
-function classeKeyFromLabel(label: string) {
-  const direct = CLASSE_API_BY_LABEL[label];
-  if (direct) return direct;
-  return label
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function siglaFromLabel(label?: string) {
-  if (!label) return null;
-  return cidadeSiglaFromParada(label);
-}
-
-function cidadeSiglaFromParada(label: string) {
-  const normalized = label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  if (normalized.includes("belem")) return "BEL";
-  if (normalized.includes("breves")) return "BRV";
-  if (normalized.includes("gurupa")) return "GUR";
-  if (normalized.includes("almeirim")) return "ALM";
-  if (normalized.includes("porto de moz")) return "PMZ";
-  if (normalized.includes("prainha")) return "PRA";
-  if (normalized.includes("monte alegre")) return "MTA";
-  if (normalized.includes("santarem")) return "STM";
-  return null;
-}
-
-function capacityRows(capacidade: Record<string, unknown>) {
-  const rows = Object.entries(capacidade)
-    .filter(([, value]) => numericValue(value) > 0)
-    .slice(0, 6)
-    .map(([key, value], index) => ({
-      label: labelClasse(key),
-      cap: numericValue(value),
-      tone: (index % 3 === 0 ? "brand" : index % 3 === 1 ? "warning" : "success") as "brand" | "warning" | "success",
-    }));
-  return rows.length ? rows : [{ label: "Sem classes cadastradas", cap: 0, tone: "brand" as const }];
-}
-
-function classesFromCapacidade(capacidade?: Record<string, unknown>) {
-  if (!capacidade) return null;
-  const classes = Object.entries(capacidade)
-    .filter(([, value]) => numericValue(value) > 0)
-    .map(([key]) => labelClasse(key));
-  return classes.length ? classes : null;
-}
-
-function capacityValue(capacidade: Record<string, unknown>, key: string) {
-  const value = numericValue(capacidade[key]);
-  return value || "—";
-}
-
-function numericValue(value: unknown) {
-  if (typeof value === "number") return value;
-  if (typeof value === "string" && value.trim()) return Number(value) || 0;
-  return 0;
-}
-
-function parseOptionalNumber(value: string) {
-  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function labelClasse(key: string) {
-  return key
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ")
-    .replace("Vip", "VIP");
-}
-
-function lastTripLabel(viagens: ViagemView[], embarcacaoId: string) {
-  const viagem = viagens.find((v) => v.embarcacaoId === embarcacaoId);
-  return viagem ? `${viagem.codigo} · ${viagem.origem} → ${viagem.destino}` : "Sem viagem vinculada";
-}
-
-function normalizeBoatName(value: string) {
-  return value.toUpperCase().replace(/\s+/g, " ").trim();
-}
-
-function asViagemStatus(status: string): ViagemStatus {
-  return ["planejada", "em_curso", "concluida", "cancelada"].includes(status) ? (status as ViagemStatus) : "planejada";
-}
-
-function asViagemSituacao(situacao: string | null): ViagemSituacao | undefined {
-  return situacao && ["no_prazo", "atencao", "atrasado"].includes(situacao) ? (situacao as ViagemSituacao) : undefined;
-}
-
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -1221,22 +1536,93 @@ function formatDateTime(value: string) {
     minute: "2-digit",
   }).format(new Date(value));
 }
-
-function formatShortDateTime(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function MockField({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
-  return (
-    <div className={wide ? "sm:col-span-2" : ""}>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <div className="mt-1 flex min-h-10 items-center rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)]">
-        {value}
-      </div>
-    </div>
+function formatHour(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(
+    new Date(value),
   );
+}
+function tripTone(status: string) {
+  if (status === "em_curso")
+    return "border-[color:var(--warning)] bg-[color:var(--warning)]/20 text-foreground";
+  if (status === "concluida")
+    return "border-[color:var(--success)] bg-[color:var(--success)]/15 text-foreground";
+  if (status === "cancelada")
+    return "border-muted-foreground bg-[color:var(--muted)] text-muted-foreground line-through";
+  return "border-[color:var(--info)] bg-[color:var(--info)]/15 text-foreground";
+}
+function extractBoatCapacities(raw: Record<string, unknown>) {
+  const source =
+    raw.capacidadePorClasse && typeof raw.capacidadePorClasse === "object"
+      ? (raw.capacidadePorClasse as Record<string, unknown>)
+      : raw;
+  const result: Record<string, number> = {};
+  for (const [key, value] of Object.entries(source)) {
+    const numeric = numericCapacity(value);
+    const supported =
+      value && typeof value === "object" && "supported" in value
+        ? Boolean((value as { supported?: unknown }).supported)
+        : numeric > 0;
+    if (supported) result[key] = numeric;
+  }
+  return result;
+}
+function extractBoatClassSettings(raw: Record<string, unknown>) {
+  const source =
+    raw.capacidadePorClasse && typeof raw.capacidadePorClasse === "object"
+      ? (raw.capacidadePorClasse as Record<string, unknown>)
+      : raw;
+  const declared = new Set(
+    Array.isArray(raw.classes)
+      ? raw.classes.filter((value): value is string => typeof value === "string")
+      : [],
+  );
+  const result: Record<string, { supported: boolean; capacity: number }> = {};
+  for (const key of PASSENGER_CLASSES) {
+    const value = source[key];
+    const supported =
+      declared.has(key) ||
+      Boolean(value && typeof value === "object" && (value as { supported?: unknown }).supported) ||
+      numericCapacity(value) > 0;
+    result[key] = { supported, capacity: numericCapacity(value) };
+  }
+  return result;
+}
+function numericCapacity(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return Number(value) || 0;
+  if (value && typeof value === "object") {
+    const data = value as Record<string, unknown>;
+    return numericCapacity(data.capacidade ?? data.valor);
+  }
+  return 0;
+}
+function boatClassSummary(raw: Record<string, unknown>) {
+  const classes = Object.keys(extractBoatCapacities(raw));
+  if (!classes.length && Array.isArray(raw.classes)) return `${raw.classes.length} classe(s)`;
+  return classes.length
+    ? classes.map(classLabel).slice(0, 3).join(", ") +
+        (classes.length > 3 ? ` +${classes.length - 3}` : "")
+    : "Sem classes de passageiros";
+}
+function classLabel(key: string) {
+  return key
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+    .replace("Vip", "VIP");
+}
+function asTripStatus(value: string): "planejada" | "em_curso" | "concluida" | "cancelada" {
+  return ["planejada", "em_curso", "concluida", "cancelada"].includes(value)
+    ? (value as "planejada" | "em_curso" | "concluida" | "cancelada")
+    : "planejada";
+}
+function asTripSituation(value: string): "no_prazo" | "atencao" | "atrasado" {
+  return ["no_prazo", "atencao", "atrasado"].includes(value)
+    ? (value as "no_prazo" | "atencao" | "atrasado")
+    : "no_prazo";
+}
+function apiMessage(error: unknown) {
+  return error instanceof AjcApiError || error instanceof Error
+    ? error.message
+    : "Não foi possível concluir a operação.";
 }

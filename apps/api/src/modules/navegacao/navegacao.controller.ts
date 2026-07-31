@@ -4,7 +4,7 @@ import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { NavegacaoRepository } from './navegacao.repository';
-import { CreateViagemInput, NotifyEscalasInput, UpdateViagemInput } from './navegacao.types';
+import { CreateViagemInput, NotifyEscalasInput, TransicionarViagemInput, UpdateViagemInput } from './navegacao.types';
 
 @UseGuards(AuthGuard)
 @Controller('navegacao')
@@ -39,6 +39,22 @@ export class NavegacaoController {
   updateViagem(@Param('id') id: string, @Body() body: UpdateViagemInput, @CurrentUser() user: AuthTokenPayload) {
     this.validateUpdateViagem(body);
     return this.repository.updateViagem(id, body, user.sub);
+  }
+
+  @Post('viagens/:id/transicoes')
+  @RequirePermissions('navegacao.editar')
+  transicionarViagem(
+    @Param('id') id: string,
+    @Body() body: TransicionarViagemInput,
+    @CurrentUser() user: AuthTokenPayload,
+  ) {
+    if (!body?.acao || !['iniciar', 'concluir', 'cancelar'].includes(body.acao)) {
+      throw new BadRequestException('acao deve ser iniciar, concluir ou cancelar');
+    }
+    if (body.acao === 'cancelar' && (!body.motivo || body.motivo.trim().length < 5)) {
+      throw new BadRequestException('motivo do cancelamento obrigatorio');
+    }
+    return this.repository.transicionarViagem(id, body, user.sub);
   }
 
   @Get('templates-rotas')

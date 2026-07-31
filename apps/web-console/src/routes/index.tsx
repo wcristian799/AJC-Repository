@@ -724,7 +724,7 @@ function LiveClock() {
     return () => clearInterval(i);
   }, []);
   return (
-    <span className="tabular-nums">
+    <span className="tabular-nums" suppressHydrationWarning>
       {now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
     </span>
   );

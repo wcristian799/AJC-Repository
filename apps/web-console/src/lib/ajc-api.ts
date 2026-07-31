@@ -162,6 +162,11 @@ export type NavegacaoViagemApi = {
   situacao: string | null;
   capacidadePaxDisponivel: Record<string, unknown>;
   observacoes: string | null;
+  rotaTemplateId: string | null;
+  configVersaoId: string | null;
+  configVersao: number | null;
+  cicloUuid: string | null;
+  motivoCancelamento: string | null;
   escalas: NavegacaoEscalaApi[];
 };
 
@@ -191,28 +196,19 @@ export type NavegacaoEscalaColaboradorApi = {
 
 export type RotaTemplateApi = {
   id: string;
-  rotulo?: string;
-  label?: string;
-  embarcacao?: string;
-  embarcacaoNome?: string;
-  origem?: string;
-  origemSigla?: string;
-  destino?: string;
-  destinoSigla?: string;
-  saida?: string;
-  saidaTexto?: string;
-  pendencias?: string[];
-  paradas?: Array<
-    | string
-    | {
-        cidade?: string;
-        cidadeSigla?: string;
-        hora?: string;
-        label?: string;
-        texto?: string;
-        dataHoraPrevista?: string;
-      }
-  >;
+  nome: string;
+  origemSigla: string;
+  destinoSigla: string;
+  diaSemana: number;
+  horaSaida: string;
+  ativo: boolean;
+  observacao?: string;
+  requerRevisao?: boolean;
+  embarcacaoPadraoId?: string | null;
+  rotaRetornoId?: string | null;
+  configVersaoId: string;
+  configVersao: number;
+  paradas: Array<{ cidadeSigla: string; offsetMinutos: number; permanenciaMinutos?: number }>;
 };
 
 export type CreateViagemApiInput = {
@@ -223,6 +219,9 @@ export type CreateViagemApiInput = {
   dataHoraRetorno?: string;
   capacidadePaxDisponivel?: Record<string, unknown>;
   observacoes?: string;
+  rotaTemplateId: string;
+  configVersaoId: string;
+  cicloUuid?: string;
   clientUuid?: string;
   escalas: Array<{ cidadeSigla: string; dataHoraPrevista?: string; observacao?: string }>;
 };
@@ -267,6 +266,17 @@ export function createNavegacaoViagem(input: CreateViagemApiInput) {
 export function updateNavegacaoViagem(id: string, input: UpdateViagemApiInput) {
   return request<NavegacaoViagemApi>(`/navegacao/viagens/${id}`, {
     method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function transitionNavegacaoViagem(
+  id: string,
+  input: { acao: "iniciar" | "concluir" | "cancelar"; motivo?: string; clientUuid?: string },
+) {
+  return request<NavegacaoViagemApi>(`/navegacao/viagens/${id}/transicoes`, {
+    method: "POST",
     auth: true,
     body: JSON.stringify(input),
   });
@@ -590,6 +600,18 @@ export type ConfigValueApi = {
 
 export function getConfigValue(chave: string) {
   return request<ConfigValueApi>(`/config/${encodeURIComponent(chave)}`, { auth: true });
+}
+
+export function listConfigValues() {
+  return request<ConfigValueApi[]>("/config", { auth: true });
+}
+
+export function publishConfigValue(chave: string, valor: unknown) {
+  return request<ConfigValueApi>(`/config/${encodeURIComponent(chave)}`, {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify({ valor }),
+  });
 }
 
 export function listPrecos(params?: { tipo?: string }) {
