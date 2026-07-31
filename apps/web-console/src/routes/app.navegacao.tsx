@@ -7,6 +7,7 @@ import {
   Check,
   ChevronRight,
   Link2,
+  PenLine,
   Play,
   Plus,
   RotateCcw,
@@ -481,6 +482,26 @@ function Navegacao() {
                   >
                     {scale.conflito ? "Conflito" : scale.status}
                   </StatusChip>
+                ),
+              },
+              {
+                key: "actions",
+                header: "Ações",
+                align: "right",
+                render: (boat) => (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditingBoatId(boat.id);
+                      setBoatModal(true);
+                    }}
+                    className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs font-medium text-foreground/80 transition-colors hover:bg-[color:var(--accent)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
+                    aria-label={`Editar embarcação ${boat.nome}`}
+                  >
+                    <PenLine className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    Editar
+                  </button>
                 ),
               },
             ]}
@@ -1307,6 +1328,10 @@ function BoatFormModal({
         <div className="mt-5">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Classes e capacidade de passageiros
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Informe lugares de rede ou unidades comerciais de camarote e suíte disponíveis nesta
+            embarcação.
           </p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {PASSENGER_CLASSES.map((key) => (

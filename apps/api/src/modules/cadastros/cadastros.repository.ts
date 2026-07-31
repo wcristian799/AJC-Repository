@@ -869,7 +869,27 @@ function withoutPassword(input: SaveUsuarioInput) {
   return rest;
 }
 
-function sanitizeCapacidadePax(input: Record<string, unknown>) {
+export function sanitizeCapacidadePax(input: Record<string, unknown>) {
+  if (Array.isArray(input.classes) || input.capacidadePorClasse !== undefined) {
+    if (!Array.isArray(input.classes)) throw new BadRequestException('classes de passageiros invalidas');
+    if (!isRecord(input.capacidadePorClasse)) throw new BadRequestException('capacidades por classe invalidas');
+
+    const classes = [...new Set(input.classes.map(normalizePassengerClass))];
+    const capacidadePorClasse: Record<string, { supported: true; capacidade: number | null; ocupacaoPessoas?: number }> = {};
+    for (const passengerClass of classes) {
+      const raw = input.capacidadePorClasse[passengerClass];
+      const details = isRecord(raw) ? raw : { capacidade: raw };
+      const capacidade = nullableNonNegativeInteger(details.capacidade, passengerClass);
+      const ocupacaoPessoas = nullablePositiveInteger(details.ocupacaoPessoas, `ocupacaoPessoas de ${passengerClass}`);
+      capacidadePorClasse[passengerClass] = {
+        supported: true,
+        capacidade,
+        ...(ocupacaoPessoas === null ? {} : { ocupacaoPessoas }),
+      };
+    }
+    return { classes, capacidadePorClasse };
+  }
+
   const output: Record<string, number> = {};
   for (const [key, value] of Object.entries(input)) {
     const normalizedKey = key.trim();
@@ -879,4 +899,29 @@ function sanitizeCapacidadePax(input: Record<string, unknown>) {
     output[normalizedKey] = Math.floor(numeric);
   }
   return output;
+}
+
+function normalizePassengerClass(value: unknown) {
+  if (typeof value !== 'string') throw new BadRequestException('classe de passageiros invalida');
+  const normalized = value.trim().toLowerCase();
+  if (!/^[a-z0-9_]+$/.test(normalized)) throw new BadRequestException(`classe de passageiros invalida: ${value}`);
+  return normalized;
+}
+
+function nullableNonNegativeInteger(value: unknown, label: string): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) throw new BadRequestException(`capacidade invalida para ${label}`);
+  return Math.floor(numeric);
+}
+
+function nullablePositiveInteger(value: unknown, label: string): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) throw new BadRequestException(`${label} invalida`);
+  return Math.floor(numeric);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }

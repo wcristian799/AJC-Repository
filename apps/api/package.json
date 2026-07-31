@@ -6,6 +6,7 @@
   "scripts": {
     "build": "nest build",
     "seed": "node ../../infra/seed/run.mjs",
+    "seed:navegacao-validacao": "node ../../infra/seed/navegacao-validacao.mjs",
     "start": "node dist/apps/api/src/main.js",
     "start:dev": "nest start --watch",
     "worker": "node dist/apps/api/src/worker.js",
