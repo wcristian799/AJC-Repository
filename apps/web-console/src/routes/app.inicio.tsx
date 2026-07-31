@@ -1,21 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import {
-  Ship, Boxes, TrendingUp, AlertTriangle, ArrowRight,
-  Activity, Radio, Anchor, BellPlus,
-} from "lucide-react";
+import { Ship, Boxes, TrendingUp, ArrowRight, Activity, Anchor, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
 import {
-  SectionHeader, StatusChip, ViagemStatusChip, ViagemSituacaoChip,
-  PrimaryButton, GhostButton, brl,
+  ViagemStatusChip,
+  ViagemSituacaoChip,
+  PrimaryButton,
+  GhostButton,
+  brl,
 } from "@/components/ops/primitives";
 import {
-  CountUp, RadialDial, LiveDot, Ticker, ShimmerBar, RadarSweep, VoyageTrack,
+  CountUp,
+  LiveDot,
+  Ticker,
+  ShimmerBar,
+  RadarSweep,
+  VoyageTrack,
 } from "@/components/ops/motion-bits";
+import { AlertCenter, type DerivedOperationalAlert } from "@/components/ops/inicio/AlertCenter";
+import { CashOverview } from "@/components/ops/inicio/CashOverview";
 import {
   getStoredAuth,
-  createOperacaoAlerta,
   getOperacaoRelatorioDia,
   listBilhetes,
   listCaixas,
@@ -24,7 +30,6 @@ import {
   listOperacaoAlertas,
   listTmsCargas,
   listTmsVolumes,
-  updateOperacaoAlerta,
   type BilheteApi,
   type CaixaApi,
   type EmbarcacaoApi,
@@ -36,7 +41,13 @@ import {
 
 export const Route = createFileRoute("/app/inicio")({
   head: () => ({
-    meta: [{ title: "Inicio · AJC Suite" }, { name: "description", content: "Centro de operacoes AJC: viagens em curso, alertas e caixas em tempo real." }],
+    meta: [
+      { title: "Inicio · AJC Suite" },
+      {
+        name: "description",
+        content: "Centro de operacoes AJC: viagens em curso, alertas e caixas em tempo real.",
+      },
+    ],
   }),
   component: Inicio,
 });
@@ -70,16 +81,6 @@ type InicioCaixaView = {
   status?: string;
 };
 
-type InicioAlertaView = {
-  id: string;
-  titulo: string;
-  detalhe: string;
-  severidade: "danger" | "warning" | "info";
-  quando: string;
-  apiId?: string;
-  origem?: "api" | "derivado";
-};
-
 function Inicio() {
   const [apiViagens, setApiViagens] = useState<NavegacaoViagemApi[]>([]);
   const [apiEmbarcacoes, setApiEmbarcacoes] = useState<EmbarcacaoApi[]>([]);
@@ -88,22 +89,20 @@ function Inicio() {
   const [apiVolumes, setApiVolumes] = useState<TmsVolumeApi[]>([]);
   const [apiBilhetes, setApiBilhetes] = useState<BilheteApi[]>([]);
   const [apiAlertas, setApiAlertas] = useState<OperacaoAlertaApi[]>([]);
-  const [apiFalhou, setApiFalhou] = useState(false);
-  const [alertaFormOpen, setAlertaFormOpen] = useState(false);
-  const [alertaSaving, setAlertaSaving] = useState(false);
+  const [apiFalhas, setApiFalhas] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [relatorioSaving, setRelatorioSaving] = useState(false);
-  const [alertaErro, setAlertaErro] = useState<string | null>(null);
   const [relatorioErro, setRelatorioErro] = useState<string | null>(null);
-  const [novoAlerta, setNovoAlerta] = useState({
-    titulo: "",
-    detalhe: "",
-    severidade: "warning" as "info" | "warning" | "danger",
-    modulo: "operacao",
-  });
+  const loadSequence = useRef(0);
 
-  useEffect(() => {
-    let alive = true;
-    Promise.all([
+  const loadDashboard = useCallback(async (silent = false) => {
+    const sequence = ++loadSequence.current;
+    if (silent) setRefreshing(true);
+    else setLoading(true);
+
+    const results = await Promise.allSettled([
       listNavegacaoViagens(),
       listEmbarcacoes(),
       listCaixas(),
@@ -111,107 +110,98 @@ function Inicio() {
       listTmsVolumes(),
       listBilhetes(),
       listOperacaoAlertas({ status: "aberto" }),
-    ])
-      .then(([viagens, embarcacoes, caixas, cargas, volumes, bilhetes, alertas]) => {
-        if (!alive) return;
-        setApiViagens(viagens);
-        setApiEmbarcacoes(embarcacoes);
-        setApiCaixas(caixas);
-        setApiCargas(cargas);
-        setApiVolumes(volumes);
-        setApiBilhetes(bilhetes);
-        setApiAlertas(alertas);
-        setApiFalhou(false);
-      })
-      .catch(() => {
-        if (alive) setApiFalhou(true);
-      });
-    return () => {
-      alive = false;
-    };
+      listOperacaoAlertas({ status: "resolvido" }),
+    ]);
+
+    if (sequence !== loadSequence.current) return;
+    const failures: string[] = [];
+    const names = [
+      "viagens",
+      "embarcações",
+      "caixas",
+      "cargas",
+      "volumes",
+      "bilhetes",
+      "alertas abertos",
+      "histórico de alertas",
+    ];
+    results.forEach((result, index) => {
+      if (result.status === "rejected") failures.push(names[index]);
+    });
+
+    if (results[0].status === "fulfilled") setApiViagens(results[0].value);
+    if (results[1].status === "fulfilled") setApiEmbarcacoes(results[1].value);
+    if (results[2].status === "fulfilled") setApiCaixas(results[2].value);
+    if (results[3].status === "fulfilled") setApiCargas(results[3].value);
+    if (results[4].status === "fulfilled") setApiVolumes(results[4].value);
+    if (results[5].status === "fulfilled") setApiBilhetes(results[5].value);
+    if (results[6].status === "fulfilled" || results[7].status === "fulfilled") {
+      const open = results[6].status === "fulfilled" ? results[6].value : [];
+      const resolved = results[7].status === "fulfilled" ? results[7].value : [];
+      setApiAlertas([...open, ...resolved]);
+    }
+    setApiFalhas(failures);
+    setUpdatedAt(new Date());
+    setLoading(false);
+    setRefreshing(false);
   }, []);
+
+  useEffect(() => {
+    void loadDashboard();
+    const interval = window.setInterval(() => void loadDashboard(true), 30_000);
+    return () => {
+      window.clearInterval(interval);
+      loadSequence.current += 1;
+    };
+  }, [loadDashboard]);
 
   const embarcacoes = useMemo(() => apiEmbarcacoes.map(mapApiEmbarcacao), [apiEmbarcacoes]);
 
   const viagens = useMemo(
-    () => apiViagens.map((viagem) => mapApiViagem(viagem, apiBilhetes, apiCargas, apiVolumes, apiEmbarcacoes)),
+    () =>
+      apiViagens.map((viagem) =>
+        mapApiViagem(viagem, apiBilhetes, apiCargas, apiVolumes, apiEmbarcacoes),
+      ),
     [apiBilhetes, apiCargas, apiEmbarcacoes, apiViagens, apiVolumes],
   );
 
   const caixas = useMemo(() => apiCaixas.map(mapApiCaixa), [apiCaixas]);
 
-  const emCurso = useMemo(() => {
-    const atuais = viagens.filter((v) => v.status === "em_curso");
-    if (atuais.length > 0) return atuais;
-    return viagens.filter((v) => v.status !== "concluida" && v.status !== "cancelada").slice(0, 3);
-  }, [viagens]);
-
-  const alertas = useMemo(() => {
-    const cadastrados = apiAlertas.map(mapApiAlerta);
-    const derivados = buildAlertas(viagens, apiVolumes, caixas, apiFalhou);
-    if (cadastrados.length + derivados.length > 0) return [...cadastrados, ...derivados].slice(0, 5);
-    return [{
-      id: "operacao-ok",
-      titulo: "Operacao sem alerta critico",
-      detalhe: "Viagens, volumes e caixas nao indicam pendencia imediata nos dados atuais.",
-      severidade: "info" as const,
-      quando: "agora",
-    }];
-  }, [apiAlertas, apiCaixas.length, apiFalhou, apiVolumes, caixas, viagens]);
+  const emCurso = useMemo(() => viagens.filter((v) => v.status === "em_curso"), [viagens]);
+  const viagensAcompanhamento = useMemo(() => {
+    if (emCurso.length > 0) return emCurso.slice(0, 3);
+    return viagens.filter((v) => v.status === "planejada").slice(0, 3);
+  }, [emCurso, viagens]);
+  const alertasDerivados = useMemo(
+    () => buildAlertas(viagens, apiVolumes, apiFalhas),
+    [apiFalhas, apiVolumes, viagens],
+  );
 
   const ativos = embarcacoes.filter((e) => e.status === "ativa" || e.status === "ativo").length;
   const saldoCaixas = caixas.reduce((s, c) => s + c.saldo, 0);
   const passageirosAtivos = emCurso.reduce((s, v) => s + v.passageiros, 0);
   const volumesTransito = emCurso.reduce((s, v) => s + v.volumes, 0);
-  const alertasCriticos = alertas.filter((a) => a.severidade === "danger").length;
-  const usuarioNome = getStoredAuth()?.user.nome?.split(" ")[0] || "Wellington";
-
-  const caixasPorTipo = [
-    { tipo: "Porto", itens: caixas.filter((c) => c.tipo === "porto") },
-    { tipo: "Embarcacoes", itens: caixas.filter((c) => ["embarcacao", "balsa"].includes(c.tipo)) },
-    { tipo: "Agentes", itens: caixas.filter((c) => c.tipo === "agente") },
-    { tipo: "Apoio", itens: caixas.filter((c) => !["porto", "embarcacao", "balsa", "agente"].includes(c.tipo)) },
-  ].filter((g) => g.itens.length > 0);
+  const alertasCriticos =
+    apiAlertas.filter((a) => a.status === "aberto" && a.severidade === "danger").length +
+    alertasDerivados.filter((a) => a.severidade === "danger").length;
+  const usuarioNome = getStoredAuth()?.user.nome?.split(" ")[0] || "usuário";
+  const caixasAbertos = caixas.filter((caixa) => caixa.status === "aberto").length;
 
   const tickerItems = buildTicker(emCurso, caixas, apiVolumes, apiBilhetes);
-
-  async function salvarAlerta() {
-    setAlertaSaving(true);
-    setAlertaErro(null);
-    try {
-      const salvo = await createOperacaoAlerta({
-        ...novoAlerta,
-        clientUuid: crypto.randomUUID(),
-      });
-      setApiAlertas((current) => [salvo, ...current.filter((item) => item.id !== salvo.id)]);
-      setNovoAlerta({ titulo: "", detalhe: "", severidade: "warning", modulo: "operacao" });
-      setAlertaFormOpen(false);
-    } catch (error) {
-      setAlertaErro(error instanceof Error ? error.message : "Nao foi possivel cadastrar o alerta.");
-    } finally {
-      setAlertaSaving(false);
-    }
-  }
-
-  async function resolverAlerta(id: string) {
-    setAlertaErro(null);
-    try {
-      await updateOperacaoAlerta(id, { status: "resolvido", clientUuid: crypto.randomUUID() });
-      setApiAlertas((current) => current.filter((item) => item.id !== id));
-    } catch (error) {
-      setAlertaErro(error instanceof Error ? error.message : "Nao foi possivel resolver o alerta.");
-    }
-  }
 
   async function baixarRelatorioDia() {
     setRelatorioSaving(true);
     setRelatorioErro(null);
     try {
-      const data = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+      const data = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(
+        new Date(),
+      );
       const relatorio = await getOperacaoRelatorioDia({ data });
       downloadJson(`ajc-relatorio-operacional-${relatorio.data}.json`, relatorio);
     } catch (error) {
-      setRelatorioErro(error instanceof Error ? error.message : "Nao foi possivel gerar o relatorio do dia.");
+      setRelatorioErro(
+        error instanceof Error ? error.message : "Nao foi possivel gerar o relatorio do dia.",
+      );
     } finally {
       setRelatorioSaving(false);
     }
@@ -220,8 +210,10 @@ function Inicio() {
   return (
     <AppShell crumb="Inicio">
       <section className="surface-card filet-crimson relative overflow-hidden">
-        <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full opacity-[0.07] blur-3xl"
-          style={{ background: "radial-gradient(closest-side, var(--champagne), transparent)" }} />
+        <div
+          className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full opacity-[0.07] blur-3xl"
+          style={{ background: "radial-gradient(closest-side, var(--champagne), transparent)" }}
+        />
         <div className="relative grid gap-6 p-5 md:p-7 xl:grid-cols-[1.4fr_auto]">
           <div className="min-w-0">
             <motion.div
@@ -231,10 +223,11 @@ function Inicio() {
               className="flex items-center gap-2"
             >
               <span className="champagne-eyebrow inline-flex items-center gap-2">
-                <LiveDot /> Ao vivo · {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date())}
+                <LiveDot tone={apiFalhas.length > 0 ? "warning" : "success"} />{" "}
+                {apiFalhas.length > 0 ? "Dados parciais" : "Atualização operacional"}
               </span>
               <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground sm:inline">
-                Centro de operacoes
+                {updatedAt ? `Atualizado ${formatUpdatedAt(updatedAt)}` : "Carregando dados"}
               </span>
             </motion.div>
 
@@ -246,7 +239,13 @@ function Inicio() {
             >
               Bom dia, <span className="brand-text">{usuarioNome}</span>.
               <br />
-              <span className="text-foreground/70">A frota esta respondendo.</span>
+              <span className="text-foreground/70">
+                {apiFalhas.length > 0
+                  ? "Há dados que precisam ser atualizados."
+                  : emCurso.length > 0
+                    ? "A operação está em movimento."
+                    : "A próxima saída está no radar."}
+              </span>
             </motion.h1>
 
             <motion.p
@@ -255,7 +254,11 @@ function Inicio() {
               transition={{ delay: 0.18, duration: 0.6, ease: easeOut }}
               className="mt-3 max-w-xl text-sm text-muted-foreground"
             >
-              {emCurso.length} viagens operacionais · {alertasCriticos} alerta(s) critico(s) · sincronizacao ativa com as bases conectadas.
+              {loading
+                ? "Conectando às bases operacionais…"
+                : apiFalhas.length > 0
+                  ? `${apiFalhas.length} fonte(s) indisponível(is): ${apiFalhas.join(", ")}. Os demais dados permanecem válidos.`
+                  : `${countLabel(emCurso.length, "viagem em curso", "viagens em curso")} · ${countLabel(alertasCriticos, "alerta crítico", "alertas críticos")} · ${countLabel(caixasAbertos, "caixa aberto", "caixas abertos")}.`}
             </motion.p>
 
             <motion.div
@@ -264,18 +267,47 @@ function Inicio() {
               transition={{ delay: 0.28, duration: 0.5, ease: easeOut }}
               className="mt-6 flex flex-wrap items-center gap-2"
             >
-              <PrimaryButton icon={Ship} onClick={() => window.location.assign("/app/navegacao")}>Nova viagem</PrimaryButton>
-              <GhostButton icon={ArrowRight} onClick={baixarRelatorioDia}>{relatorioSaving ? "Gerando..." : "Relatorio do dia"}</GhostButton>
-              <GhostButton icon={BellPlus} onClick={() => setAlertaFormOpen((open) => !open)}>Cadastrar alerta</GhostButton>
-              <GhostButton icon={Radio}>Escuta operacional</GhostButton>
+              <PrimaryButton icon={Ship} onClick={() => window.location.assign("/app/navegacao")}>
+                Nova viagem
+              </PrimaryButton>
+              <GhostButton icon={ArrowRight} onClick={baixarRelatorioDia}>
+                {relatorioSaving ? "Gerando…" : "Relatório do dia"}
+              </GhostButton>
+              <GhostButton icon={RefreshCw} onClick={() => void loadDashboard(true)}>
+                {refreshing ? "Atualizando…" : "Atualizar dados"}
+              </GhostButton>
             </motion.div>
 
             <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
               {[
-                { label: "Viagens", value: emCurso.length, dial: Math.min(100, emCurso.length * 25), icon: Ship, tone: "brand" as const },
-                { label: "Volumes", value: volumesTransito, dial: Math.min(100, volumesTransito / 5), icon: Boxes, tone: "warning" as const },
-                { label: "Caixas", value: saldoCaixas, dial: 62, icon: TrendingUp, tone: "success" as const, currency: true },
-                { label: "Frota", value: ativos, dial: embarcacoes.length ? (ativos / embarcacoes.length) * 100 : 0, icon: Anchor, tone: "brand" as const },
+                {
+                  label: "Viagens",
+                  value: emCurso.length,
+                  hint: "em curso agora",
+                  icon: Ship,
+                  currency: false,
+                },
+                {
+                  label: "Volumes",
+                  value: volumesTransito,
+                  hint: "nas viagens em curso",
+                  icon: Boxes,
+                  currency: false,
+                },
+                {
+                  label: "Caixas",
+                  value: saldoCaixas,
+                  hint: countLabel(caixasAbertos, "aberto", "abertos"),
+                  icon: TrendingUp,
+                  currency: true,
+                },
+                {
+                  label: "Frota",
+                  value: ativos,
+                  hint: `${ativos}/${embarcacoes.length} ${embarcacoes.length === 1 ? "ativa" : "ativas"}`,
+                  icon: Anchor,
+                  currency: false,
+                },
               ].map((k, i) => (
                 <motion.div
                   key={k.label}
@@ -287,20 +319,24 @@ function Inicio() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{k.label}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        {k.label}
+                      </p>
                       <p className="big-numeric mt-2 text-2xl text-foreground md:text-[1.7rem]">
                         {k.currency ? (
-                          <>R$ <CountUp to={k.value} duration={1.6} /></>
+                          <>
+                            R$ <CountUp to={k.value} duration={1.6} />
+                          </>
                         ) : (
                           <CountUp to={k.value} duration={1.4} />
                         )}
                       </p>
                     </div>
-                    <div className="relative">
-                      <RadialDial value={k.dial} tone={k.tone} size={48} stroke={3.5} />
-                      <k.icon className="absolute inset-0 m-auto h-4 w-4 text-foreground/80" strokeWidth={1.8} />
-                    </div>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[color:var(--muted)] text-foreground/80 ring-1 ring-[color:var(--hairline)]">
+                      <k.icon className="h-4 w-4" strokeWidth={1.8} />
+                    </span>
                   </div>
+                  <p className="mt-2 text-[10px] text-muted-foreground">{k.hint}</p>
                   <div className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-[color:var(--brand)] to-transparent opacity-0 transition-opacity group-hover:opacity-60" />
                 </motion.div>
               ))}
@@ -319,14 +355,25 @@ function Inicio() {
                 blips={emCurso.slice(0, 5).map((v, i) => ({
                   angle: 25 + i * 70,
                   radius: 0.42 + (i % 3) * 0.18,
-                  tone: v.situacao === "atrasado" ? "danger" : v.situacao === "atencao" ? "warning" : "brand",
+                  tone:
+                    v.situacao === "atrasado"
+                      ? "danger"
+                      : v.situacao === "atencao"
+                        ? "warning"
+                        : "brand",
                 }))}
               />
               <div className="pointer-events-none absolute inset-0 grid place-items-center">
                 <div className="text-center">
-                  <p className="font-mono text-[9px] uppercase tracking-[0.3em] text-[color:var(--brand)]">Frota AJC</p>
-                  <p className="big-numeric mt-1 text-3xl text-foreground"><CountUp to={emCurso.length} />/{embarcacoes.length}</p>
-                  <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">em rota</p>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.3em] text-[color:var(--brand)]">
+                    Frota AJC
+                  </p>
+                  <p className="big-numeric mt-1 text-3xl text-foreground">
+                    <CountUp to={emCurso.length} />/{embarcacoes.length}
+                  </p>
+                  <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+                    em rota
+                  </p>
                 </div>
               </div>
             </div>
@@ -337,7 +384,9 @@ function Inicio() {
           <div className="flex items-center">
             <div className="flex items-center gap-2 border-r border-[color:var(--hairline)] px-4">
               <Activity className="h-3.5 w-3.5 text-[color:var(--brand)]" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/80">Feed ao vivo · eventos da plataforma</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-foreground/80">
+                Eventos da plataforma
+              </span>
             </div>
             <div className="min-w-0 flex-1">
               <Ticker items={tickerItems} speed={55} />
@@ -352,7 +401,7 @@ function Inicio() {
         </p>
       )}
 
-      <section className="mt-6 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+      <section className="mt-6 grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -365,223 +414,104 @@ function Inicio() {
                 <Ship className="h-4 w-4 text-[color:var(--brand)]" />
               </span>
               <div>
-                <h2 className="font-display text-lg text-foreground">Viagens em curso</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">Cada barco navega conforme o apontamento das escalas.</p>
+                <h2 className="font-display text-lg text-foreground">Viagens em acompanhamento</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {emCurso.length > 0
+                    ? "Embarcações navegando agora, conforme o apontamento das escalas."
+                    : "Nenhuma viagem em curso; exibindo as próximas saídas planejadas."}
+                </p>
               </div>
             </div>
-            <Link to="/app/navegacao" className="text-xs font-medium text-[color:var(--brand)] hover:underline">
+            <Link
+              to="/app/navegacao"
+              className="text-xs font-medium text-[color:var(--brand)] hover:underline"
+            >
               Ver todas →
             </Link>
           </div>
           <ul className="divide-y divide-[color:var(--hairline)]">
-            {emCurso.map((v, i) => {
-              const stops = [
-                { code: v.origem, label: v.origem, done: true },
-                ...v.escalas.map((e) => ({ code: e.cidade, label: e.cidade, done: Boolean(e.horaReal) })),
-              ];
-              const done = stops.filter((s) => s.done).length;
-              const progress = Math.max(6, Math.round((done / Math.max(stops.length, 1)) * 100));
-              const tone =
-                v.situacao === "atrasado" ? "danger" :
-                v.situacao === "atencao" ? "warning" : "brand";
-              return (
-                <motion.li
-                  key={v.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 + i * 0.07, duration: 0.5, ease: easeOut }}
-                  className="px-5 py-5 transition-colors hover:bg-[color:color-mix(in_oklab,var(--brand)_4%,transparent)]"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{v.codigo}</span>
-                    <span className="font-display text-base text-foreground">{v.origem} → {v.destino}</span>
-                    <ViagemStatusChip s={v.status as never} />
-                    <ViagemSituacaoChip s={(v.situacao ?? "no_prazo") as never} />
-                    <span className="ml-auto big-numeric text-xl text-foreground"><CountUp to={v.ocupacaoPct} suffix="%" /></span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {v.embarcacaoNome} · saida {v.saida} · {v.passageiros} passageiros · {v.volumes} volumes
-                  </p>
-                  <div className="mt-2">
-                    <VoyageTrack stops={stops} progressPct={progress} />
-                  </div>
-                  <div className="mt-1 flex items-center gap-3">
-                    <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">Carga</span>
-                    <div className="flex-1">
-                      <ShimmerBar pct={v.cargaPct} tone={tone} />
+            {viagensAcompanhamento.length === 0 ? (
+              <li className="px-5 py-12 text-center">
+                <Ship className="mx-auto h-7 w-7 text-muted-foreground" />
+                <p className="mt-3 text-sm font-medium text-foreground">
+                  Nenhuma viagem em acompanhamento
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Cadastre ou planeje uma viagem para acompanhar sua operação aqui.
+                </p>
+              </li>
+            ) : (
+              viagensAcompanhamento.map((v, i) => {
+                const stops = [
+                  { code: v.origem, label: v.origem, done: v.status === "em_curso" },
+                  ...v.escalas.map((e) => ({
+                    code: e.cidade,
+                    label: e.cidade,
+                    done: Boolean(e.horaReal),
+                  })),
+                ];
+                const done = stops.filter((s) => s.done).length;
+                const progress = Math.round((done / Math.max(stops.length, 1)) * 100);
+                const tone =
+                  v.situacao === "atrasado"
+                    ? "danger"
+                    : v.situacao === "atencao"
+                      ? "warning"
+                      : "brand";
+                return (
+                  <motion.li
+                    key={v.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.15 + i * 0.07, duration: 0.5, ease: easeOut }}
+                    className="px-5 py-5 transition-colors hover:bg-[color:color-mix(in_oklab,var(--brand)_4%,transparent)]"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                        {v.codigo}
+                      </span>
+                      <span className="font-display text-base text-foreground">
+                        {v.origem} → {v.destino}
+                      </span>
+                      <ViagemStatusChip s={v.status as never} />
+                      <ViagemSituacaoChip s={(v.situacao ?? "no_prazo") as never} />
+                      <span className="ml-auto big-numeric text-xl text-foreground">
+                        <CountUp to={v.ocupacaoPct} suffix="%" />
+                      </span>
                     </div>
-                    <span className="font-mono text-[10px] text-foreground/80">{v.cargaPct}%</span>
-                  </div>
-                </motion.li>
-              );
-            })}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {v.embarcacaoNome} · saida {v.saida} · {v.passageiros} passageiros ·{" "}
+                      {v.volumes} volumes
+                    </p>
+                    <div className="mt-2">
+                      <VoyageTrack stops={stops} progressPct={progress} />
+                    </div>
+                    <div className="mt-1 flex items-center gap-3">
+                      <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Carga
+                      </span>
+                      <div className="flex-1">
+                        <ShimmerBar pct={v.cargaPct} tone={tone} />
+                      </div>
+                      <span className="font-mono text-[10px] text-foreground/80">
+                        {v.cargaPct}%
+                      </span>
+                    </div>
+                  </motion.li>
+                );
+              })
+            )}
           </ul>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18, duration: 0.5, ease: easeOut }}
-          className="surface-card relative overflow-hidden"
-        >
-          <div className="flex items-center justify-between border-b border-[color:var(--hairline)] px-5 py-4">
-            <div className="flex items-center gap-3">
-              <motion.span
-                className="grid h-9 w-9 place-items-center rounded-lg bg-[color:color-mix(in_oklab,var(--danger)_14%,transparent)] ring-1 ring-[color:color-mix(in_oklab,var(--danger)_35%,transparent)]"
-                animate={{ boxShadow: [
-                  "0 0 0 0 color-mix(in oklab, var(--danger) 50%, transparent)",
-                  "0 0 0 8px color-mix(in oklab, var(--danger) 0%, transparent)",
-                ] }}
-                transition={{ duration: 1.8, repeat: Infinity }}
-              >
-                <AlertTriangle className="h-4 w-4 text-[color:var(--danger)]" />
-              </motion.span>
-              <div>
-                <h2 className="font-display text-lg text-foreground">Alertas</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">{alertasCriticos} critico(s) · acao imediata</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setAlertaFormOpen((open) => !open)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)] hover:bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)]"
-            >
-              <BellPlus className="h-3.5 w-3.5" />
-              Cadastrar
-            </button>
-          </div>
-          {alertaFormOpen ? (
-            <div className="border-b border-[color:var(--hairline)] bg-[color:var(--surface-elev)]/55 px-5 py-4">
-              <div className="grid gap-2">
-                <input
-                  value={novoAlerta.titulo}
-                  onChange={(event) => setNovoAlerta((current) => ({ ...current, titulo: event.target.value }))}
-                  placeholder="Titulo do alerta"
-                  className="h-9 rounded-lg border border-[color:var(--hairline)] bg-[color:var(--card)] px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-[color:var(--hairline-brand)]"
-                />
-                <textarea
-                  value={novoAlerta.detalhe}
-                  onChange={(event) => setNovoAlerta((current) => ({ ...current, detalhe: event.target.value }))}
-                  placeholder="Detalhe operacional"
-                  rows={3}
-                  className="resize-none rounded-lg border border-[color:var(--hairline)] bg-[color:var(--card)] px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-[color:var(--hairline-brand)]"
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={novoAlerta.severidade}
-                    onChange={(event) => setNovoAlerta((current) => ({ ...current, severidade: event.target.value as "info" | "warning" | "danger" }))}
-                    className="h-9 rounded-lg border border-[color:var(--hairline)] bg-[color:var(--card)] px-3 text-xs text-foreground outline-none focus:border-[color:var(--hairline-brand)]"
-                  >
-                    <option value="warning">Atencao</option>
-                    <option value="danger">Critico</option>
-                    <option value="info">Informativo</option>
-                  </select>
-                  <input
-                    value={novoAlerta.modulo}
-                    onChange={(event) => setNovoAlerta((current) => ({ ...current, modulo: event.target.value }))}
-                    placeholder="Modulo"
-                    className="h-9 min-w-0 flex-1 rounded-lg border border-[color:var(--hairline)] bg-[color:var(--card)] px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-[color:var(--hairline-brand)]"
-                  />
-                  <PrimaryButton icon={BellPlus} onClick={salvarAlerta} disabled={alertaSaving}>
-                    {alertaSaving ? "Salvando" : "Salvar"}
-                  </PrimaryButton>
-                </div>
-                {alertaErro ? <p className="text-xs text-[color:var(--danger)]">{alertaErro}</p> : null}
-              </div>
-            </div>
-          ) : alertaErro ? (
-            <div className="border-b border-[color:var(--hairline)] px-5 py-2 text-xs text-[color:var(--danger)]">{alertaErro}</div>
-          ) : null}
-          <ul className="divide-y divide-[color:var(--hairline)]">
-            {alertas.map((a, i) => (
-              <motion.li
-                key={a.id}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.25 + i * 0.07, duration: 0.45, ease: easeOut }}
-                className="group relative px-5 py-4"
-              >
-                <span className={`absolute bottom-3 left-0 top-3 w-[2px] rounded-r ${
-                  a.severidade === "danger" ? "bg-[color:var(--danger)]" :
-                  a.severidade === "warning" ? "bg-[color:var(--warning)]" : "bg-[color:var(--info)]"
-                }`} />
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{a.titulo}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{a.detalhe}</p>
-                  </div>
-                  <StatusChip tone={a.severidade === "danger" ? "danger" : a.severidade === "warning" ? "warning" : "info"}>
-                    {a.quando}
-                  </StatusChip>
-                </div>
-                {a.apiId ? (
-                  <button
-                    type="button"
-                    onClick={() => resolverAlerta(a.apiId!)}
-                    className="mt-3 text-xs font-medium text-[color:var(--brand)] hover:underline"
-                  >
-                    Resolver alerta
-                  </button>
-                ) : null}
-              </motion.li>
-            ))}
-          </ul>
-        </motion.div>
-      </section>
-
-      <section className="mt-6">
-        <SectionHeader
-          eyebrow="Tesouraria"
-          title="Caixas em tempo real"
-          description="Porto, embarcacoes, agentes e caixas de apoio separados por tipo operacional."
-          actions={
-            <Link to="/app/financeiro" className="text-xs font-medium text-[color:var(--brand)] hover:underline">
-              Ir para Financeiro →
-            </Link>
-          }
+        <AlertCenter
+          alerts={apiAlertas}
+          derivedAlerts={alertasDerivados}
+          onAlertsChange={setApiAlertas}
         />
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          {caixasPorTipo.map((grupo) => {
-            const totalGrupo = grupo.itens.reduce((s, c) => s + c.saldo, 0);
-            return (
-              <div key={grupo.tipo} className="surface-card p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{grupo.tipo}</p>
-                <p className="big-numeric mt-2 text-2xl text-foreground">R$ <CountUp to={totalGrupo} duration={1.2} /></p>
-                <p className="mt-1 text-[11px] text-muted-foreground">{grupo.itens.length} caixa(s) neste tipo</p>
-              </div>
-            );
-          })}
-        </div>
-        <div className="surface-card mt-4 grid grid-cols-2 gap-px overflow-hidden bg-[color:var(--hairline)] md:grid-cols-3 xl:grid-cols-4">
-          {caixas.map((c, i) => (
-            <motion.div
-              key={c.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 * i, duration: 0.5, ease: easeOut }}
-              whileHover={{ y: -4 }}
-              className="group relative bg-[color:var(--card)] p-4 transition-colors hover:bg-[color:color-mix(in_oklab,var(--brand)_4%,transparent)]"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{c.tipo}</p>
-                <LiveDot tone={c.status === "fechado" ? "warning" : "success"} />
-              </div>
-              <p className="mt-1 truncate text-xs text-foreground/85">{c.referencia}</p>
-              <p className="big-numeric mt-3 text-2xl text-foreground">
-                R$ <CountUp to={c.saldo} duration={1.6} />
-              </p>
-              <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
-                <span className="text-[color:var(--success)]">+ {brl(c.entradasDia)}</span>
-                <span className="text-[color:var(--danger)]">- {brl(c.saidasDia)}</span>
-              </div>
-              <div className="mt-2">
-                <ShimmerBar pct={Math.min(100, (c.entradasDia / Math.max(c.entradasDia + c.saidasDia, 1)) * 100)} tone="success" />
-              </div>
-              <div className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-[color:var(--brand)] to-transparent opacity-0 transition-opacity group-hover:opacity-80" />
-            </motion.div>
-          ))}
-        </div>
       </section>
+
+      <CashOverview caixas={apiCaixas} loading={loading} />
 
       <motion.div
         initial={{ opacity: 0 }}
@@ -621,18 +551,6 @@ function mapApiCaixa(c: CaixaApi): InicioCaixaView {
   };
 }
 
-function mapApiAlerta(a: OperacaoAlertaApi): InicioAlertaView {
-  return {
-    id: `api-alerta-${a.id}`,
-    apiId: a.id,
-    origem: "api",
-    titulo: a.titulo,
-    detalhe: a.detalhe,
-    severidade: a.severidade,
-    quando: a.modulo || a.origem || "manual",
-  };
-}
-
 function mapApiViagem(
   viagem: NavegacaoViagemApi,
   bilhetes: BilheteApi[],
@@ -640,18 +558,22 @@ function mapApiViagem(
   volumes: TmsVolumeApi[],
   embarcacoes: EmbarcacaoApi[],
 ): InicioViagemView {
-  const bilhetesDaViagem = bilhetes.filter((b) => b.viagem_id === viagem.id && b.status !== "cancelado");
+  const bilhetesDaViagem = bilhetes.filter(
+    (b) => b.viagem_id === viagem.id && b.status !== "cancelado",
+  );
   const cargasDaViagem = cargas.filter((c) => c.viagem_id === viagem.id);
   const cargaIds = new Set(cargasDaViagem.map((c) => c.id));
   const volumesDaViagem = volumes.filter((v) => cargaIds.has(v.carga_id));
-  const totalVolumes = volumesDaViagem.length || cargasDaViagem.reduce((s, c) => s + Number(c.total_volumes ?? 0), 0);
+  const totalVolumes =
+    volumesDaViagem.length || cargasDaViagem.reduce((s, c) => s + Number(c.total_volumes ?? 0), 0);
   const capacidadePax = sumNumericValues(viagem.capacidadePaxDisponivel);
   const embarcacao = embarcacoes.find((e) => e.id === viagem.embarcacaoId);
   const pesoKg = cargasDaViagem.reduce((s, c) => s + Number(c.peso_total ?? 0), 0);
   const capacidadeCargaKg = Number(embarcacao?.capacidadeCarga ?? 0) * 1000;
-  const cargaPct = capacidadeCargaKg > 0
-    ? Math.min(100, Math.round((pesoKg / capacidadeCargaKg) * 100))
-    : Math.min(100, Math.round(totalVolumes * 5));
+  const cargaPct =
+    capacidadeCargaKg > 0
+      ? Math.min(100, Math.round((pesoKg / capacidadeCargaKg) * 100))
+      : Math.min(100, Math.round(totalVolumes * 5));
 
   return {
     id: viagem.id,
@@ -668,7 +590,10 @@ function mapApiViagem(
     saida: formatDateTime(viagem.dataHoraSaida),
     status: viagem.status,
     situacao: viagem.situacao || "no_prazo",
-    ocupacaoPct: capacidadePax > 0 ? Math.min(100, Math.round((bilhetesDaViagem.length / capacidadePax) * 100)) : 0,
+    ocupacaoPct:
+      capacidadePax > 0
+        ? Math.min(100, Math.round((bilhetesDaViagem.length / capacidadePax) * 100))
+        : 0,
     cargaPct,
     volumes: totalVolumes,
     passageiros: bilhetesDaViagem.length,
@@ -678,17 +603,16 @@ function mapApiViagem(
 function buildAlertas(
   viagens: InicioViagemView[],
   volumes: TmsVolumeApi[],
-  caixas: InicioCaixaView[],
-  apiFalhou: boolean,
-): InicioAlertaView[] {
-  const alertas: InicioAlertaView[] = [];
-  if (apiFalhou) {
+  apiFalhas: string[],
+): DerivedOperationalAlert[] {
+  const alertas: DerivedOperationalAlert[] = [];
+  if (apiFalhas.length > 0) {
     alertas.push({
       id: "api-falhou",
-      titulo: "API indisponivel neste painel",
-      detalhe: "O dashboard esta usando fallback visual ate a conexao voltar.",
+      titulo: "Painel com dados parciais",
+      detalhe: `Não foi possível atualizar: ${apiFalhas.join(", ")}. Os dados das demais fontes continuam visíveis com o horário da última consulta.`,
       severidade: "warning",
-      quando: "agora",
+      modulo: "Sistema",
     });
   }
   viagens
@@ -700,27 +624,21 @@ function buildAlertas(
         titulo: `${v.codigo} ${v.situacao === "atrasado" ? "com atraso" : "em atencao"}`,
         detalhe: `${v.embarcacaoNome} no trecho ${v.origem} -> ${v.destino}.`,
         severidade: v.situacao === "atrasado" ? "danger" : "warning",
-        quando: "operacao",
+        modulo: "Navegação",
+        href: "/app/navegacao",
       });
     });
-  const divergentes = volumes.filter((v) => ["divergente", "bloqueado", "avaria"].includes(String(v.status)));
+  const divergentes = volumes.filter((v) =>
+    ["divergente", "bloqueado", "avaria"].includes(String(v.status)),
+  );
   if (divergentes.length > 0) {
     alertas.push({
       id: "volumes-divergentes",
       titulo: `${divergentes.length} volume(s) com divergencia`,
       detalhe: "Conferencia apontou volume bloqueado, avariado ou divergente no TMS.",
       severidade: "danger",
-      quando: "TMS",
-    });
-  }
-  const caixasFechados = caixas.filter((c) => c.status === "fechado");
-  if (caixasFechados.length > 0) {
-    alertas.push({
-      id: "caixas-fechados",
-      titulo: `${caixasFechados.length} caixa(s) fechado(s)`,
-      detalhe: "Ha caixas fora de operacao na tesouraria do dia.",
-      severidade: "warning",
-      quando: "caixa",
+      modulo: "TMS",
+      href: "/app/tms",
     });
   }
   return alertas.slice(0, 5);
@@ -734,13 +652,20 @@ function buildTicker(
 ) {
   const items = [
     ...viagens.slice(0, 3).map((v) => (
-      <>{v.codigo} · {v.origem} → {v.destino} · <span className="text-foreground">{v.passageiros} pax</span></>
+      <>
+        {v.codigo} · {v.origem} → {v.destino} ·{" "}
+        <span className="text-foreground">{v.passageiros} pax</span>
+      </>
     )),
     ...caixas.slice(0, 2).map((c) => (
-      <>+ {brl(c.entradasDia)} · {c.referencia}</>
+      <>
+        + {brl(c.entradasDia)} · {c.referencia}
+      </>
     )),
   ];
-  const divergentes = volumes.filter((v) => ["divergente", "bloqueado", "avaria"].includes(String(v.status))).length;
+  const divergentes = volumes.filter((v) =>
+    ["divergente", "bloqueado", "avaria"].includes(String(v.status)),
+  ).length;
   if (divergentes > 0) items.push(<>{divergentes} volume(s) divergente(s) no TMS</>);
   if (bilhetes.length > 0) items.push(<>{bilhetes.length} bilhetes emitidos na base operacional</>);
   return items.length > 0 ? items : [<>Operacao sincronizada · aguardando eventos da plataforma</>];
@@ -752,6 +677,18 @@ function normalizeCaixaTipo(tipo: string) {
   if (lower.includes("porto")) return "porto";
   if (lower.includes("agente")) return "agente";
   return lower || "apoio";
+}
+
+function formatUpdatedAt(value: Date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(value);
+}
+
+function countLabel(value: number, singular: string, plural: string) {
+  return `${value} ${value === 1 ? singular : plural}`;
 }
 
 function sumNumericValues(input: Record<string, unknown> | null | undefined) {
@@ -775,7 +712,9 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 function downloadJson(filename: string, payload: unknown) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

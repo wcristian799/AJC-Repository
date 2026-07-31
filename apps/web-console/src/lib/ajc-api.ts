@@ -1,4 +1,7 @@
-const DEFAULT_API_URL = "https://apiajc.byteintelligence.com.br/api";
+const PRODUCTION_API_URL = "https://apiajc.byteintelligence.com.br/api";
+// In development, keep requests same-origin and let Vite proxy them. This preserves
+// production CORS restrictions while allowing faithful local browser QA.
+const DEFAULT_API_URL = import.meta.env.DEV ? "/api" : PRODUCTION_API_URL;
 
 export const AJC_API_URL = (import.meta.env.VITE_AJC_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
 
@@ -27,7 +30,8 @@ async function request<T>(path: string, init?: RequestInit & { auth?: boolean })
   const text = await res.text();
   const body = text ? tryJson(text) : null;
   if (!res.ok) {
-    const message = typeof body === "object" && body && "message" in body ? String(body.message) : text;
+    const message =
+      typeof body === "object" && body && "message" in body ? String(body.message) : text;
     throw new AjcApiError(message || "Falha ao chamar API AJC", res.status);
   }
   return body as T;
@@ -198,7 +202,17 @@ export type RotaTemplateApi = {
   saida?: string;
   saidaTexto?: string;
   pendencias?: string[];
-  paradas?: Array<string | { cidade?: string; cidadeSigla?: string; hora?: string; label?: string; texto?: string; dataHoraPrevista?: string }>;
+  paradas?: Array<
+    | string
+    | {
+        cidade?: string;
+        cidadeSigla?: string;
+        hora?: string;
+        label?: string;
+        texto?: string;
+        dataHoraPrevista?: string;
+      }
+  >;
 };
 
 export type CreateViagemApiInput = {
@@ -229,7 +243,9 @@ export function listNavegacaoTemplatesRotas() {
 }
 
 export function listNavegacaoEscalasColaboradores() {
-  return request<NavegacaoEscalaColaboradorApi[]>("/navegacao/escalas-colaboradores", { auth: true });
+  return request<NavegacaoEscalaColaboradorApi[]>("/navegacao/escalas-colaboradores", {
+    auth: true,
+  });
 }
 
 export function notifyNavegacaoEscalas(input: { escalaIds: string[]; clientUuid?: string }) {
@@ -839,7 +855,12 @@ export type PrestacaoContasItensApi = {
   cozinhaDias?: Array<{ dia: string; cafe: number; almoco: number; jantar: number }>;
   lanchonete?: { especie: number; pix: number };
   internet?: { especie: number; pix: number };
-  passagensAgencias?: Array<{ cidade: string; especie: number; pixConta: number; comissaoPct?: number }>;
+  passagensAgencias?: Array<{
+    cidade: string;
+    especie: number;
+    pixConta: number;
+    comissaoPct?: number;
+  }>;
   fretesAgencias?: Array<{ cidade: string; especie: number; pixConta: number }>;
   despesas?: Array<{ descricao: string; valor: number }>;
   redondas?: Array<{ nome: string; funcao: string; valor: number }>;
@@ -945,7 +966,10 @@ export function listTmsCargas(params?: { categoria?: "carga" | "encomenda" }) {
 }
 
 export function listTmsAgendamentoDisponibilidade(data: string) {
-  return request<TmsAgendamentoSlotApi[]>(`/tms/agendamentos/disponibilidade?data=${encodeURIComponent(data)}`, { auth: true });
+  return request<TmsAgendamentoSlotApi[]>(
+    `/tms/agendamentos/disponibilidade?data=${encodeURIComponent(data)}`,
+    { auth: true },
+  );
 }
 
 export function createTmsCarga(input: CreateTmsCargaInput) {
@@ -1008,7 +1032,10 @@ export function createTmsDocumentoManual(input: CreateTmsDocumentoManualInput) {
   });
 }
 
-export function conferirTmsDocumento(id: string, input: { status: "conferida" | "divergente"; observacao?: string; clientUuid?: string }) {
+export function conferirTmsDocumento(
+  id: string,
+  input: { status: "conferida" | "divergente"; observacao?: string; clientUuid?: string },
+) {
   return request<TmsDocumentoApi>(`/tms/documentos/${id}/conferencia`, {
     method: "POST",
     auth: true,
@@ -1077,7 +1104,10 @@ export function createTmsPortaria(input: CreateTmsPortariaInput) {
   });
 }
 
-export function addTmsVolumeEvent(id: string, input: { tipo: string; obs?: string; clientUuid?: string }) {
+export function addTmsVolumeEvent(
+  id: string,
+  input: { tipo: string; obs?: string; clientUuid?: string },
+) {
   return request<unknown>(`/tms/volumes/${id}/eventos`, {
     method: "POST",
     auth: true,
@@ -1144,7 +1174,14 @@ export type CreateBilheteApiInput = {
   precoPago?: number;
   assento?: string;
   caixaId?: string;
-  formaPagamento?: "dinheiro" | "pix" | "cartao_credito" | "cartao_debito" | "contrato" | "cortesia" | "gratuidade";
+  formaPagamento?:
+    | "dinheiro"
+    | "pix"
+    | "cartao_credito"
+    | "cartao_debito"
+    | "contrato"
+    | "cortesia"
+    | "gratuidade";
   cortesiaCodigo?: string;
   gratuidadeTipo?: "idoso" | "pcd" | "crianca" | "outro";
   documentoUrl?: string;
@@ -1396,12 +1433,18 @@ export function createBilhete(input: CreateBilheteApiInput) {
   });
 }
 
-export function validarBilhete(idOrQr: string, input?: { qrToken?: string; dispositivo?: string; clientUuid?: string; validadoEm?: string }) {
-  return request<ValidarBilheteApiResult>(`/vendas/bilhetes/${encodeURIComponent(idOrQr)}/validar`, {
-    method: "POST",
-    auth: true,
-    body: JSON.stringify(input ?? {}),
-  });
+export function validarBilhete(
+  idOrQr: string,
+  input?: { qrToken?: string; dispositivo?: string; clientUuid?: string; validadoEm?: string },
+) {
+  return request<ValidarBilheteApiResult>(
+    `/vendas/bilhetes/${encodeURIComponent(idOrQr)}/validar`,
+    {
+      method: "POST",
+      auth: true,
+      body: JSON.stringify(input ?? {}),
+    },
+  );
 }
 
 export function getManifesto(viagemId: string) {
@@ -1415,7 +1458,13 @@ export function listCortesias(params?: { viagemId?: string }) {
   return request<CortesiaApi[]>(`/vendas/cortesias${suffix}`, { auth: true });
 }
 
-export function createCortesia(input: { viagemId: string; classe?: string; motivo?: string; observacoes?: string; clientUuid?: string }) {
+export function createCortesia(input: {
+  viagemId: string;
+  classe?: string;
+  motivo?: string;
+  observacoes?: string;
+  clientUuid?: string;
+}) {
   return request<CortesiaApi>("/vendas/cortesias", {
     method: "POST",
     auth: true,
@@ -1591,14 +1640,20 @@ export function createPortalPedido(input: {
   });
 }
 
-export function createPortalPagamento(codigo: string, metodo: "pix" | "cartao_credito" | "cartao_debito") {
+export function createPortalPagamento(
+  codigo: string,
+  metodo: "pix" | "cartao_credito" | "cartao_debito",
+) {
   return request<PortalPagamentoApi>(`/portal/pedidos/${codigo}/pagamentos`, {
     method: "POST",
     body: JSON.stringify({ metodo }),
   });
 }
 
-export function approvePortalPagamentoStub(input: { pedidoCodigo: string; gatewayPaymentId?: string | null }) {
+export function approvePortalPagamentoStub(input: {
+  pedidoCodigo: string;
+  gatewayPaymentId?: string | null;
+}) {
   return request<{ pedido: PortalPedidoApi }>("/portal/webhooks/stub", {
     method: "POST",
     body: JSON.stringify({

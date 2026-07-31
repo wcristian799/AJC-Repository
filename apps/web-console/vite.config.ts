@@ -7,6 +7,17 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  vite: {
+    server: {
+      proxy: {
+        "/api": {
+          target: "https://apiajc.byteintelligence.com.br",
+          changeOrigin: true,
+          secure: true,
+        },
+      },
+    },
+  },
   // Fora do ambiente Lovable, o plugin de deploy do Nitro é pulado por padrão.
   // Forçamos o Nitro com preset "vercel" para gerar a saída SSR que a Vercel entende
   // (.vercel/output). Sem isso, o deploy serve só estáticos e dá 404 na raiz.
