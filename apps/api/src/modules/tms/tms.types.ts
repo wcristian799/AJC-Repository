@@ -83,8 +83,13 @@ export interface ConferirDocumentoInput {
   clientUuid?: string;
 }
 
-export interface CreateDocumentoManualInput {
-  clienteRemetenteId: string;
+export interface CreateDocumentoInput {
+  uploadId: string;
+  viagemId: string;
+  clienteRemetenteId?: string;
+  remetenteNome: string;
+  remetenteDocumento?: string;
+  remetenteTelefone?: string;
   tipo: 'NFe' | 'NFCe' | 'DC';
   pagamento?: 'CIF' | 'FOB';
   numero: string;
@@ -97,8 +102,7 @@ export interface CreateDocumentoManualInput {
   destinatarioDocumento?: string;
   destinatarioTelefone?: string;
   agendadoPara?: string;
-  arquivoUrl?: string;
-  arquivoHash?: string;
+  tipoUnitizacao?: 'AVULSA' | 'MP' | 'PD' | 'PC';
   clientUuid?: string;
 }
 

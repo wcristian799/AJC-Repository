@@ -52,7 +52,7 @@ Essa regra não bloqueia o front atual, mas deve ser considerada no futuro desen
 - Capacidades numéricas reais por classe/embarcação, se houver tabela separada.
 - Regra/visualização final de **Calendário/Cronograma longo**.
 - Campos detalhados de **lançamento manual NF/DC**.
-- Regras finais do botão/fluxo **Etiquetar por volume**.
+- ~~Regras finais do botão/fluxo **Etiquetar por volume**.~~ Resolvido em 01/ago/2026: removido de Notas; etiquetagem ocorre no recebimento/aba Etiqueta.
 - Campos de **Cadastro de palete**.
 - Tabelas de **preço de carga** por cliente/destino.
 - Tabela/regra de preço de **veículos/máquinas**.

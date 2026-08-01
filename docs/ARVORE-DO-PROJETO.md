@@ -156,7 +156,7 @@ Funções exportadas, por área (nome → método/rota):
 - **Cadastros:** `listEmbarcacoes`, `createEmbarcacao`, `updateEmbarcacao`, `listCidades`, `listUsuariosCadastro`, `listPerfisCadastro`, `createUsuarioCadastro`, `updateUsuarioCadastro`, `createPerfilCadastro`, `updatePerfilCadastro`, `listFornecedores`, `createFornecedor`, `listColaboradores`, `createColaborador`, `listAgentes`, `listClientes`, `createCliente`, `updateCliente`.
 - **CRM:** `listCrmCotacoes`, `createCrmCotacao`, `getCrmHistoricoCliente`.
 - **Preços/Config:** `listPrecosPassagemMatriz`, `getConfigValue`, `listPrecos`, `reajustarTabelaPrecos`.
-- **TMS/Carga/Encomendas/Veículos:** `listTmsCargas`, `listTmsAgendamentoDisponibilidade`, `createTmsCarga`, `listEncomendas`, `createEncomenda`, `listEncomendaDeclaracoes`, `saveEncomendaDeclaracao`, `listTmsVolumes`, `listTmsEtiquetas`, `printTmsEtiqueta`, `listTmsDocumentos`, `createTmsDocumentoManual`, `conferirTmsDocumento`, `listTmsPaletes`, `createTmsPalete`, `allocateTmsPalete`, `releaseTmsPalete`, `listTmsPortaria`, `listTmsEntregas`, `listTmsPrestacoes`, `saveTmsPrestacao`, `createTmsPortaria`, `addTmsVolumeEvent`, `createTmsEntrega`, `listVeiculosEnvios`, `createVeiculoEnvio`.
+- **TMS/Carga/Encomendas/Veículos:** `listTmsCargas`, `listTmsAgendamentoDisponibilidade`, `createTmsCarga`, `listEncomendas`, `createEncomenda`, `listEncomendaDeclaracoes`, `saveEncomendaDeclaracao`, `listTmsVolumes`, `listTmsEtiquetas`, `printTmsEtiqueta`, `listTmsDocumentos`, `analyzeTmsDocumento`, `createTmsDocumento`, `conferirTmsDocumento`, `listTmsPaletes`, `createTmsPalete`, `allocateTmsPalete`, `releaseTmsPalete`, `listTmsPortaria`, `listTmsEntregas`, `listTmsPrestacoes`, `saveTmsPrestacao`, `createTmsPortaria`, `addTmsVolumeEvent`, `createTmsEntrega`, `listVeiculosEnvios`, `createVeiculoEnvio`.
 - **Vendas/Bilhetes:** `listBilhetes`, `getVendasResumo`, `createBilhete`, `validarBilhete`, `getManifesto`, `listCortesias`, `createCortesia`, `listGratuidades`.
 - **Caixa/Financeiro:** `listCaixas`, `listCaixaMovimentos`, `abrirCaixa`, `listFinanceiroTitulos`, `createFinanceiroTitulo`.
 - **Operação (dashboard):** `listOperacaoAlertas`, `getOperacaoRelatorioDia`, `createOperacaoAlerta`, `updateOperacaoAlerta`.
@@ -255,7 +255,8 @@ Regra: viagem nasce como saída + retorno; `PATCH` bloqueia mudar `status`/`situ
 | POST | `/api/tms/cargas` | `tms.criar` |
 | GET | `/api/tms/agendamentos/disponibilidade` (`?data=`) | `tms.ver` |
 | GET | `/api/tms/documentos` | `tms.ver` |
-| POST | `/api/tms/documentos/manual` | `tms.criar` |
+| POST | `/api/tms/documentos/analisar` | `tms.criar` |
+| POST | `/api/tms/documentos` | `tms.criar` |
 | POST | `/api/tms/documentos/:id/conferencia` | `tms.conferir` |
 | GET | `/api/tms/volumes` | `tms.ver` |
 | GET | `/api/tms/etiquetas` | `tms.ver` |

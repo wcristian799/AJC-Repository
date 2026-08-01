@@ -115,16 +115,9 @@ recebido+embarcado ────────────────────�
 
 ---
 
-### B.2 Upload de NF / Declaração de Conteúdo (cliente e agente)
-**Persona:** Cliente ou agente comercial. **Plataforma:** Web/App.
+### B.2 Descontinuada — incorporada ao Lançamento de NF/DC
 
-**Objetivo:** permitir que o cliente/agente suba a NF/DC antes ou no momento do envio.
-
-**Campos:** seleção da carga/envio relacionado; tipo de documento (NF-e / NFC-e / Declaração de Conteúdo); upload de arquivo (PDF/foto) ou número da chave de NF-e; valor. **Dados de remetente e destinatário** (cada um com nome completo ou razão social, CPF/CNPJ e telefone) — atualizado pós-validação 2026-06-25, o antigo campo único "carga/envio" estava ambíguo.
-
-**Agendamento de recebimento de carga** (atualizado pós-validação 2026-06-25): junto do upload da NF/DC, o cliente/agente agenda **dia** e **horário** de entrega no porto. Janelas de **30 em 30 minutos**, com no máximo **5 caminhões por janela**.
-
-**Estados:** *Vazio* (nenhum doc enviado) · *Carregando* (upload) · *Erro* (arquivo grande/ inválido) · *Sucesso* ("Documento enviado, aguardando conferência").
+O upload separado de cliente/agente foi descontinuado em 01/ago/2026. Upload, cadastro assistido do cliente, agendamento e vínculo operacional acontecem no fluxo único B.3.
 
 ---
 
@@ -152,12 +145,14 @@ recebido+embarcado ────────────────────�
 ### B.3 Lançamento de NF/DC — ADM Notas
 **Persona:** ADM Notas (back-office). **Plataforma:** Web.
 
-**Objetivo:** lançar/validar as NF/DC que entram, vinculando-as às cargas.
+**Objetivo:** enviar e validar as NF/DC, criando o vínculo com cliente, carga e viagem no mesmo fluxo.
 
 **Componentes:**
-- Fila de documentos **pendentes** (enviados por clientes/agentes + lançamento manual).
-- Formulário: tipo, número/chave, valor, cliente, carga vinculada.
-- Ação de **etiquetar por volume da conferência** e **por palete** (gera os volumes a serem bipados).
+- Upload real de XML/PDF/foto como primeira ação; XML preenche automaticamente os campos disponíveis.
+- Identificação do emitente por CPF/CNPJ; cliente inexistente é criado na mesma transação.
+- Toda nova NF/DC nasce vinculada a carga e viagem; não existe documento avulso neste fluxo.
+- Fila de documentos **pendentes** para conferência.
+- Etiquetagem ocorre exclusivamente no fluxo B.5/recebimento, nunca na fila de Notas.
 - Marcar como **conferida** ou **divergente**.
 
 **Estados:** fila vazia · carregando · erro de validação de chave NF-e · sucesso.

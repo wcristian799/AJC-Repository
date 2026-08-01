@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { PoolClient } from 'pg';
 import { DatabaseService } from '../../database/database.service';
-import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoManualInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SaveDeclaracaoConteudoInput, SavePrestacaoContasInput } from './tms.types';
+import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SaveDeclaracaoConteudoInput, SavePrestacaoContasInput } from './tms.types';
+import { UploadedDocument } from './tms-document.service';
 
 @Injectable()
 export class TmsRepository {
@@ -39,32 +41,33 @@ export class TmsRepository {
 
   async listAgendamentoDisponibilidade(data: string) {
     const normalizedDate = normalizeAgendaDate(data);
+    const config = await this.getAgendamentoConfig();
     const result = await this.db.query(
       `
       WITH slots AS (
         SELECT generate_series(
-          ($1::date + time '06:00') AT TIME ZONE 'America/Sao_Paulo',
-          ($1::date + time '18:00') AT TIME ZONE 'America/Sao_Paulo',
-          interval '30 minutes'
+          ($1::date + $2::time) AT TIME ZONE $6,
+          ($1::date + $3::time) AT TIME ZONE $6,
+          make_interval(mins => $4)
         ) AS inicio
       )
       SELECT
         slots.inicio AS inicio,
-        slots.inicio + interval '30 minutes' AS fim,
-        5::int AS capacidade,
+        slots.inicio + make_interval(mins => $4) AS fim,
+        $5::int AS capacidade,
         count(df.id)::int AS ocupadas
       FROM slots
       LEFT JOIN documento_fiscal df
         ON df.agendado_para >= slots.inicio
-       AND df.agendado_para < slots.inicio + interval '30 minutes'
+       AND df.agendado_para < slots.inicio + make_interval(mins => $4)
       GROUP BY slots.inicio
       ORDER BY slots.inicio
       `,
-      [normalizedDate],
+      [normalizedDate, config.horaInicio, config.horaFim, config.intervaloMinutos, config.capacidadePorJanela, config.timezone],
     );
     return result.rows.map((row) => {
       const ocupadas = Number(row.ocupadas ?? 0);
-      const capacidade = Number(row.capacidade ?? 5);
+      const capacidade = Number(row.capacidade ?? config.capacidadePorJanela);
       return {
         inicio: row.inicio,
         fim: row.fim,
@@ -72,6 +75,8 @@ export class TmsRepository {
         ocupadas,
         disponiveis: Math.max(capacidade - ocupadas, 0),
         bloqueada: ocupadas >= capacidade,
+        intervaloMinutos: config.intervaloMinutos,
+        atualizacaoSegundos: config.atualizacaoSegundos,
       };
     });
   }
@@ -110,7 +115,9 @@ export class TmsRepository {
       `
       SELECT df.id, df.tipo::text, df.numero, df.valor, df.cliente_id, df.carga_id,
              df.arquivo_url, df.arquivo_hash, df.status::text, df.origem,
-             df.agendado_para, df.criado_em, df.atualizado_em,
+             df.agendado_para, df.viagem_id, df.remetente_nome, df.remetente_documento,
+             df.remetente_telefone, df.chave_acesso, df.arquivo_nome, df.arquivo_mime,
+             df.dados_extraidos, df.criado_em, df.atualizado_em,
              c.codigo AS carga_codigo, c.numero_pedido, c.tipo_recebimento::text,
              COALESCE(c.cidade_origem_sigla, ${manualOrigem}) AS cidade_origem_sigla,
              COALESCE(c.cidade_destino_sigla, ${manualDestino}) AS cidade_destino_sigla,
@@ -119,11 +126,13 @@ export class TmsRepository {
              COALESCE(c.destinatario_nome, ${manualDestinatario}) AS destinatario_nome,
              ${manualDestinatarioDocumento} AS destinatario_documento,
              ${manualDestinatarioTelefone} AS destinatario_telefone,
-             ${manualPagamento} AS pagamento,
+             ${manualPagamento} AS pagamento, c.tipo_unitizacao,
+             v.codigo AS viagem_codigo,
              cli.nome AS cliente_nome,
              u.nome AS lancado_por_nome
       FROM documento_fiscal df
       LEFT JOIN carga c ON c.id = df.carga_id
+      LEFT JOIN viagem v ON v.id = COALESCE(df.viagem_id, c.viagem_id)
       LEFT JOIN LATERAL (
         SELECT count(vol.id)::int AS total_volumes
         FROM volume vol
@@ -143,108 +152,146 @@ export class TmsRepository {
     }));
   }
 
-  async createDocumentoManual(input: CreateDocumentoManualInput, userId: string) {
-    if (!(await this.hasDocumentoManualFields())) {
-      throw new BadRequestException('Migration 0019_documento_manual_avulso pendente no banco');
-    }
-    if (!(await this.hasDocumentoManualRecipientFields())) {
-      throw new BadRequestException('Migration 0020_documento_manual_destinatario pendente no banco');
-    }
-    if (!(await this.hasDocumentoManualPaymentField())) {
-      throw new BadRequestException('Migration 0021_documento_manual_pagamento pendente no banco');
-    }
-    if (!(await this.hasDocumentoAgendamentoField())) {
-      throw new BadRequestException('Migration 0023_documento_agendamento_recebimento pendente no banco');
-    }
+  async registerDocumentoUpload(upload: UploadedDocument, userId: string) {
+    const existingClient = upload.extraction.remetente.documento
+      ? await this.db.one<{ id: string; codigo: string; nome: string }>(
+        `SELECT id, codigo, nome FROM cliente
+         WHERE regexp_replace(COALESCE(cpf_cnpj, ''), '[^0-9]', '', 'g') = $1
+           AND excluido_em IS NULL LIMIT 1`,
+        [digits(upload.extraction.remetente.documento)],
+      )
+      : null;
+    const row = await this.db.one<{ id: string }>(
+      `INSERT INTO documento_upload (
+         bucket, objeto_chave, arquivo_nome, arquivo_mime, arquivo_hash,
+         arquivo_bytes, dados_extraidos, criado_por
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8) RETURNING id`,
+      [upload.bucket, upload.objectKey, upload.fileName, upload.mimeType, upload.hash, upload.bytes, JSON.stringify(upload.extraction), userId],
+    );
+    if (!row) throw new BadRequestException('Nao foi possivel registrar o upload');
+    return {
+      uploadId: row.id,
+      arquivo: { nome: upload.fileName, mime: upload.mimeType, hash: upload.hash, bytes: upload.bytes },
+      extraido: upload.extraction,
+      cliente: existingClient ? { id: existingClient.id, codigo: existingClient.codigo, nome: existingClient.nome } : null,
+      clienteSeraCriado: Boolean(!existingClient && upload.extraction.remetente.nome),
+    };
+  }
+
+  async createDocumento(input: CreateDocumentoInput, userId: string) {
+    const config = await this.getAgendamentoConfig();
     const totalVolumes = Math.max(1, input.totalVolumes ?? 1);
+    const agendadoPara = normalizeAgendaSlot(input.agendadoPara!, config);
     const cidadeOrigemSigla = await this.normalizeCidadeSigla(input.cidadeOrigemSigla, 'origem');
     const cidadeDestinoSigla = await this.normalizeCidadeSigla(input.cidadeDestinoSigla, 'destino');
-    const agendadoPara = input.agendadoPara ? normalizeAgendaSlot(input.agendadoPara) : null;
+    if (!cidadeDestinoSigla) throw new BadRequestException('Cidade de destino obrigatoria');
     if (input.clientUuid) {
       const existing = await this.db.one<{ id: string }>(
-        'SELECT entidade_id AS id FROM audit_evento WHERE entidade = $1 AND client_uuid = $2 LIMIT 1',
-        ['documento_fiscal', input.clientUuid],
+        `SELECT df.id FROM documento_fiscal df
+         JOIN audit_evento ae ON ae.entidade = 'documento_fiscal' AND ae.entidade_id = df.id
+         WHERE ae.client_uuid = $1 LIMIT 1`, [input.clientUuid],
       );
       if (existing?.id) return this.findDocumento(existing.id);
     }
     const documentoId = await this.db.tx(async (client) => {
-      if (agendadoPara) {
-        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`documento-agenda:${agendadoPara}`]);
-        const agenda = await client.query<{ ocupadas: string }>(
-          `
-          SELECT count(*)::text AS ocupadas
-          FROM documento_fiscal
-          WHERE agendado_para >= $1::timestamptz
-            AND agendado_para < $1::timestamptz + interval '30 minutes'
-          `,
-          [agendadoPara],
-        );
-        if (Number(agenda.rows[0]?.ocupadas ?? 0) >= 5) {
-          throw new BadRequestException('Janela de agendamento sem vagas');
-        }
+      const upload = await client.query<{
+        id: string; bucket: string; objeto_chave: string; arquivo_nome: string; arquivo_mime: string;
+        arquivo_hash: string; dados_extraidos: unknown; consumido_em: Date | null; criado_por: string;
+      }>(`SELECT * FROM documento_upload WHERE id = $1 FOR UPDATE`, [input.uploadId]);
+      const stored = upload.rows[0];
+      if (!stored || stored.criado_por !== userId) throw new BadRequestException('Upload nao encontrado ou expirado');
+      if (stored.consumido_em) throw new BadRequestException('Upload ja utilizado em outro lancamento');
+
+      const trip = await client.query<{ id: string; origem_sigla: string; destino_sigla: string | null }>(
+        'SELECT id, origem_sigla, destino_sigla FROM viagem WHERE id = $1', [input.viagemId],
+      );
+      if (!trip.rows[0]) throw new BadRequestException('Viagem nao encontrada');
+      if (trip.rows[0].destino_sigla !== cidadeDestinoSigla) {
+        const stop = await client.query('SELECT 1 FROM viagem_escala WHERE viagem_id = $1 AND cidade_sigla = $2 LIMIT 1', [input.viagemId, cidadeDestinoSigla]);
+        if (!stop.rowCount) throw new BadRequestException('Destino nao pertence a viagem selecionada');
       }
-      const result = await client.query<{ id: string }>(
-        `
-        INSERT INTO documento_fiscal (
-          tipo, numero, valor, cliente_id, origem, lancado_por,
-          cidade_origem_sigla, cidade_destino_sigla, peso_total, total_volumes,
-          destinatario_nome, destinatario_documento, destinatario_telefone,
-          arquivo_url, arquivo_hash, pagamento, agendado_para
-        )
-        VALUES ($1::tipo_documento_fiscal, $2, $3, $4, 'manual', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        RETURNING id
-        `,
-        [
-          input.tipo,
-          input.numero.trim(),
-          input.valor ?? null,
-          input.clienteRemetenteId,
-          userId,
-          cidadeOrigemSigla,
-          cidadeDestinoSigla,
-          input.pesoTotal ?? null,
-          totalVolumes,
-          input.destinatarioNome?.trim() || null,
-          input.destinatarioDocumento?.trim() || null,
-          input.destinatarioTelefone?.trim() || null,
-          input.arquivoUrl?.trim() || null,
-          input.arquivoHash?.trim() || null,
-          input.pagamento ?? 'CIF',
-          agendadoPara,
-        ],
+
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`documento-agenda:${agendadoPara}`]);
+      const agenda = await client.query<{ ocupadas: string }>(
+        `SELECT count(*)::text AS ocupadas FROM documento_fiscal
+         WHERE agendado_para >= $1::timestamptz
+           AND agendado_para < $1::timestamptz + make_interval(mins => $2)`,
+        [agendadoPara, config.intervaloMinutos],
       );
-      const documentoId = result.rows[0]?.id;
+      if (Number(agenda.rows[0]?.ocupadas ?? 0) >= config.capacidadePorJanela) {
+        throw new BadRequestException('Janela de agendamento sem vagas');
+      }
+
+      const documentoLimpo = digits(input.remetenteDocumento);
+      let clienteId = input.clienteRemetenteId || null;
+      if (!clienteId && documentoLimpo) {
+        const clientRow = await client.query<{ id: string }>(
+          `SELECT id FROM cliente WHERE regexp_replace(COALESCE(cpf_cnpj, ''), '[^0-9]', '', 'g') = $1
+           AND excluido_em IS NULL LIMIT 1`, [documentoLimpo],
+        );
+        clienteId = clientRow.rows[0]?.id ?? null;
+      }
+      if (!clienteId) {
+        const created = await client.query<{ id: string }>(
+          `INSERT INTO cliente (tipo, nome, cpf_cnpj, contatos, criado_por, atualizado_por)
+           VALUES ($1::tipo_pessoa, $2, $3, $4::jsonb, $5, $5) RETURNING id`,
+          [documentoLimpo?.length === 14 ? 'PJ' : 'PF', input.remetenteNome.trim(), documentoLimpo || null,
+            JSON.stringify(input.remetenteTelefone ? [{ tipo: 'tel', valor: input.remetenteTelefone }] : []), userId],
+        );
+        clienteId = created.rows[0].id;
+        await client.query(
+          `INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_depois)
+           VALUES ('cliente', $1, 'criar', $2, $3::jsonb)`,
+          [clienteId, userId, JSON.stringify({ origem: 'xml_nf', nome: input.remetenteNome, cpfCnpj: documentoLimpo || null })],
+        );
+      }
+
+      const codigo = await this.nextCodigoTx(client, 'CG');
+      const clienteCodigo = await client.query<{ codigo: string }>('SELECT codigo FROM cliente WHERE id = $1', [clienteId]);
+      const numeroPedido = `${clienteCodigo.rows[0].codigo}-${input.tipo}-${input.numero.trim()}`;
+      const carga = await client.query<{ id: string }>(
+        `INSERT INTO carga (
+           codigo, numero_pedido, categoria, viagem_id, cliente_remetente_id, destinatario_nome,
+           cidade_origem_sigla, cidade_destino_sigla, tipo_recebimento, status, valor_declarado,
+           peso_total, tipo_unitizacao, agendado_para, client_uuid, criado_por, atualizado_por
+         ) VALUES ($1,$2,'carga',$3,$4,$5,$6,$7,'porto_balsa','aberta',$8,$9,$10,$11,$12,$13,$13)
+         RETURNING id`,
+        [codigo, numeroPedido, input.viagemId, clienteId, input.destinatarioNome?.trim() || null,
+          cidadeOrigemSigla || trip.rows[0].origem_sigla, cidadeDestinoSigla, input.valor ?? null,
+          input.pesoTotal ?? null, input.tipoUnitizacao ?? 'AVULSA', agendadoPara, input.clientUuid ?? null, userId],
+      );
+      const extracted = stored.dados_extraidos as Record<string, unknown> | null;
+      const document = await client.query<{ id: string }>(
+        `INSERT INTO documento_fiscal (
+           tipo, numero, valor, cliente_id, carga_id, viagem_id, origem, lancado_por,
+           cidade_origem_sigla, cidade_destino_sigla, peso_total, total_volumes,
+           remetente_nome, remetente_documento, remetente_telefone,
+           destinatario_nome, destinatario_documento, destinatario_telefone,
+           arquivo_url, arquivo_hash, arquivo_nome, arquivo_mime, chave_acesso,
+           dados_extraidos, pagamento, agendado_para
+         ) VALUES ($1,$2,$3,$4,$5,$6,'operacao',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24,$25)
+         RETURNING id`,
+        [input.tipo, input.numero.trim(), input.valor ?? null, clienteId, carga.rows[0].id, input.viagemId, userId,
+          cidadeOrigemSigla || trip.rows[0].origem_sigla, cidadeDestinoSigla, input.pesoTotal ?? null, totalVolumes,
+          input.remetenteNome.trim(), documentoLimpo || null, input.remetenteTelefone?.trim() || null,
+          input.destinatarioNome?.trim() || null, digits(input.destinatarioDocumento) || null, input.destinatarioTelefone?.trim() || null,
+          `s3://${stored.bucket}/${stored.objeto_chave}`, stored.arquivo_hash, stored.arquivo_nome, stored.arquivo_mime,
+          typeof extracted?.chaveAcesso === 'string' ? extracted.chaveAcesso : null, JSON.stringify(extracted ?? {}),
+          input.pagamento ?? 'CIF', agendadoPara],
+      );
+      const pesoPorVolume = input.pesoTotal ? input.pesoTotal / totalVolumes : null;
       await client.query(
-        `
-        INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_depois, client_uuid)
-        VALUES ('documento_fiscal', $1, 'criar', $2, $3::jsonb, $4)
-        ON CONFLICT (client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING
-        `,
-        [
-          documentoId,
-          userId,
-          JSON.stringify({
-            tipo: input.tipo,
-            numero: input.numero.trim(),
-            clienteRemetenteId: input.clienteRemetenteId,
-            cidadeOrigemSigla,
-            cidadeDestinoSigla,
-            valor: input.valor ?? null,
-            pesoTotal: input.pesoTotal ?? null,
-            totalVolumes,
-            destinatarioNome: input.destinatarioNome?.trim() || null,
-            destinatarioDocumento: input.destinatarioDocumento?.trim() || null,
-            destinatarioTelefone: input.destinatarioTelefone?.trim() || null,
-            agendadoPara,
-            arquivoUrl: input.arquivoUrl?.trim() || null,
-            arquivoHash: input.arquivoHash?.trim() || null,
-            pagamento: input.pagamento ?? 'CIF',
-            origem: 'manual',
-          }),
-          input.clientUuid ?? null,
-        ],
+        `INSERT INTO volume (carga_id, indice_volume, total_volumes, peso, status)
+         SELECT $1, n, $2, $3, 'recebido' FROM generate_series(1, $2) n`,
+        [carga.rows[0].id, totalVolumes, pesoPorVolume],
       );
-      return documentoId;
+      await client.query('UPDATE documento_upload SET consumido_em = now() WHERE id = $1', [input.uploadId]);
+      await client.query(
+        `INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_depois, client_uuid)
+         VALUES ('documento_fiscal', $1, 'criar', $2, $3::jsonb, $4)`,
+        [document.rows[0].id, userId, JSON.stringify({ cargaId: carga.rows[0].id, viagemId: input.viagemId, clienteId, uploadId: input.uploadId, tipoUnitizacao: input.tipoUnitizacao ?? 'AVULSA' }), input.clientUuid ?? null],
+      );
+      return document.rows[0].id;
     });
     return this.findDocumento(documentoId);
   }
@@ -312,7 +359,9 @@ export class TmsRepository {
       `
       SELECT df.id, df.tipo::text, df.numero, df.valor, df.cliente_id, df.carga_id,
              df.arquivo_url, df.arquivo_hash, df.status::text, df.origem,
-             df.agendado_para, df.criado_em, df.atualizado_em,
+             df.agendado_para, df.viagem_id, df.remetente_nome, df.remetente_documento,
+             df.remetente_telefone, df.chave_acesso, df.arquivo_nome, df.arquivo_mime,
+             df.dados_extraidos, df.criado_em, df.atualizado_em,
              c.codigo AS carga_codigo, c.numero_pedido, c.tipo_recebimento::text,
              COALESCE(c.cidade_origem_sigla, ${manualOrigem}) AS cidade_origem_sigla,
              COALESCE(c.cidade_destino_sigla, ${manualDestino}) AS cidade_destino_sigla,
@@ -321,11 +370,13 @@ export class TmsRepository {
              COALESCE(c.destinatario_nome, ${manualDestinatario}) AS destinatario_nome,
              ${manualDestinatarioDocumento} AS destinatario_documento,
              ${manualDestinatarioTelefone} AS destinatario_telefone,
-             ${manualPagamento} AS pagamento,
+             ${manualPagamento} AS pagamento, c.tipo_unitizacao,
+             v.codigo AS viagem_codigo,
              cli.nome AS cliente_nome,
              u.nome AS lancado_por_nome
       FROM documento_fiscal df
       LEFT JOIN carga c ON c.id = df.carga_id
+      LEFT JOIN viagem v ON v.id = COALESCE(df.viagem_id, c.viagem_id)
       LEFT JOIN LATERAL (
         SELECT count(vol.id)::int AS total_volumes
         FROM volume vol
@@ -850,11 +901,12 @@ export class TmsRepository {
       carga_codigo: string;
       cidade_destino_sigla: string;
       categoria: string;
+      tipo_unitizacao: string;
       palete_codigo: string | null;
     }>(
       `
       SELECT vol.id, vol.indice_volume, vol.total_volumes, vol.peso,
-             c.codigo AS carga_codigo, c.cidade_destino_sigla, c.categoria,
+             c.codigo AS carga_codigo, c.cidade_destino_sigla, c.categoria, c.tipo_unitizacao,
              p.codigo AS palete_codigo
       FROM volume vol
       JOIN carga c ON c.id = vol.carga_id
@@ -887,7 +939,7 @@ export class TmsRepository {
         paleteCodigo: volume.palete_codigo,
         volume: `${volume.indice_volume}/${volume.total_volumes}`,
         peso: volume.peso === null ? null : Number(volume.peso),
-        tipoOperacional: volume.total_volumes > 1 ? 'MP' : volume.palete_codigo ? 'PC' : 'PD',
+        tipoOperacional: volume.tipo_unitizacao,
         adapter: 'bluetooth-stub',
         observacao: 'Modelo/protocolo da impressora Bluetooth pendente; registro auditavel para fila offline.',
       };
@@ -1210,6 +1262,24 @@ export class TmsRepository {
     return `${prefix}-${year}-${String(Number(total?.total ?? 0) + 1).padStart(4, '0')}`;
   }
 
+  private async nextCodigoTx(client: PoolClient, prefix: string): Promise<string> {
+    const year = new Date().getFullYear();
+    const like = `${prefix}-${year}-%`;
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`codigo:${prefix}:${year}`]);
+    const row = await client.query<{ total: string }>('SELECT count(*)::text AS total FROM carga WHERE codigo LIKE $1', [like]);
+    return `${prefix}-${year}-${String(Number(row.rows[0]?.total ?? 0) + 1).padStart(4, '0')}`;
+  }
+
+  private async getAgendamentoConfig(): Promise<AgendamentoConfig> {
+    const row = await this.db.one<{ valor: unknown }>(
+      `SELECT cv.valor FROM config_versao cv
+       JOIN config_chave cc ON cc.id = cv.chave_id
+       WHERE cc.chave = 'tms_agendamento_recebimento' AND cv.ativo = true LIMIT 1`,
+    );
+    if (!row) throw new BadRequestException('Configuracao tms_agendamento_recebimento nao publicada');
+    return validateAgendamentoConfig(row.valor);
+  }
+
   private async nextEtiquetaProtocolo(prefix: 'ETIQ' | 'RETIQ'): Promise<string> {
     const year = new Date().getFullYear();
     const base = `${prefix}-${year}-`;
@@ -1271,24 +1341,64 @@ function normalizeAgendaDate(value: string) {
   return date;
 }
 
-function normalizeAgendaSlot(value: string) {
+type AgendamentoConfig = {
+  horaInicio: string;
+  horaFim: string;
+  intervaloMinutos: number;
+  capacidadePorJanela: number;
+  atualizacaoSegundos: number;
+  timezone: string;
+};
+
+function validateAgendamentoConfig(value: unknown): AgendamentoConfig {
+  const config = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const result: AgendamentoConfig = {
+    horaInicio: String(config.horaInicio ?? ''),
+    horaFim: String(config.horaFim ?? ''),
+    intervaloMinutos: Number(config.intervaloMinutos),
+    capacidadePorJanela: Number(config.capacidadePorJanela),
+    atualizacaoSegundos: Number(config.atualizacaoSegundos),
+    timezone: String(config.timezone || 'America/Sao_Paulo'),
+  };
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(result.horaInicio) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(result.horaFim)) {
+    throw new BadRequestException('Horario da agenda TMS invalido');
+  }
+  if (!Number.isInteger(result.intervaloMinutos) || result.intervaloMinutos < 5 || result.intervaloMinutos > 240) {
+    throw new BadRequestException('Intervalo da agenda TMS invalido');
+  }
+  if (!Number.isInteger(result.capacidadePorJanela) || result.capacidadePorJanela < 1 || result.capacidadePorJanela > 100) {
+    throw new BadRequestException('Capacidade da agenda TMS invalida');
+  }
+  if (!Number.isInteger(result.atualizacaoSegundos) || result.atualizacaoSegundos < 10 || result.atualizacaoSegundos > 300) {
+    throw new BadRequestException('Atualizacao da agenda TMS invalida');
+  }
+  return result;
+}
+
+function normalizeAgendaSlot(value: string, config: AgendamentoConfig) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     throw new BadRequestException('agendadoPara invalido');
   }
-  const minutes = date.getUTCMinutes();
-  const seconds = date.getUTCSeconds();
-  const milliseconds = date.getUTCMilliseconds();
-  if ((minutes !== 0 && minutes !== 30) || seconds !== 0 || milliseconds !== 0) {
-    throw new BadRequestException('agendadoPara deve usar janelas de 30 minutos');
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: config.timezone, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? -1);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? -1);
+  const localMinutes = hour * 60 + minute;
+  const [startHour, startMinute] = config.horaInicio.split(':').map(Number);
+  const [endHour, endMinute] = config.horaFim.split(':').map(Number);
+  const start = startHour * 60 + startMinute;
+  const end = endHour * 60 + endMinute;
+  if (date.getUTCSeconds() !== 0 || date.getUTCMilliseconds() !== 0 || (localMinutes - start) % config.intervaloMinutos !== 0) {
+    throw new BadRequestException(`agendadoPara deve usar janelas de ${config.intervaloMinutos} minutos`);
   }
-  const hourInBelem = Number(new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Sao_Paulo',
-    hour: '2-digit',
-    hour12: false,
-  }).format(date));
-  if (hourInBelem < 6 || hourInBelem > 18) {
+  if (localMinutes < start || localMinutes > end) {
     throw new BadRequestException('agendadoPara fora do horario operacional');
   }
   return date.toISOString();
+}
+
+function digits(value?: string | null) {
+  return value?.replace(/\D/g, '') || '';
 }

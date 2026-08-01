@@ -903,7 +903,7 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 │          │ └─────────────┴──────────────────────────────┘  │
 └──────────┴─────────────────────────────────────────────────┘
 ```
-**Composição:** `DataTable`/lista de **pendentes** (uploads dos clientes + lançamento manual) + painel de detalhe (`FormPanel`); ação **Etiquetar por volume** e **por palete** (gera os Volumes com `indice/total`); marcar **conferida** ou **divergente** (`StatusChip`). **Estados:** fila vazia · carregando · erro de validação de chave NF-e · sucesso. **Regras:** nº de volumes declarado aqui é o **Y** do `CounterBadge` da conferência (TMS-CONF); carga sem NF/DC conferida fica **bloqueada** para conferir (A.6). **Navegação:** Sidebar TMS › Notas → gera volumes consumidos por TMS-CONF.
+**Composição:** upload real de XML/PDF/foto como primeira ação + formulário preenchido pelo XML + `DataTable`/lista de **pendentes**. O emitente é localizado por CPF/CNPJ ou cadastrado na mesma transação; salvar cria documento, carga, viagem e volumes vinculados. A tela permite marcar **conferida** ou **divergente** (`StatusChip`). **Estados:** vazio · enviando/analisando · erro de arquivo/XML/storage · revisão · sucesso. **Regras:** nº de volumes declarado aqui é o **Y** do `CounterBadge` da conferência; carga sem NF/DC conferida fica **bloqueada** para conferir (A.6). Etiquetagem e MP/PD/PC pertencem ao recebimento/B.5, não à fila de Notas.
 
 ---
 

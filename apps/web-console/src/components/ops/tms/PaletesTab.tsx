@@ -258,10 +258,9 @@ export function PaletesTab({
             ? <span className="inline-flex items-center gap-1 text-xs"><MapPin className="h-3 w-3 text-muted-foreground" />{r.cidadeDestino}</span>
             : <span className="text-muted-foreground">-</span> },
           { key: "volumes", header: "Volumes", align: "right", render: (r) => <span className="font-mono text-xs">{r.volumes}</span> },
-          { key: "tipo", header: "Tipo", render: (r) => <Tag tone={r.volumes > 12 ? "warning" : r.volumes > 0 ? "brand" : "neutral"}>{r.volumes > 12 ? "MP" : r.volumes > 0 ? "PC" : "PD"}</Tag> },
-          { key: "ocupacao", header: "Ocupacao", render: (r) => r.status === "livre"
+          { key: "unitizacao", header: "Unitizacao", render: (r) => r.status === "livre"
             ? <StatusChip tone="success" size="sm">disponivel</StatusChip>
-            : <StatusChip tone={r.volumes >= 10 ? "brand" : "warning"} size="sm">{r.volumes >= 10 ? "completo" : "parcial"}</StatusChip> },
+            : <span className="text-[11px] text-muted-foreground">definida no recebimento</span> },
           { key: "acao", header: "Acao", align: "right", render: (r) => r.status === "livre"
             ? <button className="text-[11px] font-medium text-[color:var(--brand)] story-link" onClick={() => beginAllocation(r)}>Alocar</button>
             : <button className="text-[11px] text-muted-foreground story-link" disabled={saving} onClick={() => handleReleasePalete(r.id)}>liberar retorno</button> },

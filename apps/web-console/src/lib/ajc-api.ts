@@ -19,10 +19,11 @@ const AUTH_STORAGE_KEY = "ajc.auth.v1";
 
 async function request<T>(path: string, init?: RequestInit & { auth?: boolean }): Promise<T> {
   const token = init?.auth ? getStoredAuth()?.accessToken : undefined;
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
   const res = await fetch(`${AJC_API_URL}${path}`, {
     ...init,
     headers: {
-      "content-type": "application/json",
+      ...(!isFormData ? { "content-type": "application/json" } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
@@ -664,6 +665,7 @@ export type TmsCargaApi = {
   viagem_codigo: string;
   remetente_nome: string;
   total_volumes: number;
+  tipo_unitizacao?: "AVULSA" | "MP" | "PD" | "PC";
 };
 
 export type CreateEncomendaInput = {
@@ -703,6 +705,8 @@ export type TmsAgendamentoSlotApi = {
   ocupadas: number;
   disponiveis: number;
   bloqueada: boolean;
+  intervaloMinutos: number;
+  atualizacaoSegundos: number;
 };
 
 export type TmsVolumeApi = {
@@ -734,6 +738,15 @@ export type TmsDocumentoApi = {
   status: "pendente" | "conferida" | "divergente" | string;
   origem: "cliente" | "agente" | "manual" | string | null;
   agendado_para?: string | null;
+  viagem_id?: string | null;
+  viagem_codigo?: string | null;
+  remetente_nome?: string | null;
+  remetente_documento?: string | null;
+  remetente_telefone?: string | null;
+  chave_acesso?: string | null;
+  arquivo_nome?: string | null;
+  arquivo_mime?: string | null;
+  tipo_unitizacao?: "AVULSA" | "MP" | "PD" | "PC" | null;
   criado_em: string;
   atualizado_em: string;
   carga_codigo: string | null;
@@ -750,8 +763,32 @@ export type TmsDocumentoApi = {
   lancado_por_nome: string | null;
 };
 
-export type CreateTmsDocumentoManualInput = {
-  clienteRemetenteId: string;
+export type TmsDocumentoAnaliseApi = {
+  uploadId: string;
+  arquivo: { nome: string; mime: string; hash: string; bytes: number };
+  extraido: {
+    tipo: "NFe" | "NFCe" | "DC";
+    numero?: string;
+    chaveAcesso?: string;
+    valor?: number;
+    pesoTotal?: number;
+    totalVolumes?: number;
+    pagamento?: "CIF" | "FOB";
+    remetente: { nome?: string; documento?: string; telefone?: string };
+    destinatario: { nome?: string; documento?: string; telefone?: string };
+    xmlLido: boolean;
+  };
+  cliente: { id: string; codigo: string; nome: string } | null;
+  clienteSeraCriado: boolean;
+};
+
+export type CreateTmsDocumentoInput = {
+  uploadId: string;
+  viagemId: string;
+  clienteRemetenteId?: string;
+  remetenteNome: string;
+  remetenteDocumento?: string;
+  remetenteTelefone?: string;
   tipo: "NFe" | "NFCe" | "DC";
   pagamento?: "CIF" | "FOB";
   numero: string;
@@ -764,8 +801,7 @@ export type CreateTmsDocumentoManualInput = {
   destinatarioDocumento?: string;
   destinatarioTelefone?: string;
   agendadoPara?: string;
-  arquivoUrl?: string;
-  arquivoHash?: string;
+  tipoUnitizacao?: "AVULSA" | "MP" | "PD" | "PC";
   clientUuid?: string;
 };
 
@@ -1046,8 +1082,18 @@ export function listTmsDocumentos() {
   return request<TmsDocumentoApi[]>("/tms/documentos", { auth: true });
 }
 
-export function createTmsDocumentoManual(input: CreateTmsDocumentoManualInput) {
-  return request<TmsDocumentoApi>("/tms/documentos/manual", {
+export function analyzeTmsDocumento(file: File) {
+  const body = new FormData();
+  body.append("arquivo", file);
+  return request<TmsDocumentoAnaliseApi>("/tms/documentos/analisar", {
+    method: "POST",
+    auth: true,
+    body,
+  });
+}
+
+export function createTmsDocumento(input: CreateTmsDocumentoInput) {
+  return request<TmsDocumentoApi>("/tms/documentos", {
     method: "POST",
     auth: true,
     body: JSON.stringify(input),

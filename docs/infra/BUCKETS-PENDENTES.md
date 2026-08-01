@@ -18,7 +18,7 @@
 
 | Bucket sugerido | Status | Modulo | Uso |
 |---|---|---|---|
-| `documentos-fiscais` | pendente | TMS / Encomendas | NF-e, NFC-e, DC e anexos de documentos fiscais (`documento_fiscal.arquivo_url`) |
+| `documentos-fiscais` | ativo | TMS / Encomendas | NF-e, NFC-e, DC e anexos fiscais. MinIO privado, referencia `s3://`, SHA-256 e upload temporario auditavel. |
 | `declaracoes-conteudo-assinaturas` | pendente | Encomendas | Assinaturas da declaracao de conteudo (`declaracao_conteudo.assinatura_url`) |
 | `portaria-fotos` | pendente | TMS | Fotos de registro de portaria (`registro_portaria.foto_url`) |
 | `recebimento-fotos` | pendente | TMS | Fotos de recebimento/carga (`carga_recebimento.foto_url`) |
@@ -36,7 +36,6 @@
 
 ## Proximos passos
 
-1. Subir servico `minio` no `docker-compose.coolify.yml`.
-2. Definir variaveis `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_API_URL`, `MINIO_PUBLIC_URL`.
-3. Criar rotina/bootstrap para garantir buckets obrigatorios.
-4. Ligar cada fluxo de upload gradualmente, com hash SHA-256 e trilha de auditoria.
+1. Definir e rotacionar as credenciais MinIO no Coolify.
+2. Configurar backup externo e lifecycle dos uploads temporarios abandonados.
+3. Ligar os demais fluxos gradualmente, com hash SHA-256 e trilha de auditoria.

@@ -67,5 +67,5 @@ Atualizar:
 - Validar divergências internas de horário do FAQ 2026 antes do cadastro definitivo.
 - Valores/capacidades numéricas reais por embarcação/classe, caso existam em tabela separada.
 - Campos detalhados do lançamento manual NF/DC, se forem diferentes do fluxo Nova Carga.
-- Regras finais do botão/fluxo Etiquetar por volume.
+- ~~Regras finais do botão/fluxo Etiquetar por volume.~~ Resolvido em 01/ago/2026: a ação foi removida de Notas e permanece no fluxo próprio de Etiqueta/recebimento.
 - Campos de Cadastro de palete.

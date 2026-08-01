@@ -1,15 +1,17 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '../auth/auth.guard';
 import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { TmsRepository } from './tms.repository';
-import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoManualInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SavePrestacaoContasInput } from './tms.types';
+import { TmsDocumentService } from './tms-document.service';
+import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SavePrestacaoContasInput } from './tms.types';
 
 @UseGuards(AuthGuard)
 @Controller('tms')
 export class TmsController {
-  constructor(private readonly repository: TmsRepository) {}
+  constructor(private readonly repository: TmsRepository, private readonly documents: TmsDocumentService) {}
 
   @Get('cargas')
   @RequirePermissions('tms.ver')
@@ -45,13 +47,26 @@ export class TmsController {
     return this.repository.listDocumentos();
   }
 
-  @Post('documentos/manual')
+  @Post('documentos/analisar')
   @RequirePermissions('tms.criar')
-  createDocumentoManual(@Body() body: CreateDocumentoManualInput, @CurrentUser() user: AuthTokenPayload) {
-    this.require(body.clienteRemetenteId, 'clienteRemetenteId');
+  @UseInterceptors(FileInterceptor('arquivo', { limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
+  async analyzeDocumento(
+    @UploadedFile() file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
+    @CurrentUser() user: AuthTokenPayload,
+  ) {
+    const uploaded = await this.documents.uploadAndExtract(file);
+    return this.repository.registerDocumentoUpload(uploaded, user.sub);
+  }
+
+  @Post('documentos')
+  @RequirePermissions('tms.criar')
+  createDocumento(@Body() body: CreateDocumentoInput, @CurrentUser() user: AuthTokenPayload) {
+    this.require(body.uploadId, 'uploadId');
+    this.require(body.viagemId, 'viagemId');
+    this.require(body.remetenteNome, 'remetenteNome');
     this.require(body.numero, 'numero');
     this.require(body.agendadoPara, 'agendadoPara');
-    return this.repository.createDocumentoManual(body, user.sub);
+    return this.repository.createDocumento(body, user.sub);
   }
 
   @Post('documentos/:id/conferencia')
