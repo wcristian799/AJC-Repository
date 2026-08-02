@@ -145,10 +145,14 @@ export function KPIStat({
 
 export function FilterBar({
   searchPlaceholder = "Buscar…",
+  searchValue,
+  onSearchChange,
   right,
   children,
 }: {
   searchPlaceholder?: string;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
   right?: ReactNode;
   children?: ReactNode;
 }) {
@@ -159,6 +163,8 @@ export function FilterBar({
         <input
           type="text"
           placeholder={searchPlaceholder}
+          value={searchValue}
+          onChange={onSearchChange ? (event) => onSearchChange(event.target.value) : undefined}
           className="h-full w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
         />
       </div>

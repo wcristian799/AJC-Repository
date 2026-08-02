@@ -6,12 +6,41 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { TmsRepository } from './tms.repository';
 import { TmsDocumentService } from './tms-document.service';
-import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SavePrestacaoContasInput } from './tms.types';
+import { TmsControlRepository } from './tms-control.repository';
+import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SavePrestacaoContasInput, TmsControlQuery, TmsControlVolumesQuery } from './tms.types';
 
 @UseGuards(AuthGuard)
 @Controller('tms')
 export class TmsController {
-  constructor(private readonly repository: TmsRepository, private readonly documents: TmsDocumentService) {}
+  constructor(
+    private readonly repository: TmsRepository,
+    private readonly control: TmsControlRepository,
+    private readonly documents: TmsDocumentService,
+  ) {}
+
+  @Get('controle-viagens')
+  @RequirePermissions('tms.ver')
+  listControleViagens(@Query() query: TmsControlQuery) {
+    return this.control.list(query);
+  }
+
+  @Get('controle-viagens/exportacao')
+  @RequirePermissions('tms.ver')
+  exportControleViagens(@Query() query: TmsControlQuery) {
+    return this.control.list(query, true);
+  }
+
+  @Get('controle-viagens/:viagemId/volumes')
+  @RequirePermissions('tms.ver')
+  listControleVolumes(@Param('viagemId') viagemId: string, @Query() query: TmsControlVolumesQuery) {
+    return this.control.listVolumes(viagemId, query);
+  }
+
+  @Get('controle-viagens/volumes/:volumeId/eventos')
+  @RequirePermissions('tms.ver')
+  listControleVolumeEventos(@Param('volumeId') volumeId: string) {
+    return this.control.listVolumeEvents(volumeId);
+  }
 
   @Get('cargas')
   @RequirePermissions('tms.ver')

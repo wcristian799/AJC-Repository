@@ -954,6 +954,15 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 - **Regras:** números refletem a máquina de estados do volume; **divergências abertas bloqueiam** o fechamento da carga (A.6) e aparecem em vermelho até resolução do gerente. É a base do BI por viagem/embarcação/cidade (B.11, PRD RF-9/Diretoria).
 - **Navegação:** Sidebar TMS › Controle por viagem; drill-down → ficha do volume / AuditTrail.
 
+### Implementação funcional (02/ago/2026)
+- A tela consulta o agregado paginado `GET /api/tms/controle-viagens`; não monta totais juntando listas limitadas no navegador e não contém estimativas de peso, frete ou valor declarado.
+- O funil é **cumulativo e auditável**: todo volume físico conta como recebido; embarcado/entregue considera o estado atual ou a passagem registrada em `evento_volume`; divergência representa o estado aberto atual.
+- Busca por viagem/embarcação/cidade, filtros por embarcação/cidade/status/período, atualização manual e automática, CSV e impressão/PDF consultam o servidor com o mesmo recorte.
+- Selecionar uma viagem abre volumes paginados; busca por UUID/QR/carga/pedido/cliente, filtros de destino/estado, painel de divergências e modal de AuditTrail usam endpoints próprios. Valores ausentes aparecem como **“Não informado”**.
+- Skeleton, erro preservando o último resultado, vazio, paginação e limite de exportação são estados explícitos. O layout não produz rolagem horizontal na viewport móvel, embora a superfície-alvo continue sendo o back-office desktop.
+- Todos os parâmetros operacionais vivem na chave versionada `tms_controle_viagem` e são editáveis em **Cadastros › Configuração operacional › Controle de carga por viagem**: fuso, atualização, período padrão, paginação, exportação e limites de trilha/divergências.
+- Critério de aceite técnico: nenhuma importação de `src/mocks`, nenhuma regra financeira estimada e nenhuma limitação silenciosa por listas auxiliares do front.
+
 ---
 
 ## 12. Padrões transversais do módulo (valem em todas as telas de campo)

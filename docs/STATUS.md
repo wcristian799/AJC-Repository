@@ -791,3 +791,16 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - A busca local aceita nome, codigo, CPF/CNPJ e cidade, ignora acentos e pontuacao e limita a renderizacao aos primeiros 50 resultados para manter o seletor responsivo com uma base grande.
 - A acao Cadastrar novo cliente permanece fixa e leva o foco aos dados do remetente; ao sair de um cliente existente, nao reutiliza silenciosamente os dados selecionados, preservando apenas dados extraidos do arquivo quando houver.
 - Cada resultado mostra nome, codigo, documento e cidade para reduzir selecao de homonimos. Build SSR/Vercel concluido com sucesso.
+
+
+## 02/ago/2026 - TMS B.11 Controle por viagem funcional
+
+- A tela Controle por viagem deixou de cruzar listas limitadas no front e passou a consumir um agregado paginado real do PostgreSQL.
+- Migration 0027 adiciona a configuracao versionada tms_controle_viagem; o ambiente local foi verificado em 27/27.
+- Novos endpoints: GET /api/tms/controle-viagens, /exportacao, /:viagemId/volumes e /volumes/:volumeId/eventos, todos protegidos por tms.ver.
+- Funil recebido/embarcado/entregue e cumulativo e considera estado atual + evento_volume; divergencia e o estado aberto atual. Valores ausentes nao sao estimados.
+- Cadastros > Configuracao operacional ganhou editor para fuso, atualizacao, periodo, paginacao, exportacao, eventos e divergencias, com publicacao auditavel.
+- Front B.11 ganhou busca e filtros reais, refresh manual/automatico, skeleton/erro/vazio, paginacao, rota da viagem, valores declarados/cobrados, CSV, impressao/PDF, volumes, divergencias e AuditTrail.
+- Correcao de linguagem: o KPI superior agora mede Volumes processados, em vez de afirmar Conferidos hoje sem base temporal de eventos.
+- QA concluido: build Nest, teste unitario do validador, smoke autenticado dos agregados/detalhes e build TanStack/Vite; inspecao visual desktop e viewport 390px sem overflow horizontal.
+- Deploy: executar a migration 0027 antes ou junto do novo backend. Nenhuma seed de negocio adicional e necessaria.

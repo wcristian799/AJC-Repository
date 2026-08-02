@@ -50,7 +50,7 @@ apps/api/
 
 ## 2. Migrations (`infra/migrations/`)
 
-SQL puro, controlado por `schema_migrations` + runner `infra/migrations/run.mjs`. **17 migrations aplicadas** (status 17/17).
+SQL puro, controlado por `schema_migrations` + runner `infra/migrations/run.mjs`. **27 migrations disponíveis** (status local verificado 27/27 em 02/ago/2026).
 
 | # | Arquivo | Conteúdo |
 |---|---|---|
@@ -71,6 +71,12 @@ SQL puro, controlado por `schema_migrations` + runner `infra/migrations/run.mjs`
 | 0015 | `financeiro_titulos_minimos.sql` | `financeiro_titulo` (AP/AR) |
 | 0016 | `etiqueta_impressao.sql` | `etiqueta_impressao` (fila/auditoria de impressao e reimpressao) |
 | 0017 | `alerta_operacional.sql` | `alerta_operacional` (alertas cadastraveis do dashboard) |
+| 0018 | `cliente_codigo_cadastro.sql` | Código único `CLI-AAAA-NNNN` para clientes |
+| 0019–0023 | documentos/agendamento | Campos reais de lançamento NF/DC, destinatário, pagamento e agenda |
+| 0024 | `navegacao_configuravel_calendario.sql` | Calendário e horários de navegação versionados/configuráveis |
+| 0025 | `tms_lancamento_nf_unificado.sql` | Unificação do lançamento de NF/DC e upload |
+| 0026 | `documento_fiscal_origem_operacao.sql` | Origem `operacao` aceita no documento fiscal |
+| 0027 | `tms_controle_viagem_config.sql` | Configuração versionada do Controle por viagem + extensão `unaccent` |
 
 ### 2.1 Como aplicar
 
@@ -132,6 +138,12 @@ A camada `apps/web-console/src/lib/ajc-api.ts` é o cliente TS que consome esses
 | POST | `/api/tms/documentos/:id/conferencia` | session | Marca documento como conferido/divergente com auditoria |
 | POST | `/api/tms/cargas` | session | Nova carga e lancamento manual NF/NFCe/DC (campos Lucas), idempotente por `client_uuid`, criando `carga`, `documento_fiscal`, volumes e `audit_evento` |
 | POST | `/api/tms/volumes/:id/eventos` | session | Bipe/etiqueta (offline-sync) |
+| GET | `/api/tms/controle-viagens` | session + `tms.ver` | Agregado paginado por viagem, funil físico cumulativo, valores e filtros |
+| GET | `/api/tms/controle-viagens/exportacao` | session + `tms.ver` | Mesmo agregado, respeitando o limite de exportação publicado |
+| GET | `/api/tms/controle-viagens/:viagemId/volumes` | session + `tms.ver` | Drill-down paginado, busca, filtros e divergências da viagem |
+| GET | `/api/tms/controle-viagens/volumes/:volumeId/eventos` | session + `tms.ver` | Trilha append-only do volume, com usuário, tempo, observação, foto e GPS quando existentes |
+
+O agregado de B.11 é executado no PostgreSQL em `TmsControlRepository`; o front não cruza listas truncadas de viagens/cargas/volumes. A chave `tms_controle_viagem`, validada pelo backend antes da publicação, controla período, atualização, paginação e limites. Decisão detalhada em `docs/arquitetura/04-ADR-Controle-Viagem-Agregado.md`.
 
 
 **Notas/NF-DC:** `NotasTab` agora usa `/api/tms/cargas` para lancamento manual de NF/NFCe/DC e `/api/tms/volumes/:id/etiquetas` para etiquetar todos os volumes da carga/documento. A geracao de protocolo de etiqueta consulta `etiqueta_impressao`, nao `carga`, para evitar colisao entre CG/ETIQ/RETIQ.

@@ -130,7 +130,7 @@ O TanStack Start usa **file-based routing**: o nome do arquivo vira a URL (`app.
 **Tabs do TMS — `src/components/ops/tms/*`** (todas com API real):
 | Componente | Bloco | Papel |
 |---|---|---|
-| `ControleTab.tsx` | B.11 | Controle de carga por viagem (recebidos/embarcados/entregues/divergentes). Dados via props. |
+| `ControleTab.tsx` | B.11 | Controle real agregado no servidor: filtros, atualização automática, funil cumulativo, valores ausentes explícitos, drill-down de volumes/divergências, AuditTrail e exportação CSV/PDF. |
 | `NotasTab.tsx` | B.2/B.3 | NF/DC: upload, fila de lançamento ADM, conferência, agendamento (janela 30min, máx 5), impressão de etiqueta. |
 | `PaletesTab.tsx` | B.6 | CRUD e alocação/liberação de paletes. Código gerado automático (AJC-###/TER-###). |
 | `EtiquetaTab.tsx` | B.5 | Geração/reimpressão de etiquetas por volume (tipos MP/PC/PD). |
@@ -156,7 +156,7 @@ Funções exportadas, por área (nome → método/rota):
 - **Cadastros:** `listEmbarcacoes`, `createEmbarcacao`, `updateEmbarcacao`, `listCidades`, `listUsuariosCadastro`, `listPerfisCadastro`, `createUsuarioCadastro`, `updateUsuarioCadastro`, `createPerfilCadastro`, `updatePerfilCadastro`, `listFornecedores`, `createFornecedor`, `listColaboradores`, `createColaborador`, `listAgentes`, `listClientes`, `createCliente`, `updateCliente`.
 - **CRM:** `listCrmCotacoes`, `createCrmCotacao`, `getCrmHistoricoCliente`.
 - **Preços/Config:** `listPrecosPassagemMatriz`, `getConfigValue`, `listPrecos`, `reajustarTabelaPrecos`.
-- **TMS/Carga/Encomendas/Veículos:** `listTmsCargas`, `listTmsAgendamentoDisponibilidade`, `createTmsCarga`, `listEncomendas`, `createEncomenda`, `listEncomendaDeclaracoes`, `saveEncomendaDeclaracao`, `listTmsVolumes`, `listTmsEtiquetas`, `printTmsEtiqueta`, `listTmsDocumentos`, `analyzeTmsDocumento`, `createTmsDocumento`, `conferirTmsDocumento`, `listTmsPaletes`, `createTmsPalete`, `allocateTmsPalete`, `releaseTmsPalete`, `listTmsPortaria`, `listTmsEntregas`, `listTmsPrestacoes`, `saveTmsPrestacao`, `createTmsPortaria`, `addTmsVolumeEvent`, `createTmsEntrega`, `listVeiculosEnvios`, `createVeiculoEnvio`.
+- **TMS/Carga/Encomendas/Veículos:** `listTmsCargas`, `listTmsAgendamentoDisponibilidade`, `createTmsCarga`, `listEncomendas`, `createEncomenda`, `listEncomendaDeclaracoes`, `saveEncomendaDeclaracao`, `listTmsVolumes`, `listTmsControleViagens`, `exportTmsControleViagens`, `listTmsControleVolumes`, `listTmsControleVolumeEventos`, `listTmsEtiquetas`, `printTmsEtiqueta`, `listTmsDocumentos`, `analyzeTmsDocumento`, `createTmsDocumento`, `conferirTmsDocumento`, `listTmsPaletes`, `createTmsPalete`, `allocateTmsPalete`, `releaseTmsPalete`, `listTmsPortaria`, `listTmsEntregas`, `listTmsPrestacoes`, `saveTmsPrestacao`, `createTmsPortaria`, `addTmsVolumeEvent`, `createTmsEntrega`, `listVeiculosEnvios`, `createVeiculoEnvio`.
 - **Vendas/Bilhetes:** `listBilhetes`, `getVendasResumo`, `createBilhete`, `validarBilhete`, `getManifesto`, `listCortesias`, `createCortesia`, `listGratuidades`.
 - **Caixa/Financeiro:** `listCaixas`, `listCaixaMovimentos`, `abrirCaixa`, `listFinanceiroTitulos`, `createFinanceiroTitulo`.
 - **Operação (dashboard):** `listOperacaoAlertas`, `getOperacaoRelatorioDia`, `createOperacaoAlerta`, `updateOperacaoAlerta`.
@@ -344,7 +344,7 @@ Bloqueia overbooking por classe (capacidade em `viagem.capacidade_pax_disponivel
 
 ## 4. DADOS / INFRA — `infra/`
 
-### 4.1. Migrations — `infra/migrations/*.sql` (0001..0023)
+### 4.1. Migrations — `infra/migrations/*.sql` (0001..0027)
 
 SQL puro, idempotente. Convenções: PK `uuid`, `criado_em`/`atualizado_em`, soft-delete via `excluido_em`, trigger `set_atualizado_em()`, `client_uuid` + índice único parcial para sync offline, provas com `*_url` + `*_hash`.
 
@@ -373,6 +373,10 @@ SQL puro, idempotente. Convenções: PK `uuid`, `criado_em`/`atualizado_em`, sof
 | 0021 | `documento_manual_pagamento.sql` | `documento_fiscal += pagamento (CIF/FOB)`. |
 | 0022 | `carga_agendamento_recebimento.sql` | `carga += agendado_para` (legado — regra migrada p/ 0023). |
 | 0023 | `documento_agendamento_recebimento.sql` | `documento_fiscal += agendado_para` (agenda ativa). |
+| 0024 | `navegacao_configuravel_calendario.sql` | Configuração versionada do calendário e horários da navegação. |
+| 0025 | `tms_lancamento_nf_unificado.sql` | Fluxo unificado de lançamento/upload NF/DC. |
+| 0026 | `documento_fiscal_origem_operacao.sql` | Amplia a origem válida do documento fiscal para `operacao`. |
+| 0027 | `tms_controle_viagem_config.sql` | Chave versionada `tms_controle_viagem` e suporte `unaccent` às buscas. |
 
 **Principais tabelas (colunas-chave):**
 - **Acesso:** `usuario`(login uk, senha_hash, perfil_id), `perfil`, `permissao`(uk `modulo,acao`), `perfil_permissao` (N:N), `sessao`(refresh_hash), `colaborador`.

@@ -6,6 +6,7 @@ import { RequirePermissions } from '../auth/permissions.decorator';
 import { ConfigRepository } from './config.repository';
 import { validateNavegacaoRoutesConfig } from '../navegacao/navegacao-config.validator';
 import { validateTmsScheduleConfig } from '../tms/tms-config.validator';
+import { validateTmsControlConfig } from '../tms/tms-control-config.validator';
 
 interface PublishConfigBody {
   valor?: unknown;
@@ -50,6 +51,9 @@ export class ConfigController {
     }
     if (chave.trim() === 'tms_agendamento_recebimento') {
       validateTmsScheduleConfig(body.valor);
+    }
+    if (chave.trim() === 'tms_controle_viagem') {
+      validateTmsControlConfig(body.valor);
     }
     return this.repository.publish(chave.trim(), body.valor, user.sub);
   }

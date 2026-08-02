@@ -106,6 +106,25 @@ export interface CreateDocumentoInput {
   clientUuid?: string;
 }
 
+export interface TmsControlQuery {
+  busca?: string;
+  embarcacaoId?: string;
+  cidadeSigla?: string;
+  status?: 'planejada' | 'em_curso' | 'concluida' | 'cancelada';
+  dataInicio?: string;
+  dataFim?: string;
+  pagina?: string;
+  porPagina?: string;
+}
+
+export interface TmsControlVolumesQuery {
+  busca?: string;
+  cidadeSigla?: string;
+  status?: string;
+  pagina?: string;
+  porPagina?: string;
+}
+
 export interface PrestacaoContasItem {
   [key: string]: unknown;
 }

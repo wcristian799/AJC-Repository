@@ -725,6 +725,134 @@ export type TmsVolumeApi = {
   palete_codigo: string | null;
 };
 
+export type TmsControleConfigApi = {
+  versao: number;
+  schemaVersion: 1;
+  timezone: string;
+  atualizacaoSegundos: number;
+  diasPassadosPadrao: number;
+  diasFuturosPadrao: number;
+  itensPorPagina: number;
+  maximoPorPagina: number;
+  limiteExportacao: number;
+  limiteEventosPorVolume: number;
+  limiteDivergenciasPainel: number;
+};
+
+export type TmsControleViagemApi = {
+  id: string;
+  codigo: string | null;
+  embarcacao_id: string;
+  embarcacao_nome: string;
+  origem_sigla: string;
+  destino_sigla: string | null;
+  data_hora_saida: string;
+  data_hora_retorno: string | null;
+  status: "planejada" | "em_curso" | "concluida" | "cancelada";
+  situacao: string | null;
+  cargas: number;
+  volumes: number;
+  recebidos: number;
+  embarcados: number;
+  entregues: number;
+  divergentes: number;
+  valor_declarado: number | null;
+  valor_cobrado: number | null;
+  cargas_sem_valor_declarado: number;
+  cargas_sem_valor_cobrado: number;
+  progresso_percentual: number;
+  escalas: Array<{
+    id: string;
+    ordem: number;
+    cidadeSigla: string;
+    dataHoraPrevista: string;
+    dataHoraReal: string | null;
+  }>;
+};
+
+export type TmsControleTotaisApi = {
+  viagens: number;
+  volumes: number;
+  recebidos: number;
+  embarcados: number;
+  entregues: number;
+  divergentes: number;
+  valorDeclarado: number | null;
+  valorCobrado: number | null;
+  cargasSemValorDeclarado: number;
+  cargasSemValorCobrado: number;
+};
+
+export type TmsControleParams = {
+  busca?: string;
+  embarcacaoId?: string;
+  cidadeSigla?: string;
+  status?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  pagina?: number;
+  porPagina?: number;
+};
+
+export type TmsControleResponseApi = {
+  items: TmsControleViagemApi[];
+  total: number;
+  totals: TmsControleTotaisApi;
+  filtros: Required<Pick<TmsControleParams, "dataInicio" | "dataFim" | "pagina" | "porPagina">> & TmsControleParams;
+  paginacao: { pagina: number; porPagina: number; total: number; paginas: number };
+  configuracao: TmsControleConfigApi;
+  atualizadoEm: string;
+  exportacao?: { limite: number; truncada: boolean };
+};
+
+export type TmsControleVolumeApi = {
+  id: string;
+  uuid: string;
+  indice_volume: number;
+  total_volumes: number;
+  peso: number | null;
+  status: string;
+  criado_em: string;
+  atualizado_em: string;
+  carga_id: string;
+  carga_codigo: string | null;
+  numero_pedido: string | null;
+  cidade_destino_sigla: string;
+  valor_declarado: number | null;
+  valor_cobrado: number | null;
+  cliente_id: string;
+  cliente_codigo: string | null;
+  cliente_nome: string;
+  eventos_total: number;
+  ultimo_evento: TmsControleVolumeEventApi | null;
+};
+
+export type TmsControleVolumeEventApi = {
+  id: string;
+  tipo: string;
+  observacao?: string | null;
+  obs?: string | null;
+  ocorrido_em?: string;
+  ocorridoEm?: string;
+  criado_em?: string;
+  usuario_id?: string;
+  usuario_nome?: string;
+  usuarioNome?: string;
+  foto_url?: string | null;
+  fotoUrl?: string | null;
+  foto_hash?: string | null;
+  fotoHash?: string | null;
+  gps: unknown | null;
+};
+
+export type TmsControleVolumesResponseApi = {
+  viagem: { id: string; codigo: string | null; embarcacaoNome: string };
+  items: TmsControleVolumeApi[];
+  divergencias: Array<TmsControleVolumeApi & { observacao: string | null }>;
+  paginacao: { pagina: number; porPagina: number; total: number; paginas: number };
+  atualizadoEm: string;
+};
+
 export type TmsDocumentoApi = {
   id: string;
   tipo: "NFe" | "NFCe" | "DC" | string;
@@ -1064,6 +1192,33 @@ export function saveEncomendaDeclaracao(cargaId: string, input: SaveEncomendaDec
 
 export function listTmsVolumes() {
   return request<TmsVolumeApi[]>("/tms/volumes", { auth: true });
+}
+
+function tmsControleQuery(params: TmsControleParams = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  });
+  return search.toString() ? `?${search.toString()}` : "";
+}
+
+export function listTmsControleViagens(params: TmsControleParams = {}) {
+  return request<TmsControleResponseApi>(`/tms/controle-viagens${tmsControleQuery(params)}`, { auth: true });
+}
+
+export function exportTmsControleViagens(params: Omit<TmsControleParams, "pagina" | "porPagina"> = {}) {
+  return request<TmsControleResponseApi>(`/tms/controle-viagens/exportacao${tmsControleQuery(params)}`, { auth: true });
+}
+
+export function listTmsControleVolumes(viagemId: string, params: Pick<TmsControleParams, "busca" | "cidadeSigla" | "status" | "pagina" | "porPagina"> = {}) {
+  return request<TmsControleVolumesResponseApi>(`/tms/controle-viagens/${viagemId}/volumes${tmsControleQuery(params)}`, { auth: true });
+}
+
+export function listTmsControleVolumeEventos(volumeId: string) {
+  return request<{ volume: { id: string; uuid: string; carga_codigo: string | null }; items: TmsControleVolumeEventApi[]; limite: number }>(
+    `/tms/controle-viagens/volumes/${volumeId}/eventos`,
+    { auth: true },
+  );
 }
 
 export function listTmsEtiquetas() {

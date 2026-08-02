@@ -172,7 +172,7 @@ function TMS() {
   }, [data.viagens, data.clientes, data.cidades]);
 
   const total = data.volumes.length;
-  const conferidos = data.volumes.filter((v) => v.status !== "recebido").length;
+  const processados = data.volumes.filter((v) => v.status !== "recebido").length;
   const divergentes = data.volumes.filter((v) => v.status === "divergente").length;
   const entregues = data.volumes.filter((v) => v.status === "entregue").length;
   const clienteSelecionado = data.clientes.find((cliente) => cliente.id === novaCargaForm.clienteRemetenteId) ?? null;
@@ -302,9 +302,9 @@ function TMS() {
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPIStat index={0} label="Volumes em rastreio" value={String(total)} hint="todos com QR ativo" icon={Boxes} />
-        <KPIStat index={1} label="Conferidos hoje" value={String(conferidos)} hint={loading ? "carregando API" : "incluindo 2º bipe"} delta={{ value: "API", positive: true }} icon={CheckCircle2} />
+        <KPIStat index={1} label="Volumes processados" value={String(processados)} hint={loading ? "carregando API" : "além do recebimento"} delta={{ value: "API", positive: true }} icon={CheckCircle2} />
         <KPIStat index={2} label="Divergências" value={String(divergentes)} hint="bloqueia entrega" icon={AlertTriangle} />
-        <KPIStat index={3} label="Entregues" value={String(entregues)} hint="com foto + assinatura" />
+        <KPIStat index={3} label="Entregues" value={String(entregues)} hint="status físico concluído" />
       </section>
 
       {loadError && (
@@ -457,7 +457,7 @@ function TMS() {
         ))}
       </nav>
 
-      {tab === "ctrl" && <ControleTab cargas={data.cargas} volumes={data.volumes} viagens={data.viagens} embarcacoes={data.embarcacoes} />}
+      {tab === "ctrl" && <ControleTab embarcacoes={data.embarcacoes} cidades={data.cidades} />}
       {tab === "notas" && (
         <NotasTab
           cargas={data.cargas}
