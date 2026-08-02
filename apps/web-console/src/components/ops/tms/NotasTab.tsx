@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle, CalendarClock, CheckCircle2, FileCheck2, FileText, Radio,
-  RefreshCw, Ship, Truck, Upload, UserCheck, UserPlus,
+  AlertTriangle, CalendarClock, Check, CheckCircle2, ChevronsUpDown, FileCheck2,
+  FileText, Plus, Radio, RefreshCw, Ship, Truck, Upload, UserCheck, UserPlus,
 } from "lucide-react";
+import {
+  Command, CommandGroup, CommandInput, CommandItem, CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DataTable, FilterBar, FilterChip, GhostButton, PrimaryButton, SectionHeader,
   StatusChip, Tag, brl,
@@ -184,6 +189,17 @@ export function NotasTab({
     }));
   }
 
+  function startNewClient() {
+    const extracted = analysis?.extraido.remetente;
+    setForm((current) => ({
+      ...current,
+      clienteRemetenteId: "",
+      remetenteNome: extracted?.nome ?? "",
+      remetenteDocumento: extracted?.documento ?? "",
+      remetenteTelefone: extracted?.telefone ?? "",
+    }));
+  }
+
   function selectTrip(id: string) {
     const trip = activeTrips.find((item) => item.id === id);
     setForm((current) => ({
@@ -300,8 +316,8 @@ export function NotasTab({
               </div>}
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <Field label="Cliente remetente"><select value={form.clienteRemetenteId} onChange={(event) => selectExistingClient(event.target.value)}><option value="">Novo cliente / preencher abaixo</option>{clientes.map((client) => <option key={client.id} value={client.id}>{client.codigo} - {client.nome}</option>)}</select></Field>
-                <Field label="Remetente"><input value={form.remetenteNome} onChange={(event) => setForm({ ...form, remetenteNome: event.target.value })} /></Field>
+                <div><span id="cliente-remetente-label" className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Cliente remetente</span><ClientCombobox clientes={clientes} value={form.clienteRemetenteId} onChange={selectExistingClient} onCreateNew={startNewClient} /></div>
+                <Field label="Remetente"><input id="nota-remetente-nome" value={form.remetenteNome} onChange={(event) => setForm({ ...form, remetenteNome: event.target.value })} /></Field>
                 <Field label="CPF/CNPJ remetente"><input value={form.remetenteDocumento} onChange={(event) => setForm({ ...form, remetenteDocumento: event.target.value })} /></Field>
                 <Field label="Telefone remetente"><input value={form.remetenteTelefone} onChange={(event) => setForm({ ...form, remetenteTelefone: event.target.value })} /></Field>
                 <Field label="Tipo"><select value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value as LaunchForm["tipo"] })}><option value="NFe">NF-e</option><option value="NFCe">NFC-e</option><option value="DC">Declaracao de Conteudo</option></select></Field>
@@ -371,6 +387,122 @@ function UploadFirst({ analysis, analyzing, onFile }: { analysis: TmsDocumentoAn
   return <label className="flex min-h-24 cursor-pointer items-center justify-center rounded-lg border border-dashed border-[color:var(--hairline-strong)] bg-[color:var(--muted)] p-4 text-center transition-colors hover:border-[color:var(--brand)] focus-within:border-[color:var(--brand)]"><input className="sr-only" type="file" accept=".xml,.pdf,.jpg,.jpeg,.png,application/xml,application/pdf,image/jpeg,image/png" disabled={analyzing} onChange={(event) => onFile(event.target.files?.[0])} /><div><Upload className="mx-auto h-6 w-6 text-[color:var(--brand)]" /><p className="mt-2 text-sm font-medium">{analyzing ? "Enviando e preenchendo os campos..." : analysis ? "Trocar arquivo" : "Escolher XML, PDF ou foto da NF/DC"}</p><p className="mt-1 text-xs text-muted-foreground">{analysis ? `${analysis.arquivo.nome} · ${formatBytes(analysis.arquivo.bytes)} · SHA-256 ${analysis.arquivo.hash.slice(0, 10)}...` : "Ate 10 MB. O XML preenche o formulario automaticamente."}</p></div></label>;
 }
 
+function ClientCombobox({
+  clientes,
+  value,
+  onChange,
+  onCreateNew,
+}: {
+  clientes: ClienteApi[];
+  value: string;
+  onChange: (id: string) => void;
+  onCreateNew: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = clientes.find((cliente) => cliente.id === value);
+  const normalizedQuery = normalizeSearch(query);
+  const matchingClients = useMemo(() => (
+    normalizedQuery
+      ? clientes.filter((cliente) => normalizeSearch([
+          cliente.codigo,
+          cliente.nome,
+          cliente.cpfCnpj,
+          cliente.cidadeSigla,
+        ].filter(Boolean).join(" ")).includes(normalizedQuery))
+      : clientes
+  ), [clientes, normalizedQuery]);
+  const visibleClients = matchingClients.slice(0, 50);
+
+  function closeAndReset() {
+    setOpen(false);
+    setQuery("");
+  }
+
+  function createNewClient() {
+    onCreateNew();
+    closeAndReset();
+    window.requestAnimationFrame(() => document.querySelector<HTMLInputElement>("#nota-remetente-nome")?.focus());
+  }
+
+  return (
+    <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setQuery(""); }}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-labelledby="cliente-remetente-label"
+          aria-expanded={open}
+          className="flex h-10 w-full items-center justify-between gap-3 rounded-md bg-[color:var(--muted)] px-3 text-left text-sm ring-1 ring-[color:var(--hairline)] transition-colors hover:bg-[color:var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
+        >
+          <span className="min-w-0 truncate">
+            {selected ? <><span className="font-medium">{selected.nome}</span><span className="ml-2 font-mono text-[11px] text-muted-foreground">{selected.codigo}</span></> : <span className="text-muted-foreground">Buscar ou cadastrar cliente</span>}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] min-w-[min(24rem,calc(100vw-2rem))] overflow-hidden border-[color:var(--hairline-strong)] p-0"
+      >
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Buscar por nome, codigo ou CPF/CNPJ..."
+            aria-label="Buscar cliente"
+          />
+          <CommandList className="max-h-[340px]">
+            {visibleClients.length > 0 ? (
+              <CommandGroup heading={normalizedQuery ? `${matchingClients.length} cliente(s) encontrado(s)` : "Clientes"}>
+                {visibleClients.map((cliente) => (
+                  <CommandItem
+                    key={cliente.id}
+                    value={cliente.id}
+                    onSelect={() => { onChange(cliente.id); closeAndReset(); }}
+                    className="items-start py-2.5"
+                  >
+                    <Check className={`mt-0.5 h-4 w-4 shrink-0 text-[color:var(--brand)] ${value === cliente.id ? "opacity-100" : "opacity-0"}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{cliente.nome}</span>
+                      <span className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
+                        <span className="font-mono">{cliente.codigo}</span>
+                        {cliente.cpfCnpj && <span>{formatDocument(cliente.cpfCnpj)}</span>}
+                        {cliente.cidadeSigla && <span>{cliente.cidadeSigla}</span>}
+                      </span>
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : (
+              <div className="px-4 py-7 text-center text-sm">
+                <p className="font-medium text-foreground">Nenhum cliente encontrado</p>
+                <p className="mt-1 text-xs text-muted-foreground">Confira a busca ou cadastre o remetente como novo cliente.</p>
+              </div>
+            )}
+            {matchingClients.length > 50 && (
+              <p className="border-t border-[color:var(--hairline)] px-3 py-2 text-center text-[11px] text-muted-foreground">Mostrando os primeiros 50 resultados. Refine a busca para encontrar mais rapido.</p>
+            )}
+            <CommandSeparator />
+            <CommandGroup heading="Nao encontrou o cliente?">
+              <CommandItem value="novo-cliente" onSelect={createNewClient} className="py-2.5">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-[color:var(--brand)]">
+                  <Plus className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-medium">Cadastrar novo cliente</span>
+                  <span className="block text-xs text-muted-foreground">Preencher os dados do remetente abaixo</span>
+                </span>
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</span><div className="[&_input]:h-10 [&_input]:w-full [&_input]:rounded-md [&_input]:bg-[color:var(--muted)] [&_input]:px-3 [&_input]:text-sm [&_input]:ring-1 [&_input]:ring-[color:var(--hairline)] [&_select]:h-10 [&_select]:w-full [&_select]:rounded-md [&_select]:bg-[color:var(--muted)] [&_select]:px-3 [&_select]:text-sm [&_select]:ring-1 [&_select]:ring-[color:var(--hairline)] [&_select:disabled]:opacity-50">{children}</div></label>;
 }
@@ -397,4 +529,6 @@ function todayDateInput() { return new Intl.DateTimeFormat("en-CA", { timeZone: 
 function formatSlot(value: string) { return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
 function formatDate(value: string) { return value ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`)) : "a data selecionada"; }
 function formatBytes(value: number) { return value < 1024 * 1024 ? `${Math.max(1, Math.round(value / 1024))} KB` : `${(value / 1024 / 1024).toFixed(1)} MB`; }
+function normalizeSearch(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase(); }
+function formatDocument(value: string) { const digits = value.replace(/\D/g, ""); if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4"); if (digits.length === 14) return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5"); return value; }
 function cityLabel(sigla: string, cidades: CidadeApi[] | undefined) { const city = cidades?.find((item) => item.sigla === sigla); return city ? `${city.nome} · ${sigla}` : sigla; }

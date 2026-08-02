@@ -784,3 +784,10 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - A migration 0026_documento_fiscal_origem_operacao.sql amplia a constraint para aceitar operacao, preservando os valores historicos sem voltar a classificar o fluxo atual como lancamento manual.
 - Validacao local concluida: runner com 26/26 migrations aplicadas e constraint consultada diretamente no PostgreSQL contendo operacao.
 - Proximo passo de producao: publicar a migration, executar node infra/migrations/run.mjs no container da API e repetir o lancamento da nota.
+
+
+## Trabalho 2026-08-02 - Busca de cliente no lancamento de NF/DC
+- O select nativo de Cliente remetente foi substituido por combobox pesquisavel no fluxo Lancar NF/DC.
+- A busca local aceita nome, codigo, CPF/CNPJ e cidade, ignora acentos e pontuacao e limita a renderizacao aos primeiros 50 resultados para manter o seletor responsivo com uma base grande.
+- A acao Cadastrar novo cliente permanece fixa e leva o foco aos dados do remetente; ao sair de um cliente existente, nao reutiliza silenciosamente os dados selecionados, preservando apenas dados extraidos do arquivo quando houver.
+- Cada resultado mostra nome, codigo, documento e cidade para reduzir selecao de homonimos. Build SSR/Vercel concluido com sucesso.
