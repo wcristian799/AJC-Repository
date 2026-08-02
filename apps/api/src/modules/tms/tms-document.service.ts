@@ -55,36 +55,47 @@ export class TmsDocumentService {
       : emptyExtraction();
     const hash = createHash('sha256').update(file.buffer).digest('hex');
     const objectKey = `${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${safeName(file.originalname)}`;
-    const client = this.createClient();
-    try {
-      if (!(await client.bucketExists(this.bucket))) await client.makeBucket(this.bucket, process.env.OBJECT_STORAGE_REGION || 'us-east-1');
-      await client.putObject(this.bucket, objectKey, file.buffer, file.size, {
-        'Content-Type': mimeType,
-        'X-Amz-Meta-Sha256': hash,
-      });
-    } catch (error) {
-      throw new ServiceUnavailableException(`Object storage indisponivel: ${error instanceof Error ? error.message : 'falha desconhecida'}`);
+    const clients = this.createClients();
+    let lastError: unknown;
+    for (const client of clients) {
+      try {
+        if (!(await client.bucketExists(this.bucket))) await client.makeBucket(this.bucket, process.env.OBJECT_STORAGE_REGION || 'us-east-1');
+        await client.putObject(this.bucket, objectKey, file.buffer, file.size, {
+          'Content-Type': mimeType,
+          'X-Amz-Meta-Sha256': hash,
+        });
+        return { bucket: this.bucket, objectKey, fileName: file.originalname, mimeType, hash, bytes: file.size, extraction };
+      } catch (error) {
+        lastError = error;
+      }
     }
-    return { bucket: this.bucket, objectKey, fileName: file.originalname, mimeType, hash, bytes: file.size, extraction };
+    throw new ServiceUnavailableException(`Object storage indisponivel: ${lastError instanceof Error ? lastError.message : 'falha desconhecida'}`);
   }
 
-  private createClient() {
+  private createClients() {
     const endpoint = process.env.OBJECT_STORAGE_ENDPOINT;
-    const accessKey = process.env.OBJECT_STORAGE_ACCESS_KEY;
-    const secretKey = process.env.OBJECT_STORAGE_SECRET_KEY;
-    if (!endpoint || !accessKey || !secretKey) {
+    const uniqueCredentials = resolveStorageCredentials(process.env);
+    if (!endpoint || !uniqueCredentials.length) {
       throw new ServiceUnavailableException('Object storage nao configurado para receber NF/DC');
     }
     const url = new URL(endpoint);
-    return new MinioClient({
+    return uniqueCredentials.map(([accessKey, secretKey]) => new MinioClient({
       endPoint: url.hostname,
       port: Number(url.port || (url.protocol === 'https:' ? 443 : 80)),
       useSSL: url.protocol === 'https:',
       accessKey,
       secretKey,
       region: process.env.OBJECT_STORAGE_REGION || 'us-east-1',
-    });
+    }));
   }
+}
+
+export function resolveStorageCredentials(environment: NodeJS.ProcessEnv): Array<[string, string]> {
+  const credentials = [
+    [environment.OBJECT_STORAGE_ACCESS_KEY, environment.OBJECT_STORAGE_SECRET_KEY],
+    [environment.MINIO_ROOT_USER, environment.MINIO_ROOT_PASSWORD],
+  ].filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1]));
+  return credentials.filter((entry, index) => credentials.findIndex((candidate) => candidate[0] === entry[0] && candidate[1] === entry[1]) === index);
 }
 
 export function extractNfe(xml: string): FiscalExtraction {

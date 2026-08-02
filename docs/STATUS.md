@@ -763,3 +763,10 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - Regra de paletes registrada no ADR `docs/arquitetura/03-ADR-Lancamento-NF-e-Unitizacao-Paletes.md`: upload de nota nao aloca palete. MP/PD/PC, parcial/completo e palete fisico so podem ser definidos no recebimento, e liberacao ocorre por acao auditada depois da descarga, reconciliacao e retorno. Foram removidas inferencias falsas por peso ou quantidade.
 - QA verde: build NestJS, 4 suites/11 testes Jest, build SSR/Vercel do front e smoke local autenticado da configuracao/documentos. Inspecao visual desktop e mobile confirmou o fluxo progressivo sem overflow da pagina e sem erros de console.
 - Proximo passo: implementar a persistencia operacional da classificacao MP/PD/PC e da composicao dos paletes no fluxo de recebimento fisico. Aplicar a migration 0025 e configurar as variaveis MinIO antes do deploy desta etapa em producao.
+
+
+## Trabalho 2026-08-01 - Correcao pos-deploy NF/DC
+- UX corrigida conforme retorno do dono: o formulario completo de Lancamento de NF/DC volta a aparecer antes do upload, com cliente, remetente, tipo, viagem, destino, valores, destinatario e agenda editaveis. O upload e um campo do formulario e apenas autopreenche dados quando conclui.
+- Storage corrigido para divergencia de credenciais: a API tenta primeiro o usuario dedicado de object storage e depois as credenciais root da propria stack MinIO, sem duplicar tentativas. O compose propaga ambas as credenciais e aguarda o healthcheck do MinIO.
+- QA verde: backend build, 4 suites/13 testes Jest, frontend SSR/Vercel build, git diff --check e inspecao visual autenticada desktop/mobile sem overflow ou erros de console.
+- Proximo passo de deploy: publicar API/front novamente. Nao ha migration nova; manter MINIO_ROOT_USER e MINIO_ROOT_PASSWORD validos no Coolify.

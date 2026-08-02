@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { extractNfe } from './tms-document.service';
+import { extractNfe, resolveStorageCredentials } from './tms-document.service';
 
 describe('extractNfe', () => {
   it('extrai emitente, destinatario, totais, volumes e frete da NF-e', () => {
@@ -22,5 +22,28 @@ describe('extractNfe', () => {
 
   it('recusa XML que nao e NF-e/NFC-e', () => {
     expect(() => extractNfe('<documento><numero>123</numero></documento>')).toThrow(BadRequestException);
+  });
+});
+
+describe('resolveStorageCredentials', () => {
+  it('mantem credencial dedicada e inclui o root como recuperacao', () => {
+    expect(resolveStorageCredentials({
+      OBJECT_STORAGE_ACCESS_KEY: 'usuario-app',
+      OBJECT_STORAGE_SECRET_KEY: 'senha-app',
+      MINIO_ROOT_USER: 'usuario-root',
+      MINIO_ROOT_PASSWORD: 'senha-root',
+    })).toEqual([
+      ['usuario-app', 'senha-app'],
+      ['usuario-root', 'senha-root'],
+    ]);
+  });
+
+  it('nao repete a mesma credencial', () => {
+    expect(resolveStorageCredentials({
+      OBJECT_STORAGE_ACCESS_KEY: 'ajc',
+      OBJECT_STORAGE_SECRET_KEY: 'segredo',
+      MINIO_ROOT_USER: 'ajc',
+      MINIO_ROOT_PASSWORD: 'segredo',
+    })).toEqual([['ajc', 'segredo']]);
   });
 });

@@ -284,28 +284,23 @@ export function NotasTab({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="font-display text-xl">Lancamento de NF/DC</h3>
-                <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Comece pelo arquivo. XML preenche a nota e procura o cliente por CPF/CNPJ; PDF ou foto permanecem disponiveis para preenchimento assistido.</p>
+                <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Preencha normalmente ou envie o arquivo da nota para completar os campos automaticamente. Todos os dados continuam editaveis antes de salvar.</p>
               </div>
               {analysis && <StatusChip tone="success">arquivo armazenado e verificado</StatusChip>}
             </div>
-            <UploadFirst analysis={analysis} analyzing={analyzing} onFile={handleFile} />
           </div>
 
-          {analysis && (
-            <div className="p-5">
-              <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg bg-[color:var(--muted)] px-4 py-3 ring-1 ring-[color:var(--hairline)]">
+          <div className="p-5">
+              {analysis && <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg bg-[color:var(--muted)] px-4 py-3 ring-1 ring-[color:var(--hairline)]">
                 {analysis.cliente ? <UserCheck className="h-5 w-5 text-[color:var(--success)]" /> : <UserPlus className="h-5 w-5 text-[color:var(--brand)]" />}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{analysis.cliente ? `${analysis.cliente.codigo} - ${analysis.cliente.nome}` : "Cliente novo sera cadastrado junto com a nota"}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">{analysis.extraido.xmlLido ? "Dados extraidos do XML. Revise antes de salvar." : "Arquivo sem XML: complete os dados abaixo; nao e necessario sair para Cadastros."}</p>
                 </div>
-                <select value={form.clienteRemetenteId} onChange={(event) => selectExistingClient(event.target.value)} className="h-10 max-w-xs rounded-md bg-background px-3 text-xs ring-1 ring-[color:var(--hairline)]">
-                  <option value="">Cadastrar a partir da nota</option>
-                  {clientes.map((client) => <option key={client.id} value={client.id}>{client.codigo} - {client.nome}</option>)}
-                </select>
-              </div>
+              </div>}
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <Field label="Cliente remetente"><select value={form.clienteRemetenteId} onChange={(event) => selectExistingClient(event.target.value)}><option value="">Novo cliente / preencher abaixo</option>{clientes.map((client) => <option key={client.id} value={client.id}>{client.codigo} - {client.nome}</option>)}</select></Field>
                 <Field label="Remetente"><input value={form.remetenteNome} onChange={(event) => setForm({ ...form, remetenteNome: event.target.value })} /></Field>
                 <Field label="CPF/CNPJ remetente"><input value={form.remetenteDocumento} onChange={(event) => setForm({ ...form, remetenteDocumento: event.target.value })} /></Field>
                 <Field label="Telefone remetente"><input value={form.remetenteTelefone} onChange={(event) => setForm({ ...form, remetenteTelefone: event.target.value })} /></Field>
@@ -321,6 +316,7 @@ export function NotasTab({
                 <Field label="Destinatario"><input value={form.destinatarioNome} onChange={(event) => setForm({ ...form, destinatarioNome: event.target.value })} /></Field>
                 <Field label="CPF/CNPJ destinatario"><input value={form.destinatarioDocumento} onChange={(event) => setForm({ ...form, destinatarioDocumento: event.target.value })} /></Field>
                 <Field label="Telefone destinatario"><input value={form.destinatarioTelefone} onChange={(event) => setForm({ ...form, destinatarioTelefone: event.target.value })} /></Field>
+                <div className="md:col-span-2 xl:col-span-3"><span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Upload da NF/DC</span><UploadFirst analysis={analysis} analyzing={analyzing} onFile={handleFile} /></div>
               </div>
 
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--hairline)] pt-4">
@@ -328,7 +324,6 @@ export function NotasTab({
                 <div className="flex gap-2"><GhostButton onClick={() => { setShowLaunch(false); setAnalysis(null); }}>Cancelar</GhostButton><PrimaryButton icon={FileCheck2} disabled={saving} onClick={saveDocument}>{saving ? "Lancando..." : "Lancar NF/DC"}</PrimaryButton></div>
               </div>
             </div>
-          )}
         </section>
       )}
 
@@ -373,7 +368,7 @@ export function NotasTab({
 }
 
 function UploadFirst({ analysis, analyzing, onFile }: { analysis: TmsDocumentoAnaliseApi | null; analyzing: boolean; onFile: (file?: File) => void }) {
-  return <label className="mt-4 flex min-h-32 cursor-pointer items-center justify-center rounded-xl border border-dashed border-[color:var(--hairline-strong)] bg-[color:var(--muted)] p-6 text-center transition-colors hover:border-[color:var(--brand)] focus-within:border-[color:var(--brand)]"><input className="sr-only" type="file" accept=".xml,.pdf,.jpg,.jpeg,.png,application/xml,application/pdf,image/jpeg,image/png" disabled={analyzing} onChange={(event) => onFile(event.target.files?.[0])} /><div><Upload className="mx-auto h-7 w-7 text-[color:var(--brand)]" /><p className="mt-2 text-sm font-medium">{analyzing ? "Enviando e lendo o documento..." : analysis ? "Trocar arquivo" : "Escolher XML, PDF ou foto da NF/DC"}</p><p className="mt-1 text-xs text-muted-foreground">{analysis ? `${analysis.arquivo.nome} · ${formatBytes(analysis.arquivo.bytes)} · SHA-256 ${analysis.arquivo.hash.slice(0, 10)}...` : "Ate 10 MB. XML permite preenchimento automatico."}</p></div></label>;
+  return <label className="flex min-h-24 cursor-pointer items-center justify-center rounded-lg border border-dashed border-[color:var(--hairline-strong)] bg-[color:var(--muted)] p-4 text-center transition-colors hover:border-[color:var(--brand)] focus-within:border-[color:var(--brand)]"><input className="sr-only" type="file" accept=".xml,.pdf,.jpg,.jpeg,.png,application/xml,application/pdf,image/jpeg,image/png" disabled={analyzing} onChange={(event) => onFile(event.target.files?.[0])} /><div><Upload className="mx-auto h-6 w-6 text-[color:var(--brand)]" /><p className="mt-2 text-sm font-medium">{analyzing ? "Enviando e preenchendo os campos..." : analysis ? "Trocar arquivo" : "Escolher XML, PDF ou foto da NF/DC"}</p><p className="mt-1 text-xs text-muted-foreground">{analysis ? `${analysis.arquivo.nome} · ${formatBytes(analysis.arquivo.bytes)} · SHA-256 ${analysis.arquivo.hash.slice(0, 10)}...` : "Ate 10 MB. O XML preenche o formulario automaticamente."}</p></div></label>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

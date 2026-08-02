@@ -47,6 +47,8 @@ Obrigatorias:
 - `OBJECT_STORAGE_SECRET_KEY=...`
 - `OBJECT_STORAGE_REGION=us-east-1`
 
+`OBJECT_STORAGE_ACCESS_KEY` e `OBJECT_STORAGE_SECRET_KEY` podem representar um usuario dedicado do MinIO. Se estiverem vazias ou tiverem perdido validade, a API tenta as credenciais `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` da mesma stack. Isso evita divergencia entre o container MinIO e a API; em producao, prefira manter o usuario dedicado valido e reservar o fallback root para recuperacao operacional.
+
 Enquanto nao houver fornecedor/credenciais reais:
 
 - `PAYMENT_GATEWAY_MODE=stub`
