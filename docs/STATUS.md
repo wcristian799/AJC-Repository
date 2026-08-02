@@ -770,3 +770,10 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - Storage corrigido para divergencia de credenciais: a API tenta primeiro o usuario dedicado de object storage e depois as credenciais root da propria stack MinIO, sem duplicar tentativas. O compose propaga ambas as credenciais e aguarda o healthcheck do MinIO.
 - QA verde: backend build, 4 suites/13 testes Jest, frontend SSR/Vercel build, git diff --check e inspecao visual autenticada desktop/mobile sem overflow ou erros de console.
 - Proximo passo de deploy: publicar API/front novamente. Nao ha migration nova; manter MINIO_ROOT_USER e MINIO_ROOT_PASSWORD validos no Coolify.
+
+
+## Trabalho 2026-08-02 - Deploy bloqueado pelo healthcheck do MinIO
+- Log do Coolify confirmou MinIO online em :9000 e Postgres saudavel, mas o comando wget do healthcheck falhou ate marcar o storage unhealthy; por isso api e worker, que aguardavam service_healthy, nunca iniciaram.
+- docker-compose.coolify.yml passou a usar o healthcheck oficial mc ready local. API e worker aguardam apenas service_started para o MinIO, isolando indisponibilidade de upload sem derrubar o ERP/TMS inteiro.
+- Validacao local docker compose config --quiet e git diff --check passaram. Nao ha migration nova.
+- Proximo passo: publicar a correcao e redeployar a stack no Coolify.

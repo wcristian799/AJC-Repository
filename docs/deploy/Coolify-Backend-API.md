@@ -49,6 +49,8 @@ Obrigatorias:
 
 `OBJECT_STORAGE_ACCESS_KEY` e `OBJECT_STORAGE_SECRET_KEY` podem representar um usuario dedicado do MinIO. Se estiverem vazias ou tiverem perdido validade, a API tenta as credenciais `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` da mesma stack. Isso evita divergencia entre o container MinIO e a API; em producao, prefira manter o usuario dedicado valido e reservar o fallback root para recuperacao operacional.
 
+O healthcheck do container usa o comando oficial `mc ready local`. `api` e `worker` aguardam o MinIO iniciar, mas nao ficam bloqueados por `service_healthy`: indisponibilidade temporaria do storage degrada somente uploads, sem impedir o restante do ERP/TMS de subir.
+
 Enquanto nao houver fornecedor/credenciais reais:
 
 - `PAYMENT_GATEWAY_MODE=stub`
