@@ -777,3 +777,10 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - docker-compose.coolify.yml passou a usar o healthcheck oficial mc ready local. API e worker aguardam apenas service_started para o MinIO, isolando indisponibilidade de upload sem derrubar o ERP/TMS inteiro.
 - Validacao local docker compose config --quiet e git diff --check passaram. Nao ha migration nova.
 - Proximo passo: publicar a correcao e redeployar a stack no Coolify.
+
+
+## Trabalho 2026-08-02 - Constraint da origem no lancamento de NF/DC
+- Causa do erro 500 identificada: o fluxo unificado grava corretamente origem operacao, mas a constraint historica ck_documento_fiscal_origem ainda aceitava apenas cliente, agente e manual.
+- A migration 0026_documento_fiscal_origem_operacao.sql amplia a constraint para aceitar operacao, preservando os valores historicos sem voltar a classificar o fluxo atual como lancamento manual.
+- Validacao local concluida: runner com 26/26 migrations aplicadas e constraint consultada diretamente no PostgreSQL contendo operacao.
+- Proximo passo de producao: publicar a migration, executar node infra/migrations/run.mjs no container da API e repetir o lancamento da nota.

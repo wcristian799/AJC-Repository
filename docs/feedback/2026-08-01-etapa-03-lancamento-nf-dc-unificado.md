@@ -11,6 +11,7 @@ Registro da decisao posterior ao documento vivo de 09/jul, recebida em 01/ago/20
 - Upload e a primeira acao. XML preenche automaticamente o que existir.
 - Cliente existente e selecionado por CPF/CNPJ; cliente inexistente e criado dentro do mesmo fluxo, sem exigir ida previa ao cadastro.
 - Nenhum arquivo ficticio ou URL `manual-upload://` e permitido.
+- A origem persistida pelo novo fluxo e `operacao`; a migration `0026_documento_fiscal_origem_operacao.sql` amplia o constraint historico sem voltar a classificar o lancamento como manual.
 
 ## Regra de paletes fechada
 
