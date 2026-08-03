@@ -852,6 +852,18 @@ export class CadastrosRepository {
       [entidade, entidadeId, acao, userId, JSON.stringify(dadosDepois ?? {})],
     );
   }
+
+  async listPermissoes() {
+    const result = await this.db.query<{
+      id: string; modulo: string; acao: string; descricao: string | null;
+    }>(`
+      SELECT id, modulo, acao, descricao
+      FROM permissao
+      ORDER BY CASE WHEN modulo = 'campo' THEN 0 WHEN modulo = 'prestacao' THEN 1 ELSE 2 END,
+               modulo, acao
+    `);
+    return result.rows.map((row) => ({ ...row, codigo: `${row.modulo}.${row.acao}` }));
+  }
 }
 
 function emptyToNull(value: string | null | undefined) {

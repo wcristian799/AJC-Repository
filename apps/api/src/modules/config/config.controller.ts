@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   NotFoundException,
+  ForbiddenException,
   Param,
   Put,
   UseGuards,
@@ -17,6 +18,7 @@ import { validateNavegacaoRoutesConfig } from "../navegacao/navegacao-config.val
 import { validateTmsScheduleConfig } from "../tms/tms-config.validator";
 import { validateTmsControlConfig } from "../tms/tms-control-config.validator";
 import { validateTmsUnitizacaoConfig } from "../tms/tms-unitizacao-config.validator";
+import { validateTmsPrestacaoConfig } from "../tms/tms-prestacao-config.validator";
 
 interface PublishConfigBody {
   valor?: unknown;
@@ -56,6 +58,9 @@ export class ConfigController {
     if (body.valor === undefined) {
       throw new BadRequestException("valor obrigatorio");
     }
+    if (chave.trim() === "tms_prestacao_contas" && !user.permissions.includes("prestacao.configurar")) {
+      throw new ForbiddenException("Permissao insuficiente para configurar prestacao de contas");
+    }
     if (chave.trim() === "navegacao_rotas_horarios") {
       validateNavegacaoRoutesConfig(body.valor);
     }
@@ -67,6 +72,9 @@ export class ConfigController {
     }
     if (chave.trim() === "tms_paletizacao_etiquetas") {
       validateTmsUnitizacaoConfig(body.valor);
+    }
+    if (chave.trim() === "tms_prestacao_contas") {
+      validateTmsPrestacaoConfig(body.valor);
     }
     return this.repository.publish(chave.trim(), body.valor, user.sub);
   }

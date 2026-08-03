@@ -22,6 +22,12 @@ export class CadastrosController {
     return this.repository.listPerfis();
   }
 
+  @Get('permissoes')
+  @RequirePermissions('cadastros.ver')
+  listPermissoes() {
+    return this.repository.listPermissoes();
+  }
+
   @Post('usuarios')
   @RequirePermissions('cadastros.criar')
   createUsuario(@Body() body: SaveUsuarioInput, @CurrentUser() user: AuthTokenPayload) {

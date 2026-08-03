@@ -6,6 +6,7 @@ import { OperationalNavigationConfig } from "@/components/ops/cadastros/Operatio
 import { OperationalTmsConfig } from "@/components/ops/cadastros/OperationalTmsConfig";
 import { OperationalTmsControlConfig } from "@/components/ops/cadastros/OperationalTmsControlConfig";
 import { OperationalUnitizacaoConfig } from "@/components/ops/cadastros/OperationalUnitizacaoConfig";
+import { OperationalPrestacaoConfig } from "@/components/ops/cadastros/OperationalPrestacaoConfig";
 import {
   SectionHeader, DataTable, FilterBar, FilterChip, PrimaryButton, GhostButton,
   StatusChip, brl,
@@ -19,6 +20,7 @@ import {
   listColaboradores,
   listFornecedores,
   listPerfisCadastro,
+  listPermissoesCadastro,
   listPrecos,
   listPrecosPassagemMatriz,
   listUsuariosCadastro,
@@ -29,6 +31,7 @@ import {
   type ColaboradorApi,
   type FornecedorApi,
   type PerfilCadastroApi,
+  type PermissaoCadastroApi,
   type PrecoItemApi,
   type PrecoPassagemMatrizApi,
   type UsuarioCadastroApi,
@@ -47,6 +50,7 @@ function Cadastros() {
   const [preview, setPreview] = useState(false);
   const [usuarios, setUsuarios] = useState<UsuarioCadastroApi[]>([]);
   const [perfis, setPerfis] = useState<PerfilCadastroApi[]>([]);
+  const [permissoes, setPermissoes] = useState<PermissaoCadastroApi[]>([]);
   const [cidades, setCidades] = useState<CidadeApi[]>([]);
   const [precosPassagem, setPrecosPassagem] = useState<PrecoPassagemMatrizApi[]>([]);
   const [precosCarga, setPrecosCarga] = useState<PrecoItemApi[]>([]);
@@ -68,18 +72,15 @@ function Cadastros() {
 
   const fator = 1 + (preview ? reajuste : 0) / 100;
   const cidadesOpcoes = cidades.map((c) => ({ sigla: c.sigla, nome: c.nome }));
-  const permissoesReais = useMemo(() => {
-    const values = new Set<string>();
-    perfis.forEach((p) => p.permissions.forEach((perm) => values.add(perm)));
-    return [...values].sort();
-  }, [perfis]);
+  const permissoesReais = useMemo(() => permissoes.map((permissao) => permissao.codigo), [permissoes]);
   useEffect(() => {
     let alive = true;
     async function load() {
       try {
-        const [usuariosApi, perfisApi, cidadesApi, passagemApi, cargaApi, fornecedoresApi, colaboradoresApi] = await Promise.all([
+        const [usuariosApi, perfisApi, permissoesApi, cidadesApi, passagemApi, cargaApi, fornecedoresApi, colaboradoresApi] = await Promise.all([
           listUsuariosCadastro(),
           listPerfisCadastro(),
+          listPermissoesCadastro(),
           listCidades(),
           listPrecosPassagemMatriz(),
           listPrecos({ tipo: "carga" }),
@@ -89,6 +90,7 @@ function Cadastros() {
         if (!alive) return;
         setUsuarios(usuariosApi);
         setPerfis(perfisApi);
+        setPermissoes(permissoesApi);
         setCidades(cidadesApi);
         setPrecosPassagem(passagemApi);
         setPrecosCarga(cargaApi);
@@ -330,7 +332,7 @@ function Cadastros() {
       </div>
       {erro && <p className="mt-3 text-xs text-[color:var(--danger)]">{erro}</p>}
 
-      {tab === "config_operacional" && <div className="mt-5 space-y-4"><OperationalTmsConfig /><OperationalUnitizacaoConfig /><OperationalTmsControlConfig /><OperationalNavigationConfig cidades={cidades} /></div>}
+      {tab === "config_operacional" && <div className="mt-5 space-y-4"><OperationalTmsConfig /><OperationalUnitizacaoConfig /><OperationalTmsControlConfig /><OperationalPrestacaoConfig cidades={cidades} /><OperationalNavigationConfig cidades={cidades} /></div>}
 
       {tab === "usuarios" && (
         <div className="mt-5 space-y-4">
@@ -398,7 +400,7 @@ function Cadastros() {
                   return (
                     <label key={perm} className="flex items-center gap-2 rounded-md bg-[color:var(--muted)] px-3 py-2 font-mono text-[11px] ring-1 ring-[color:var(--hairline)]">
                       <input type="checkbox" checked={checked} onChange={(e) => setNovoPerfil((v) => ({ ...v, permissions: e.target.checked ? [...v.permissions, perm] : v.permissions.filter((p) => p !== perm) }))} />
-                      {perm}
+                      <span><span className="block">{perm}</span><span className="mt-0.5 block font-sans text-[10px] text-muted-foreground">{permissoes.find((item) => item.codigo === perm)?.descricao}</span></span>
                     </label>
                   );
                 })}
@@ -427,7 +429,7 @@ function Cadastros() {
                 <tbody>
                   {permissoesReais.map((perm) => (
                     <tr key={perm} className="border-t border-[color:var(--hairline)]">
-                      <td className="sticky left-0 z-10 bg-[color:var(--card)] px-4 py-3 font-mono text-xs">{perm}</td>
+                      <td className="sticky left-0 z-10 bg-[color:var(--card)] px-4 py-3"><span className="font-mono text-xs">{perm}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{permissoes.find((item) => item.codigo === perm)?.descricao}</span></td>
                       {perfis.map((perfil) => {
                         const has = perfil.permissions.includes(perm);
                         return (

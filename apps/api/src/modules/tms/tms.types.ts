@@ -189,14 +189,43 @@ export interface TmsControlVolumesQuery {
   porPagina?: string;
 }
 
+export interface PrestacaoReceitaInput {
+  id?: string;
+  categoria: string;
+  formaPagamento: string;
+  descricao?: string;
+  valor: number;
+  origemSigla?: string;
+  destinoSigla?: string;
+  agencia?: string;
+}
+
+export interface PrestacaoDespesaInput {
+  id?: string;
+  categoria: string;
+  escopo: 'cidade' | 'viagem';
+  cidadeSigla?: string;
+  descricao: string;
+  valor: number;
+}
+
 export interface PrestacaoContasItem {
-  [key: string]: unknown;
+  caixaInicial?: number;
+  receitas: PrestacaoReceitaInput[];
+  despesas: PrestacaoDespesaInput[];
+  observacoes?: string;
+  localFechamento?: string;
+  semMovimento?: boolean;
 }
 
 export interface SavePrestacaoContasInput {
   viagemId: string;
-  totalDeclarado?: number;
-  status?: "rascunho" | "enviada" | "conferida";
-  itens?: PrestacaoContasItem;
+  clientUuid?: string;
+  itens: PrestacaoContasItem;
   anexos?: unknown[];
+}
+
+export interface ConferirPrestacaoContasInput {
+  observacao?: string;
+  clientUuid?: string;
 }

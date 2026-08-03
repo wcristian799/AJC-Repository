@@ -826,3 +826,11 @@ Integrar front?back removendo mocks residuais por m�dulo (prioridade: `/campo/*`
 - O `FieldShell` deixou de consultar localStorage durante o render inicial e nao gera mais hydration mismatch entre SSR e cliente. Revalidacao no console nao produziu novos erros.
 - O seed canonico agora liga `TER-101` ao cliente real Comercial Ribeira Ltda. e respeita `ck_palete_proprietario_referencia`; reaplicacao idempotente concluida.
 - Build TanStack/Vite/Nitro verde apos as correcoes. Deploy deve executar tambem a migration 0030.
+## Trabalho 2026-08-03 - Etapa 05: login de campo e prestação de contas
+- `/campo/login` agora autentica exclusivamente a suíte operacional; `/campo` lista apenas apps permitidos pelo perfil e as rotas internas, PDV e Bilheteiro possuem bloqueio de acesso por aplicativo.
+- Perfis continuam sendo as funções oficiais do RBAC. Cadastros passou a carregar o catálogo completo de permissões do banco, incluindo apps atuais/futuros e ações granulares de prestação.
+- `/campo/gerente` cria e salva rascunho real por viagem/embarcação, recebe receitas/despesas configuradas, valida intertrechos/agências, envia com bloqueio, reconhece explicitamente viagem sem movimento e emite PDF.
+- TMS › Prestação de contas passou a conferir dados enviados, comparar declarado/sistema/divergência, mostrar base operacional, emitir PDF e registrar conferência auditada.
+- Migration 0031 adiciona permissões, idempotência, versão da configuração, timestamps/responsáveis de envio/conferência e a chave versionada `tms_prestacao_contas`. Ambiente local em 31/31.
+- QA: backend build WSL; 7 suítes/23 testes; front SSR/Vercel build; smoke autenticado HTTP 200; inspeção visual desktop/mobile sem overflow.
+- Deploy: aplicar 0031, publicar API/front juntos e exigir novo login para renovar as permissões presentes no token. Documento: `docs/feedback/2026-08-03-etapa-05-app-gerente-prestacao.md`.

@@ -21,6 +21,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CampoIndexRouteImport } from './routes/campo.index'
 import { Route as CampoRecebimentoRouteImport } from './routes/campo.recebimento'
 import { Route as CampoPortariaRouteImport } from './routes/campo.portaria'
+import { Route as CampoLoginRouteImport } from './routes/campo.login'
+import { Route as CampoGerenteRouteImport } from './routes/campo.gerente'
 import { Route as CampoEntregasRouteImport } from './routes/campo.entregas'
 import { Route as CampoConferenciaRouteImport } from './routes/campo.conferencia'
 import { Route as AppVendasRouteImport } from './routes/app.vendas'
@@ -90,6 +92,16 @@ const CampoRecebimentoRoute = CampoRecebimentoRouteImport.update({
 const CampoPortariaRoute = CampoPortariaRouteImport.update({
   id: '/portaria',
   path: '/portaria',
+  getParentRoute: () => CampoRoute,
+} as any)
+const CampoLoginRoute = CampoLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => CampoRoute,
+} as any)
+const CampoGerenteRoute = CampoGerenteRouteImport.update({
+  id: '/gerente',
+  path: '/gerente',
   getParentRoute: () => CampoRoute,
 } as any)
 const CampoEntregasRoute = CampoEntregasRouteImport.update({
@@ -163,6 +175,8 @@ export interface FileRoutesByFullPath {
   '/app/vendas': typeof AppVendasRoute
   '/campo/conferencia': typeof CampoConferenciaRoute
   '/campo/entregas': typeof CampoEntregasRoute
+  '/campo/gerente': typeof CampoGerenteRoute
+  '/campo/login': typeof CampoLoginRoute
   '/campo/portaria': typeof CampoPortariaRoute
   '/campo/recebimento': typeof CampoRecebimentoRoute
   '/campo/': typeof CampoIndexRoute
@@ -186,6 +200,8 @@ export interface FileRoutesByTo {
   '/app/vendas': typeof AppVendasRoute
   '/campo/conferencia': typeof CampoConferenciaRoute
   '/campo/entregas': typeof CampoEntregasRoute
+  '/campo/gerente': typeof CampoGerenteRoute
+  '/campo/login': typeof CampoLoginRoute
   '/campo/portaria': typeof CampoPortariaRoute
   '/campo/recebimento': typeof CampoRecebimentoRoute
   '/campo': typeof CampoIndexRoute
@@ -211,6 +227,8 @@ export interface FileRoutesById {
   '/app/vendas': typeof AppVendasRoute
   '/campo/conferencia': typeof CampoConferenciaRoute
   '/campo/entregas': typeof CampoEntregasRoute
+  '/campo/gerente': typeof CampoGerenteRoute
+  '/campo/login': typeof CampoLoginRoute
   '/campo/portaria': typeof CampoPortariaRoute
   '/campo/recebimento': typeof CampoRecebimentoRoute
   '/campo/': typeof CampoIndexRoute
@@ -237,6 +255,8 @@ export interface FileRouteTypes {
     | '/app/vendas'
     | '/campo/conferencia'
     | '/campo/entregas'
+    | '/campo/gerente'
+    | '/campo/login'
     | '/campo/portaria'
     | '/campo/recebimento'
     | '/campo/'
@@ -260,6 +280,8 @@ export interface FileRouteTypes {
     | '/app/vendas'
     | '/campo/conferencia'
     | '/campo/entregas'
+    | '/campo/gerente'
+    | '/campo/login'
     | '/campo/portaria'
     | '/campo/recebimento'
     | '/campo'
@@ -284,6 +306,8 @@ export interface FileRouteTypes {
     | '/app/vendas'
     | '/campo/conferencia'
     | '/campo/entregas'
+    | '/campo/gerente'
+    | '/campo/login'
     | '/campo/portaria'
     | '/campo/recebimento'
     | '/campo/'
@@ -387,6 +411,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CampoPortariaRouteImport
       parentRoute: typeof CampoRoute
     }
+    '/campo/login': {
+      id: '/campo/login'
+      path: '/login'
+      fullPath: '/campo/login'
+      preLoaderRoute: typeof CampoLoginRouteImport
+      parentRoute: typeof CampoRoute
+    }
+    '/campo/gerente': {
+      id: '/campo/gerente'
+      path: '/gerente'
+      fullPath: '/campo/gerente'
+      preLoaderRoute: typeof CampoGerenteRouteImport
+      parentRoute: typeof CampoRoute
+    }
     '/campo/entregas': {
       id: '/campo/entregas'
       path: '/entregas'
@@ -487,6 +525,8 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 interface CampoRouteChildren {
   CampoConferenciaRoute: typeof CampoConferenciaRoute
   CampoEntregasRoute: typeof CampoEntregasRoute
+  CampoGerenteRoute: typeof CampoGerenteRoute
+  CampoLoginRoute: typeof CampoLoginRoute
   CampoPortariaRoute: typeof CampoPortariaRoute
   CampoRecebimentoRoute: typeof CampoRecebimentoRoute
   CampoIndexRoute: typeof CampoIndexRoute
@@ -495,6 +535,8 @@ interface CampoRouteChildren {
 const CampoRouteChildren: CampoRouteChildren = {
   CampoConferenciaRoute: CampoConferenciaRoute,
   CampoEntregasRoute: CampoEntregasRoute,
+  CampoGerenteRoute: CampoGerenteRoute,
+  CampoLoginRoute: CampoLoginRoute,
   CampoPortariaRoute: CampoPortariaRoute,
   CampoRecebimentoRoute: CampoRecebimentoRoute,
   CampoIndexRoute: CampoIndexRoute,

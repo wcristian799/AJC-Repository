@@ -12,6 +12,7 @@ conforme a §15 do modelo.
 | `0001_extensions.sql` | `pgcrypto`, `postgis`, `btree_gist` | §1.3 |
 | `0002_enums.sql` | Todos os `CREATE TYPE` (enums) | §2 |
 | `0003_fundacao_acesso.sql` | função `set_atualizado_em`, `cidade`, `perfil`, `permissao`, `perfil_permissao`, `colaborador`, `usuario`, `sessao`, `fornecedor` | §2.1, §3 |
+| `0031_campo_rbac_prestacao_contas.sql` | permissões dos apps de campo, estados/auditoria da prestação e configuração versionada | Etapa 05 |
 | `0004_clientes_config_precos_navegacao.sql` | `agente`, `cliente`, `cliente_agente_historico`, `config_chave`, `config_versao`, `tabela_preco`, `item_preco`, `embarcacao`, `viagem`, `viagem_escala`, `posicao_embarcacao`, `escala_colaborador` | §4, §5, §6, §7 |
 | `0005_tms.sql` | `palete`, `carga`, `carga_recebimento`, `volume`, `evento_volume`, `palete_viagem`, `documento_fiscal`, `declaracao_conteudo`, `registro_portaria`, `entrega_comprovante`, `entrega_volume`, `prestacao_contas` | §8 |
 | `0006_vendas_caixa_crm_audit.sql` | `caixa`, `bilhete`, `caixa_movimento`, `cortesia`, `gratuidade`, `termo_aceite`, `nps`, `cotacao`, `audit_evento` | §9, §10, §11 |

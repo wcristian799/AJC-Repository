@@ -2,6 +2,17 @@
 @source "../src";
 @import "tw-animate-css";
 
+@utility field {
+  height: 2.75rem;
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--hairline);
+  background: var(--surface-elev);
+  padding-inline: 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+}
+
 @custom-variant light (&:is(.light, .light *));
 
 /*

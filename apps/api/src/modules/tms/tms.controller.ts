@@ -34,6 +34,7 @@ import {
   ReleasePaleteInput,
   SaveLocalOperacionalInput,
   SavePaleteInput,
+  ConferirPrestacaoContasInput,
   SavePrestacaoContasInput,
   ScanConferenciaVolumeInput,
   TmsControlQuery,
@@ -446,25 +447,60 @@ export class TmsController {
   }
 
   @Get("prestacoes")
-  @RequirePermissions("tms.ver")
+  @RequirePermissions("prestacao.ver")
   listPrestacoes() {
     return this.repository.listPrestacoes();
   }
 
+  @Get("prestacoes/minhas")
+  @RequirePermissions("prestacao.lancar")
+  listMinhasPrestacoes(@CurrentUser() user: AuthTokenPayload) {
+    return this.repository.listPrestacoes(user.sub);
+  }
+
+  @Get("prestacoes/configuracao")
+  getPrestacaoConfiguracao() {
+    return this.repository.getPrestacaoConfigPublic();
+  }
+
+  @Get("prestacoes/viagens-disponiveis")
+  @RequirePermissions("prestacao.lancar")
+  listViagensPrestacao() {
+    return this.repository.listViagensPrestacao();
+  }
+
+  @Get("prestacoes/cidades")
+  @RequirePermissions("prestacao.lancar")
+  listCidadesPrestacao() {
+    return this.repository.listCidadesPrestacao();
+  }
+
   @Get("prestacoes/:id")
-  @RequirePermissions("tms.ver")
+  @RequirePermissions("prestacao.ver")
   getPrestacao(@Param("id") id: string) {
     return this.repository.findPrestacao(id);
   }
 
   @Post("prestacoes")
-  @RequirePermissions("tms.criar")
+  @RequirePermissions("prestacao.lancar")
   savePrestacao(
     @Body() body: SavePrestacaoContasInput,
     @CurrentUser() user: AuthTokenPayload,
   ) {
     this.require(body.viagemId, "viagemId");
     return this.repository.savePrestacao(body, user.sub);
+  }
+
+  @Post("prestacoes/:id/enviar")
+  @RequirePermissions("prestacao.lancar")
+  enviarPrestacao(@Param("id") id: string, @CurrentUser() user: AuthTokenPayload) {
+    return this.repository.enviarPrestacao(id, user.sub);
+  }
+
+  @Post("prestacoes/:id/conferir")
+  @RequirePermissions("prestacao.conferir")
+  conferirPrestacao(@Param("id") id: string, @Body() body: ConferirPrestacaoContasInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.repository.conferirPrestacao(id, body, user.sub);
   }
 
   private require(value: unknown, field: string): void {

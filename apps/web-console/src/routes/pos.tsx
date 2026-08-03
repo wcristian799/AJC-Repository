@@ -19,6 +19,7 @@ import {
   type PrecoPassagemMatrizApi,
 } from "@/lib/ajc-api";
 import { resumoPrecoPassagem, type PrecoPassagemResumo } from "@/lib/passagem-pricing";
+import { FieldStandaloneGuard } from "@/components/ops/field/FieldStandaloneGuard";
 
 export const Route = createFileRoute("/pos")({
   head: () => ({
@@ -27,7 +28,7 @@ export const Route = createFileRoute("/pos")({
       { name: "description", content: "Terminal de vendas do porto: passagens, cortesias, gratuidades e controle de caixa." },
     ],
   }),
-  component: PosScreen,
+  component: () => <FieldStandaloneGuard permission="campo.pdv"><PosScreen /></FieldStandaloneGuard>,
 });
 
 const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

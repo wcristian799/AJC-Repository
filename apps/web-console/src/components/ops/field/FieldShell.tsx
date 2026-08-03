@@ -1,10 +1,10 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { LogOut } from "lucide-react";
 import { BrandMark } from "@/components/ops/BrandMark";
 import { SyncIndicator } from "@/components/ops/primitives";
-import { getStoredAuth } from "@/lib/ajc-api";
+import { getStoredAuth, logoutAjc } from "@/lib/ajc-api";
 import { listReceivingQueue } from "@/lib/tms-receiving-offline";
 
 export type FieldPerfil = {
@@ -26,6 +26,7 @@ export type FieldPerfil = {
  * posto por vez; "trocar perfil/sair" volta ao hub `/campo`.
  */
 export function FieldShell({ perfil, children }: { perfil: FieldPerfil; children: ReactNode }) {
+  const navigate = useNavigate();
   const [networkOnline, setNetworkOnline] = useState(true);
   const [queued, setQueued] = useState(0);
   const [storedOperator, setStoredOperator] = useState("Usuário autenticado");
@@ -57,14 +58,14 @@ export function FieldShell({ perfil, children }: { perfil: FieldPerfil; children
 
           <div className="flex shrink-0 items-center gap-2">
             <SyncIndicator online={online} pending={pending} />
-            <Link
-              to="/campo"
+            <button
+              onClick={() => void logoutAjc().finally(() => navigate({to:"/campo/login"}))}
               className="grid h-9 w-9 place-items-center rounded-full text-foreground/70 ring-1 ring-[color:var(--hairline)] transition-colors hover:bg-[color:var(--accent)] hover:text-foreground"
               title="Trocar perfil / sair"
               aria-label="Trocar perfil ou sair"
             >
               <LogOut className="h-4 w-4" strokeWidth={1.8} />
-            </Link>
+            </button>
           </div>
         </div>
         {local && (

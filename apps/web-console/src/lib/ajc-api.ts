@@ -321,6 +321,8 @@ export type PerfilCadastroApi = {
   permissions: string[];
 };
 
+export type PermissaoCadastroApi = { id:string; modulo:string; acao:string; descricao:string|null; codigo:string };
+
 export type CidadeApi = {
   sigla: string;
   nome: string;
@@ -478,6 +480,10 @@ export function listUsuariosCadastro() {
 
 export function listPerfisCadastro() {
   return request<PerfilCadastroApi[]>("/cadastros/perfis", { auth: true });
+}
+
+export function listPermissoesCadastro() {
+  return request<PermissaoCadastroApi[]>("/cadastros/permissoes", { auth: true });
 }
 
 export function createUsuarioCadastro(input: SaveUsuarioInput) {
@@ -1073,22 +1079,15 @@ export type TmsEntregaApi = {
 
 export type PrestacaoContasItensApi = {
   caixaInicial?: number;
-  receitasBordo?: Array<{ rotulo: string; especie: number; pix: number }>;
-  cozinhaDias?: Array<{ dia: string; cafe: number; almoco: number; jantar: number }>;
-  lanchonete?: { especie: number; pix: number };
-  internet?: { especie: number; pix: number };
-  passagensAgencias?: Array<{
-    cidade: string;
-    especie: number;
-    pixConta: number;
-    comissaoPct?: number;
-  }>;
-  fretesAgencias?: Array<{ cidade: string; especie: number; pixConta: number }>;
-  despesas?: Array<{ descricao: string; valor: number }>;
-  redondas?: Array<{ nome: string; funcao: string; valor: number }>;
-  assinatura?: { local?: string; responsavel?: string };
-  [key: string]: unknown;
+  receitas: Array<{id?:string;categoria:string;formaPagamento:string;descricao?:string;valor:number;origemSigla?:string;destinoSigla?:string;agencia?:string}>;
+  despesas: Array<{id?:string;categoria:string;escopo:"cidade"|"viagem";cidadeSigla?:string;descricao:string;valor:number}>;
+  observacoes?: string;
+  localFechamento?: string;
+  semMovimento?: boolean;
 };
+
+export type PrestacaoConfigApi = { id:string; versao:number; valor:{schemaVersion:1;timezone:string;formasPagamento:Array<{codigo:string;nome:string;ativo:boolean}>;categoriasReceita:Array<{codigo:string;nome:string;ativo:boolean}>;categoriasDespesa:Array<{codigo:string;nome:string;ativo:boolean}>;intertrechos:Array<{origemSigla:string;destinoSigla:string;nome?:string;ativo?:boolean}>;comissoesAgencia:Array<{agenciaId?:string;agenciaNome:string;percentual:number;ativo?:boolean}>;exigirDescricaoDespesa:boolean;exigirCidadeOuViagemDespesa:boolean} };
+export type PrestacaoViagemApi = {id:string;codigo:string;data_hora_saida:string;data_hora_retorno:string|null;origem_sigla:string;destino_sigla:string|null;status:string;embarcacao_nome:string};
 
 export type PrestacaoContasApi = {
   id: string;
@@ -1113,6 +1112,10 @@ export type PrestacaoContasApi = {
   cargas: number;
   encomendas: number;
   veiculos: number;
+  enviada_em?: string | null;
+  conferida_em?: string | null;
+  observacao_conferencia?: string | null;
+  config_versao?: number | null;
 };
 
 export type CreateTmsPortariaInput = {
@@ -1371,11 +1374,15 @@ export function listTmsPrestacoes() {
   return request<PrestacaoContasApi[]>("/tms/prestacoes", { auth: true });
 }
 
+export function listMinhasTmsPrestacoes() { return request<PrestacaoContasApi[]>("/tms/prestacoes/minhas",{auth:true}); }
+export function getTmsPrestacaoConfig() { return request<PrestacaoConfigApi>("/tms/prestacoes/configuracao",{auth:true}); }
+export function listTmsPrestacaoViagens() { return request<PrestacaoViagemApi[]>("/tms/prestacoes/viagens-disponiveis",{auth:true}); }
+export function listTmsPrestacaoCidades() { return request<CidadeApi[]>("/tms/prestacoes/cidades",{auth:true}); }
+
 export function saveTmsPrestacao(input: {
   viagemId: string;
-  totalDeclarado?: number;
-  status?: "rascunho" | "enviada" | "conferida";
-  itens?: PrestacaoContasItensApi;
+  clientUuid: string;
+  itens: PrestacaoContasItensApi;
   anexos?: unknown[];
 }) {
   return request<PrestacaoContasApi>("/tms/prestacoes", {
@@ -1384,6 +1391,9 @@ export function saveTmsPrestacao(input: {
     body: JSON.stringify(input),
   });
 }
+
+export function enviarTmsPrestacao(id:string) { return request<PrestacaoContasApi>(`/tms/prestacoes/${id}/enviar`,{method:"POST",auth:true,body:"{}"}); }
+export function conferirTmsPrestacao(id:string,input:{observacao?:string;clientUuid?:string}) { return request<PrestacaoContasApi>(`/tms/prestacoes/${id}/conferir`,{method:"POST",auth:true,body:JSON.stringify(input)}); }
 
 export function createTmsPortaria(input: CreateTmsPortariaInput) {
   return request<TmsPortariaApi>("/tms/portaria", {

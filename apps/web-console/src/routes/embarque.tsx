@@ -16,10 +16,11 @@ import {
   type EmbarcacaoApi,
   type NavegacaoViagemApi,
 } from "@/lib/ajc-api";
+import { FieldStandaloneGuard } from "@/components/ops/field/FieldStandaloneGuard";
 
 export const Route = createFileRoute("/embarque")({
   head: () => ({ meta: [{ title: "ValidaÃ§Ã£o de embarque Â· AJC" }] }),
-  component: Embarque,
+  component: () => <FieldStandaloneGuard permission="campo.bilheteiro"><Embarque /></FieldStandaloneGuard>,
 });
 
 const easeOut = [0.16, 1, 0.3, 1] as const;

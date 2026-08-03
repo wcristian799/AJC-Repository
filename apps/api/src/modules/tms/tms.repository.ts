@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { DatabaseService } from '../../database/database.service';
-import { AllocatePaleteInput, ConferirDocumentoInput, CreateCargaInput, CreateDocumentoInput, EntregaInput, PrintEtiquetaInput, RegistroPortariaInput, SaveDeclaracaoConteudoInput, SavePrestacaoContasInput } from './tms.types';
+import { AllocatePaleteInput, ConferirDocumentoInput, ConferirPrestacaoContasInput, CreateCargaInput, CreateDocumentoInput, EntregaInput, PrestacaoContasItem, PrintEtiquetaInput, RegistroPortariaInput, SaveDeclaracaoConteudoInput, SavePrestacaoContasInput } from './tms.types';
 import { UploadedDocument } from './tms-document.service';
 
 @Injectable()
@@ -1067,12 +1067,14 @@ export class TmsRepository {
     return this.db.one('SELECT * FROM entrega_comprovante WHERE id = $1', [entregaId]);
   }
 
-  async listPrestacoes() {
+  async listPrestacoes(gerenteId?: string) {
     const result = await this.db.query(
       `
       SELECT pc.id, pc.viagem_id, pc.gerente_id, u.nome AS gerente_nome,
              pc.total_declarado, pc.total_sistema, pc.divergencia, pc.status::text,
-             pc.itens, pc.anexos, pc.criado_em, pc.atualizado_em,
+             pc.itens, pc.anexos, pc.criado_em, pc.atualizado_em, pc.enviada_em,
+             pc.conferida_em, pc.conferida_por, pc.observacao_conferencia,
+             cv.versao AS config_versao,
              v.codigo AS viagem_codigo, v.data_hora_saida, v.data_hora_retorno,
              v.origem_sigla, v.destino_sigla, e.nome AS embarcacao_nome,
              COALESCE(b.total_passageiros, 0)::int AS passageiros,
@@ -1083,6 +1085,7 @@ export class TmsRepository {
       JOIN viagem v ON v.id = pc.viagem_id
       JOIN embarcacao e ON e.id = v.embarcacao_id
       JOIN usuario u ON u.id = pc.gerente_id
+      LEFT JOIN config_versao cv ON cv.id = pc.config_versao_id
       LEFT JOIN LATERAL (
         SELECT count(*) AS total_passageiros
         FROM bilhete b
@@ -1100,11 +1103,31 @@ export class TmsRepository {
         FROM envio_veiculo x
         WHERE x.viagem_id = v.id AND x.status <> 'cancelada'
       ) ev ON true
+      WHERE ($1::uuid IS NULL OR pc.gerente_id = $1)
       ORDER BY pc.atualizado_em DESC
       LIMIT 100
       `,
+      [gerenteId ?? null],
     );
     return result.rows.map((row) => this.mapPrestacao(row));
+  }
+
+  async getPrestacaoConfigPublic() { return this.getPrestacaoConfig(); }
+
+  async listViagensPrestacao() {
+    const result = await this.db.query(`
+      SELECT v.id, v.codigo, v.data_hora_saida, v.data_hora_retorno, v.origem_sigla,
+             v.destino_sigla, v.status::text, e.nome AS embarcacao_nome
+      FROM viagem v JOIN embarcacao e ON e.id = v.embarcacao_id
+      WHERE v.status <> 'cancelada'
+      ORDER BY v.data_hora_saida DESC LIMIT 100
+    `);
+    return result.rows;
+  }
+
+  async listCidadesPrestacao() {
+    const result = await this.db.query(`SELECT sigla,nome,uf,is_base AS "isBase",ativo FROM cidade WHERE ativo=true ORDER BY nome`);
+    return result.rows;
   }
 
   async findPrestacao(id: string) {
@@ -1112,7 +1135,9 @@ export class TmsRepository {
       `
       SELECT pc.id, pc.viagem_id, pc.gerente_id, u.nome AS gerente_nome,
              pc.total_declarado, pc.total_sistema, pc.divergencia, pc.status::text,
-             pc.itens, pc.anexos, pc.criado_em, pc.atualizado_em,
+             pc.itens, pc.anexos, pc.criado_em, pc.atualizado_em, pc.enviada_em,
+             pc.conferida_em, pc.conferida_por, pc.observacao_conferencia,
+             cv.versao AS config_versao,
              v.codigo AS viagem_codigo, v.data_hora_saida, v.data_hora_retorno,
              v.origem_sigla, v.destino_sigla, e.nome AS embarcacao_nome,
              COALESCE(b.total_passageiros, 0)::int AS passageiros,
@@ -1123,6 +1148,7 @@ export class TmsRepository {
       JOIN viagem v ON v.id = pc.viagem_id
       JOIN embarcacao e ON e.id = v.embarcacao_id
       JOIN usuario u ON u.id = pc.gerente_id
+      LEFT JOIN config_versao cv ON cv.id = pc.config_versao_id
       LEFT JOIN LATERAL (
         SELECT count(*) AS total_passageiros
         FROM bilhete b
@@ -1150,37 +1176,81 @@ export class TmsRepository {
   }
 
   async savePrestacao(input: SavePrestacaoContasInput, gerenteId: string) {
+    if (!input.clientUuid) throw new BadRequestException('clientUuid obrigatorio');
+    const config = await this.getPrestacaoConfig();
+    const itens = this.validatePrestacaoItens(input.itens, config.valor);
     const totalSistema = await this.calcularTotalSistemaPrestacao(input.viagemId);
-    const totalDeclarado = input.totalDeclarado ?? totalSistema;
-    const row = await this.db.one<{ id: string }>(
-      `
-      INSERT INTO prestacao_contas (
-        viagem_id, gerente_id, total_declarado, total_sistema, divergencia,
-        status, itens, anexos
-      )
-      VALUES ($1, $2, $3::numeric, $4::numeric, $3::numeric - $4::numeric, $5::status_prestacao, $6::jsonb, $7::jsonb)
-      ON CONFLICT (viagem_id, gerente_id) DO UPDATE
-      SET total_declarado = EXCLUDED.total_declarado,
-          total_sistema = EXCLUDED.total_sistema,
-          divergencia = EXCLUDED.divergencia,
-          status = EXCLUDED.status,
-          itens = EXCLUDED.itens,
-          anexos = EXCLUDED.anexos,
-          atualizado_em = now()
-      RETURNING id
-      `,
-      [
-        input.viagemId,
-        gerenteId,
-        totalDeclarado,
-        totalSistema,
-        input.status ?? 'rascunho',
-        JSON.stringify(input.itens ?? {}),
-        JSON.stringify(input.anexos ?? []),
-      ],
-    );
+    const totalDeclarado = this.totalDeclarado(itens);
+    const row = await this.db.tx(async (client) => {
+      const existingByUuid = await client.query<{id:string}>('SELECT id FROM prestacao_contas WHERE client_uuid = $1', [input.clientUuid]);
+      if (existingByUuid.rows[0]) return existingByUuid.rows[0];
+      const existing = await client.query<{id:string;status:string}>(
+        'SELECT id, status::text FROM prestacao_contas WHERE viagem_id = $1 AND gerente_id = $2 FOR UPDATE', [input.viagemId, gerenteId]);
+      if (existing.rows[0] && existing.rows[0].status !== 'rascunho') throw new BadRequestException('Prestacao enviada nao pode mais ser editada');
+      const saved = await client.query<{id:string}>(`
+        INSERT INTO prestacao_contas (viagem_id, gerente_id, total_declarado, total_sistema, divergencia, status, itens, anexos, client_uuid, config_versao_id)
+        VALUES ($1,$2,$3,$4,$3::numeric-$4::numeric,'rascunho',$5::jsonb,$6::jsonb,$7,$8)
+        ON CONFLICT (viagem_id, gerente_id) DO UPDATE SET total_declarado=EXCLUDED.total_declarado,total_sistema=EXCLUDED.total_sistema,
+          divergencia=EXCLUDED.divergencia,itens=EXCLUDED.itens,anexos=EXCLUDED.anexos,client_uuid=EXCLUDED.client_uuid,
+          config_versao_id=EXCLUDED.config_versao_id,atualizado_em=now()
+        RETURNING id`, [input.viagemId, gerenteId, totalDeclarado, totalSistema, JSON.stringify(itens), JSON.stringify(input.anexos ?? []), input.clientUuid, config.id]);
+      await client.query(`INSERT INTO audit_evento(entidade,entidade_id,acao,usuario_id,dados_depois) VALUES('prestacao_contas',$1,'salvar_rascunho',$2,$3::jsonb)`, [saved.rows[0].id, gerenteId, JSON.stringify({viagemId:input.viagemId,totalDeclarado,configVersao:config.versao})]);
+      return saved.rows[0];
+    });
     if (!row) throw new BadRequestException('Nao foi possivel salvar a prestacao de contas');
     return this.findPrestacao(row.id);
+  }
+
+  async enviarPrestacao(id: string, gerenteId: string) {
+    const draft = await this.db.one<{itens:PrestacaoContasItem;valor:any}>(`SELECT pc.itens,cv.valor FROM prestacao_contas pc LEFT JOIN config_versao cv ON cv.id=pc.config_versao_id WHERE pc.id=$1 AND pc.gerente_id=$2 AND pc.status='rascunho'`,[id,gerenteId]);
+    if (!draft) throw new BadRequestException('Somente o gerente responsavel pode enviar um rascunho');
+    this.validatePrestacaoItens(draft.itens,draft.valor,true);
+    const row = await this.db.one<{id:string}>(`UPDATE prestacao_contas SET status='enviada', enviada_em=now(), atualizado_em=now()
+      WHERE id=$1 AND gerente_id=$2 AND status='rascunho' RETURNING id`, [id, gerenteId]);
+    if (!row) throw new BadRequestException('Somente o gerente responsavel pode enviar um rascunho');
+    await this.db.query(`INSERT INTO audit_evento(entidade,entidade_id,acao,usuario_id,dados_depois) VALUES('prestacao_contas',$1,'enviar',$2,'{"status":"enviada"}'::jsonb)`, [id, gerenteId]);
+    return this.findPrestacao(id);
+  }
+
+  async conferirPrestacao(id: string, input: ConferirPrestacaoContasInput, userId: string) {
+    const row = await this.db.one<{id:string}>(`UPDATE prestacao_contas SET status='conferida', conferida_em=now(), conferida_por=$2,
+      observacao_conferencia=NULLIF(BTRIM($3),'') , atualizado_em=now() WHERE id=$1 AND status='enviada' RETURNING id`, [id, userId, input.observacao ?? '']);
+    if (!row) throw new BadRequestException('Somente uma prestacao enviada pode ser conferida');
+    await this.db.query(`INSERT INTO audit_evento(entidade,entidade_id,acao,usuario_id,dados_depois,client_uuid) VALUES('prestacao_contas',$1,'conferir',$2,$3::jsonb,$4)`, [id,userId,JSON.stringify({status:'conferida',observacao:input.observacao ?? null}),input.clientUuid ?? null]);
+    return this.findPrestacao(id);
+  }
+
+  private async getPrestacaoConfig() {
+    const row = await this.db.one<{id:string;versao:number;valor:any}>(`SELECT cv.id,cv.versao,cv.valor FROM config_versao cv JOIN config_chave cc ON cc.id=cv.chave_id WHERE cc.chave='tms_prestacao_contas' AND cv.ativo=true ORDER BY cv.versao DESC LIMIT 1`);
+    if (!row) throw new BadRequestException('Configuracao de prestacao nao publicada');
+    return row;
+  }
+
+  private validatePrestacaoItens(value: PrestacaoContasItem, config: any, strict = false): PrestacaoContasItem {
+    if (!value || !Array.isArray(value.receitas) || !Array.isArray(value.despesas)) throw new BadRequestException('Receitas e despesas sao obrigatorias');
+    const receitaCodes = new Set((config.categoriasReceita ?? []).filter((x:any)=>x.ativo!==false).map((x:any)=>x.codigo));
+    const despesaCodes = new Set((config.categoriasDespesa ?? []).filter((x:any)=>x.ativo!==false).map((x:any)=>x.codigo));
+    const formas = new Set((config.formasPagamento ?? []).filter((x:any)=>x.ativo!==false).map((x:any)=>x.codigo));
+    const intertrechos = new Set((config.intertrechos ?? []).filter((x:any)=>x.ativo!==false).map((x:any)=>`${x.origemSigla}|${x.destinoSigla}`));
+    const agencias = new Set((config.comissoesAgencia ?? []).filter((x:any)=>x.ativo!==false).map((x:any)=>x.agenciaNome));
+    for (const item of value.receitas) {
+      if (!receitaCodes.has(item.categoria) || !formas.has(item.formaPagamento) || !Number.isFinite(Number(item.valor)) || Number(item.valor) < 0) throw new BadRequestException('Receita invalida para a configuracao publicada');
+      if (strict && item.categoria === 'frete_intertrecho' && !intertrechos.has(`${item.origemSigla}|${item.destinoSigla}`)) throw new BadRequestException('Intertrecho nao esta configurado');
+      if (strict && item.categoria === 'agencias' && !agencias.has(item.agencia)) throw new BadRequestException('Agencia nao esta configurada para prestacao');
+    }
+    for (const item of value.despesas) {
+      if (!despesaCodes.has(item.categoria) || !Number.isFinite(Number(item.valor)) || Number(item.valor) < 0) throw new BadRequestException('Despesa invalida para a configuracao publicada');
+      if (strict && config.exigirDescricaoDespesa && !item.descricao?.trim()) throw new BadRequestException('Descricao da despesa obrigatoria');
+      if (strict && config.exigirCidadeOuViagemDespesa && item.escopo === 'cidade' && !item.cidadeSigla) throw new BadRequestException('Cidade da despesa obrigatoria');
+    }
+    if (strict && value.receitas.length === 0 && value.despesas.length === 0 && value.semMovimento !== true) throw new BadRequestException('Informe os lancamentos ou confirme que a viagem nao teve movimento');
+    return value;
+  }
+
+  private totalDeclarado(itens: PrestacaoContasItem) {
+    const receitas = itens.receitas.reduce((sum,item)=>sum+Number(item.valor),0);
+    const despesas = itens.despesas.reduce((sum,item)=>sum+Number(item.valor),0);
+    return Math.round((Number(itens.caixaInicial ?? 0) + receitas - despesas) * 100) / 100;
   }
 
   private async calcularTotalSistemaPrestacao(viagemId: string) {
