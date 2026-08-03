@@ -1,10 +1,10 @@
 export interface DocumentoFiscalInput {
-  tipo: 'NFe' | 'NFCe' | 'DC';
+  tipo: "NFe" | "NFCe" | "DC";
   numero?: string;
   valor?: number;
   arquivoUrl?: string;
   arquivoHash?: string;
-  origem?: 'cliente' | 'agente' | 'manual';
+  origem?: "cliente" | "agente" | "manual";
 }
 
 export interface CreateCargaInput {
@@ -14,8 +14,8 @@ export interface CreateCargaInput {
   destinatarioNome?: string;
   cidadeOrigemSigla?: string;
   cidadeDestinoSigla: string;
-  tipoRecebimento?: 'porto_balsa' | 'direto';
-  categoria?: 'carga' | 'encomenda';
+  tipoRecebimento?: "porto_balsa" | "direto";
+  categoria?: "carga" | "encomenda";
   valorDeclarado?: number;
   valorCobrado?: number;
   pesoTotal?: number;
@@ -32,7 +32,7 @@ export interface RegistroPortariaInput {
   placa?: string;
   empresa: string;
   motoristaNome?: string;
-  tipo?: 'veiculo_carga' | 'veiculo_transporte' | 'pessoa';
+  tipo?: "veiculo_carga" | "veiculo_transporte" | "pessoa";
   fotoUrl?: string;
   clientUuid?: string;
 }
@@ -71,14 +71,78 @@ export interface AllocatePaleteInput {
 }
 
 export interface PrintEtiquetaInput {
-  tipo?: 'impressao' | 'reimpressao';
+  tipo?: "impressao" | "reimpressao";
   printerModel?: string;
   printerMac?: string;
   clientUuid?: string;
 }
 
+export interface SaveLocalOperacionalInput {
+  codigo: string;
+  nome: string;
+  tipo: "porto" | "patio" | "embarcacao" | "outro";
+  cidadeSigla?: string;
+  embarcacaoId?: string;
+  ativo?: boolean;
+}
+
+export interface SavePaleteInput {
+  proprietario: "AJC" | "terceiro";
+  clienteProprietarioId?: string;
+  fornecedorProprietarioId?: string;
+  localOperacionalId: string;
+  ativo?: boolean;
+}
+
+export interface OpenConferenciaInput {
+  viagemId: string;
+  paleteId?: string;
+  localOperacionalId: string;
+  cidadeDestinoSigla: string;
+  tipoUnitizacao: "AVULSA" | "MP" | "PD" | "PC";
+  clientUuid?: string;
+}
+
+export interface AddConferenciaItemInput {
+  documentoFiscalId: string;
+  quantidadeInformada: number;
+  justificativa?: string;
+  clientUuid?: string;
+}
+
+export interface ScanConferenciaVolumeInput {
+  volumeUuid: string;
+  clientUuid?: string;
+}
+
+export interface CloseConferenciaInput {
+  estadoComposicao?: "parcial" | "completo";
+  evidencias?: Array<{
+    url: string;
+    hash: string;
+    nome?: string;
+    mime?: string;
+  }>;
+  observacao?: string;
+  clientUuid?: string;
+}
+
+export interface ReleasePaleteInput {
+  localOperacionalId: string;
+  motivo: string;
+  clientUuid?: string;
+}
+
+export interface PrintTargetEtiquetaInput extends PrintEtiquetaInput {
+  alvoTipo: "palete" | "volume";
+  alvoId: string;
+  conferenciaId?: string;
+  justificativa?: string;
+  etiquetaOriginalId?: string;
+}
+
 export interface ConferirDocumentoInput {
-  status: 'conferida' | 'divergente';
+  status: "conferida" | "divergente";
   observacao?: string;
   clientUuid?: string;
 }
@@ -90,8 +154,8 @@ export interface CreateDocumentoInput {
   remetenteNome: string;
   remetenteDocumento?: string;
   remetenteTelefone?: string;
-  tipo: 'NFe' | 'NFCe' | 'DC';
-  pagamento?: 'CIF' | 'FOB';
+  tipo: "NFe" | "NFCe" | "DC";
+  pagamento?: "CIF" | "FOB";
   numero: string;
   cidadeOrigemSigla?: string;
   cidadeDestinoSigla?: string;
@@ -102,7 +166,7 @@ export interface CreateDocumentoInput {
   destinatarioDocumento?: string;
   destinatarioTelefone?: string;
   agendadoPara?: string;
-  tipoUnitizacao?: 'AVULSA' | 'MP' | 'PD' | 'PC';
+  tipoUnitizacao?: "AVULSA" | "MP" | "PD" | "PC";
   clientUuid?: string;
 }
 
@@ -110,7 +174,7 @@ export interface TmsControlQuery {
   busca?: string;
   embarcacaoId?: string;
   cidadeSigla?: string;
-  status?: 'planejada' | 'em_curso' | 'concluida' | 'cancelada';
+  status?: "planejada" | "em_curso" | "concluida" | "cancelada";
   dataInicio?: string;
   dataFim?: string;
   pagina?: string;
@@ -132,7 +196,7 @@ export interface PrestacaoContasItem {
 export interface SavePrestacaoContasInput {
   viagemId: string;
   totalDeclarado?: number;
-  status?: 'rascunho' | 'enviada' | 'conferida';
+  status?: "rascunho" | "enviada" | "conferida";
   itens?: PrestacaoContasItem;
   anexos?: unknown[];
 }

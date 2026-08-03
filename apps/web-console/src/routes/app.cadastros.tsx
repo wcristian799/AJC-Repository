@@ -5,6 +5,7 @@ import { AppShell } from "@/components/ops/AppShell";
 import { OperationalNavigationConfig } from "@/components/ops/cadastros/OperationalNavigationConfig";
 import { OperationalTmsConfig } from "@/components/ops/cadastros/OperationalTmsConfig";
 import { OperationalTmsControlConfig } from "@/components/ops/cadastros/OperationalTmsControlConfig";
+import { OperationalUnitizacaoConfig } from "@/components/ops/cadastros/OperationalUnitizacaoConfig";
 import {
   SectionHeader, DataTable, FilterBar, FilterChip, PrimaryButton, GhostButton,
   StatusChip, brl,
@@ -329,7 +330,7 @@ function Cadastros() {
       </div>
       {erro && <p className="mt-3 text-xs text-[color:var(--danger)]">{erro}</p>}
 
-      {tab === "config_operacional" && <div className="mt-5 space-y-4"><OperationalTmsConfig /><OperationalTmsControlConfig /><OperationalNavigationConfig cidades={cidades} /></div>}
+      {tab === "config_operacional" && <div className="mt-5 space-y-4"><OperationalTmsConfig /><OperationalUnitizacaoConfig /><OperationalTmsControlConfig /><OperationalNavigationConfig cidades={cidades} /></div>}
 
       {tab === "usuarios" && (
         <div className="mt-5 space-y-4">

@@ -197,7 +197,7 @@ function TripDetails({ trip, cidades }: { trip: TmsControleViagemApi; cidades: C
     </div>
     <div className="surface-card grid gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_180px_210px]">
       <FilterBar searchPlaceholder="UUID, carga, pedido ou cliente..." searchValue={searchDraft} onSearchChange={setSearchDraft} />
-      <Select label="Estado" value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={["recebido", "conferido", "embarcado", "reconferido", "desembarcado", "entregue", "divergente"].map((value) => ({ value, label: labelStatus(value) }))} />
+      <Select label="Estado" value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={["cadastrado", "recebido", "conferido", "embarcado", "reconferido", "desembarcado", "entregue", "divergente"].map((value) => ({ value, label: labelStatus(value) }))} />
       <Select label="Destino" value={city} onChange={(value) => { setCity(value); setPage(1); }} options={cidades.filter((item) => item.ativo).map((item) => ({ value: item.sigla, label: `${item.sigla} · ${item.nome}` }))} />
     </div>
     {error && <p className="rounded-md p-3 text-xs text-[color:var(--danger)] ring-1 ring-[color:var(--hairline)]">{error}</p>}

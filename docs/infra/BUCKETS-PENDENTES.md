@@ -21,7 +21,7 @@
 | `documentos-fiscais` | ativo | TMS / Encomendas | NF-e, NFC-e, DC e anexos fiscais. MinIO privado, referencia `s3://`, SHA-256 e upload temporario auditavel. |
 | `declaracoes-conteudo-assinaturas` | pendente | Encomendas | Assinaturas da declaracao de conteudo (`declaracao_conteudo.assinatura_url`) |
 | `portaria-fotos` | pendente | TMS | Fotos de registro de portaria (`registro_portaria.foto_url`) |
-| `recebimento-fotos` | pendente | TMS | Fotos de recebimento/carga (`carga_recebimento.foto_url`) |
+| `recebimento-fotos` | ativo | TMS | Evidencias fotograficas da conferencia fisica. MinIO privado, MIME de imagem validado, limite de 12 MB, SHA-256 e referencia `s3://` armazenados na conferencia. Quando o aparelho esta offline, o blob fica no IndexedDB ate a sincronizacao autenticada. |
 | `entregas-comprovantes` | pendente | TMS | Assinatura e fotos obrigatorias de entrega (`entrega_comprovante.assinatura_url`, `foto1_url`, `foto2_url`) |
 | `prestacoes-anexos` | pendente | TMS | PDFs e comprovantes anexos da prestacao de contas (`prestacao_contas.anexos`) |
 | `veiculos-fotos-checklist` | pendente | Veiculos/Maquinas | Fotos por etapa/checklist (`envio_veiculo_foto.foto_url`) |

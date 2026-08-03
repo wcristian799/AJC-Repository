@@ -70,7 +70,7 @@ export class TmsControlRepository {
     const pagina = positiveInteger(query.pagina, 1, 'pagina');
     const porPagina = boundedInteger(query.porPagina, configValue.config.itensPorPagina, 5, configValue.config.maximoPorPagina, 'porPagina');
     const status = query.status?.trim() || null;
-    if (status && !['recebido', 'conferido', 'embarcado', 'reconferido', 'desembarcado', 'entregue', 'divergente'].includes(status)) {
+    if (status && !['cadastrado', 'recebido', 'conferido', 'embarcado', 'reconferido', 'desembarcado', 'entregue', 'divergente'].includes(status)) {
       throw new BadRequestException('status de volume invalido');
     }
     const busca = normalizeOptional(query.busca, 120);

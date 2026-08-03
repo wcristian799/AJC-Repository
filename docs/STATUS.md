@@ -804,3 +804,25 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - Correcao de linguagem: o KPI superior agora mede Volumes processados, em vez de afirmar Conferidos hoje sem base temporal de eventos.
 - QA concluido: build Nest, teste unitario do validador, smoke autenticado dos agregados/detalhes e build TanStack/Vite; inspecao visual desktop e viewport 390px sem overflow horizontal.
 - Deploy: executar a migration 0027 antes ou junto do novo backend. Nenhuma seed de negocio adicional e necessaria.
+
+## 03/ago/2026 - Etapa 04: recebimento, paletizacao e etiquetas funcionais
+
+- A Etapa 04 deixou de ser demonstrativa: migrations 0028/0029 implementam `volume.cadastrado`, conferencia fisica, locais operacionais, proprietario real de palete, ciclo de alocacao e etiqueta por alvo real.
+- `/app/tms` ganhou operacao real nas abas Coletor, Cross-docking, Paletes e Etiquetas; `/campo/conferencia` e `/campo/recebimento` reutilizam o fluxo de campo responsivo, com usuario autenticado e conectividade real.
+- Recebimento exige classificacao explicita AVULSA/MP/PD/PC. NF/DC, viagem, cliente, destino, quantidades, divergencias, volumes e ocupacao sao lidos/persistidos pela API; nao existe inferencia por peso ou lista mockada.
+- Fila offline duravel usa `client_uuid`, `localStorage` para mutacoes e IndexedDB para evidencias. Conferencia ja aberta continua sem sinal e sincroniza em ordem; abertura totalmente offline aguarda o spike PowerSync.
+- Fotos de evidencia usam o bucket privado MinIO `recebimento-fotos`, MIME de imagem, limite de 12 MB e SHA-256. O inventario canonico foi atualizado.
+- Etiquetas distinguem palete e volume avulso, possuem QR real, impressao/reimpressao auditada, original/motivo e confirmacao explicita de sucesso/falha. Nao ha Bluetooth simulado; hardware e configuravel.
+- Cadastros > Configuracoes operacionais ganhou editor versionado das regras de unitizacao/etiqueta e CRUD de locais operacionais ligados a cidades/embarcacoes reais.
+- Paletes usam busca/paginacao do servidor, proprietarios reais AJC/cliente/fornecedor, local real, historico de conferencias e liberacao auditada somente no porto depois de descarga/entrega.
+- QA automatizado: migrations aplicadas (29/29), build Nest verde, 6 suites/21 testes Jest verdes, build cliente+SSR/Nitro verde e smoke HTTP autenticado dos novos contratos. A conexao do navegador do Codex falhou antes da inspecao visual por ausencia dos assets do proprio runtime; nenhuma falha da aplicacao apareceu nos gates executados.
+- Documento de entrega: `docs/feedback/2026-08-03-etapa-04-paletizacao-etiquetas.md`. ADR 03 atualizado com estados, offline e politica de impressao.
+- Deploy: publicar API/front juntos, executar o runner para 0028/0029, validar MinIO e publicar as regras reais no painel. Nao executar seed demonstrativa.
+## 03/ago/2026 - Inspecao visual da Etapa 04 concluida
+
+- Inspecao real no navegador concluida em desktop e viewport 390x844 para Paletes, Etiquetas, Configuracoes operacionais, Conferencia e Recebimento direto; sem overflow horizontal de pagina e sem regressao visual do Crimson Prestige.
+- A conferencia de campo deixou de assumir PC: o conferente agora precisa escolher explicitamente AVULSA, MP, PD ou PC antes de abrir o processo.
+- Migration 0030 corrige o nome automatico `Porto de Porto de Moz` para `Porto de Moz` sem alterar locais personalizados; ambiente local validado com 30 migrations.
+- O `FieldShell` deixou de consultar localStorage durante o render inicial e nao gera mais hydration mismatch entre SSR e cliente. Revalidacao no console nao produziu novos erros.
+- O seed canonico agora liga `TER-101` ao cliente real Comercial Ribeira Ltda. e respeita `ck_palete_proprietario_referencia`; reaplicacao idempotente concluida.
+- Build TanStack/Vite/Nitro verde apos as correcoes. Deploy deve executar tambem a migration 0030.

@@ -12,10 +12,7 @@ function CampoRecebimento() {
     <FieldShell
       perfil={{
         nome: "Recebimento direto / Balsa",
-        operador: "Sebastião Luz",
-        local: "Cross-docking na balsa",
-        online: false,
-        pending: 2,
+        local: "Recebimento físico e cross-docking",
       }}
     >
       <CrossDockingTab />

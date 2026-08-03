@@ -1,15 +1,17 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { LogOut } from "lucide-react";
 import { BrandMark } from "@/components/ops/BrandMark";
 import { SyncIndicator } from "@/components/ops/primitives";
+import { getStoredAuth } from "@/lib/ajc-api";
+import { listReceivingQueue } from "@/lib/tms-receiving-offline";
 
 export type FieldPerfil = {
   /** Rótulo do posto (ex.: "Conferente do Porto"). */
   nome: string;
   /** Nome do operador com o coletor na mão (ex.: "João Nonato"). */
-  operador: string;
+  operador?: string;
   /** Local/turno opcional (ex.: "Porto de Belém · turno manhã"). */
   local?: string;
   /** Estado da conexão — campo é offline-first, offline não é erro. */
@@ -24,7 +26,19 @@ export type FieldPerfil = {
  * posto por vez; "trocar perfil/sair" volta ao hub `/campo`.
  */
 export function FieldShell({ perfil, children }: { perfil: FieldPerfil; children: ReactNode }) {
-  const { nome, operador, local, online = false, pending = 0 } = perfil;
+  const [networkOnline, setNetworkOnline] = useState(true);
+  const [queued, setQueued] = useState(0);
+  const [storedOperator, setStoredOperator] = useState("Usuário autenticado");
+  useEffect(() => {
+    const update = () => { setNetworkOnline(navigator.onLine); setQueued(listReceivingQueue().length); };
+    setStoredOperator(getStoredAuth()?.user.nome || "Usuário autenticado");
+    update(); window.addEventListener("online", update); window.addEventListener("offline", update); window.addEventListener("ajc:receiving-queue", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); window.removeEventListener("ajc:receiving-queue", update); };
+  }, []);
+  const { nome, local } = perfil;
+  const operador = perfil.operador || storedOperator;
+  const online = perfil.online ?? networkOnline;
+  const pending = perfil.pending ?? queued;
 
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-[color:var(--surface-noir,var(--background))]">

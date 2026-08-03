@@ -626,15 +626,16 @@ async function seedEscalaColaborador(nomeColaborador, viagemId, funcao, status, 
 }
 
 async function seedTmsOperations(adminId) {
-  await seedPalete('AJC-014', 'AJC');
-  await seedPalete('AJC-021', 'AJC');
-  await seedPalete('TER-101', 'terceiro');
-
-  const viagem = await getId('viagem', 'codigo', 'V-2026-0001');
-  const viagem2 = await getId('viagem', 'codigo', 'V-2026-0002');
   const comercial = await getCliente('Comercial Ribeira Ltda.');
   const atacadao = await getCliente('Atacadao Santarem');
   const jose = await getCliente('Jose Carvalho');
+
+  await seedPalete('AJC-014', 'AJC');
+  await seedPalete('AJC-021', 'AJC');
+  await seedPalete('TER-101', 'terceiro', comercial);
+
+  const viagem = await getId('viagem', 'codigo', 'V-2026-0001');
+  const viagem2 = await getId('viagem', 'codigo', 'V-2026-0002');
 
   const carga1 = await seedCarga({
     codigo: 'CG-2026-0001',
@@ -703,12 +704,28 @@ async function seedTmsOperations(adminId) {
   await seedVeiculo(viagem, comercial, adminId);
 }
 
-async function seedPalete(codigo, proprietario) {
+async function seedPalete(codigo, proprietario, clienteProprietarioId = null) {
+  if (proprietario === 'terceiro' && !clienteProprietarioId) {
+    throw new Error(`Palete terceiro ${codigo} exige proprietario real`);
+  }
   const current = await client.query('SELECT id FROM palete WHERE codigo = $1 LIMIT 1', [codigo]);
   if (current.rows[0]?.id) {
-    await client.query('UPDATE palete SET proprietario = $2::proprietario_palete, atualizado_em = now() WHERE id = $1', [current.rows[0].id, proprietario]);
+    await client.query(
+      `UPDATE palete
+       SET proprietario = $2::proprietario_palete,
+           terceiro_id = $3,
+           cliente_proprietario_id = $3,
+           fornecedor_proprietario_id = NULL,
+           atualizado_em = now()
+       WHERE id = $1`,
+      [current.rows[0].id, proprietario, clienteProprietarioId],
+    );
   } else {
-    await client.query('INSERT INTO palete (codigo, proprietario) VALUES ($1, $2::proprietario_palete)', [codigo, proprietario]);
+    await client.query(
+      `INSERT INTO palete (codigo, proprietario, terceiro_id, cliente_proprietario_id)
+       VALUES ($1, $2::proprietario_palete, $3, $3)`,
+      [codigo, proprietario, clienteProprietarioId],
+    );
   }
 }
 

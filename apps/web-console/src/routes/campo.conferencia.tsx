@@ -12,10 +12,7 @@ function CampoConferencia() {
     <FieldShell
       perfil={{
         nome: "Conferente do Porto",
-        operador: "João Nonato",
-        local: "Coletor · conferência e entrega",
-        online: false,
-        pending: 3,
+        local: "Conferência de NF/DC, paletes e volumes",
       }}
     >
       <ColetorTab />

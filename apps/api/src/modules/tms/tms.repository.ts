@@ -282,7 +282,7 @@ export class TmsRepository {
       const pesoPorVolume = input.pesoTotal ? input.pesoTotal / totalVolumes : null;
       await client.query(
         `INSERT INTO volume (carga_id, indice_volume, total_volumes, peso, status)
-         SELECT $1, n, $2, $3, 'recebido' FROM generate_series(1, $2) n`,
+         SELECT $1, n, $2, $3, 'cadastrado' FROM generate_series(1, $2) n`,
         [carga.rows[0].id, totalVolumes, pesoPorVolume],
       );
       await client.query('UPDATE documento_upload SET consumido_em = now() WHERE id = $1', [input.uploadId]);
@@ -585,7 +585,7 @@ export class TmsRepository {
         await client.query(
           `
           INSERT INTO volume (carga_id, indice_volume, total_volumes, peso, status)
-          VALUES ($1, $2, $3, $4, 'recebido')
+          VALUES ($1, $2, $3, $4, 'cadastrado')
           `,
           [id, i, totalVolumes, pesoPorVolume],
         );

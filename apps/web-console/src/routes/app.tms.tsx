@@ -25,7 +25,6 @@ import {
   type TmsCargaApi,
   type TmsDocumentoApi,
   type TmsEntregaApi,
-  type TmsPaleteApi,
   type TmsPortariaApi,
   type TmsVolumeApi,
   type VeiculoEnvioApi,
@@ -37,7 +36,6 @@ import {
   listTmsCargas,
   listTmsDocumentos,
   listTmsEntregas,
-  listTmsPaletes,
   listTmsPortaria,
   listTmsVolumes,
   listVeiculosEnvios,
@@ -101,7 +99,6 @@ function TMS() {
     cidades: [],
     documentos: [],
     volumes: [],
-    paletes: [],
     portaria: [],
     entregas: [],
     veiculos: [],
@@ -119,7 +116,6 @@ function TMS() {
       listTmsCargas(),
       listTmsDocumentos(),
       listTmsVolumes(),
-      listTmsPaletes(),
       listTmsPortaria(),
       listTmsEntregas(),
       listVeiculosEnvios(),
@@ -128,14 +124,13 @@ function TMS() {
       listClientes(),
       listCidades(),
     ])
-      .then(([cargas, documentos, volumes, paletes, portaria, entregas, veiculos, viagens, embarcacoes, clientes, cidades]) => {
+      .then(([cargas, documentos, volumes, portaria, entregas, veiculos, viagens, embarcacoes, clientes, cidades]) => {
         if (!active) return;
         setData({
           cargas: ensureArray(cargas),
           cidades: ensureArray(cidades),
           documentos: ensureArray(documentos),
           volumes: ensureArray(volumes),
-          paletes: ensureArray(paletes),
           portaria: ensureArray(portaria),
           entregas: ensureArray(entregas),
           veiculos: ensureArray(veiculos),
@@ -471,14 +466,7 @@ function TMS() {
           onVolumesChange={(volumes) => setData((prev) => ({ ...prev, volumes }))}
         />
       )}
-      {tab === "paletes" && (
-        <PaletesTab
-          paletes={data.paletes}
-          volumes={data.volumes}
-          viagens={data.viagens}
-          onPaletesChange={(paletes) => setData((prev) => ({ ...prev, paletes }))}
-        />
-      )}
+      {tab === "paletes" && <PaletesTab />}
       {tab === "etiqueta" && <EtiquetaTab volumes={data.volumes} />}
       {tab === "veiculos" && (
         <VeiculosTab
@@ -782,7 +770,6 @@ type TmsData = {
   cidades: CidadeApi[];
   documentos: TmsDocumentoApi[];
   volumes: TmsVolumeApi[];
-  paletes: TmsPaleteApi[];
   portaria: TmsPortariaApi[];
   entregas: TmsEntregaApi[];
   veiculos: VeiculoEnvioApi[];
