@@ -131,6 +131,7 @@ export type EmbarcacaoApi = {
   status: string;
   capacidadeCarga: number | null;
   capacidadePax: Record<string, unknown>;
+  fotoUrl: string | null;
 };
 
 export type SaveEmbarcacaoInput = {
@@ -139,6 +140,7 @@ export type SaveEmbarcacaoInput = {
   status?: "ativa" | "manutencao" | "alugada";
   capacidadeCarga?: number | null;
   capacidadePax?: Record<string, unknown>;
+  fotoUrl?: string | null;
 };
 
 export type NavegacaoEscalaApi = {
@@ -155,6 +157,7 @@ export type NavegacaoViagemApi = {
   codigo: string | null;
   embarcacaoId: string;
   embarcacaoNome: string;
+  embarcacaoFotoUrl: string | null;
   origemSigla: string;
   destinoSigla: string | null;
   dataHoraSaida: string;
@@ -321,7 +324,13 @@ export type PerfilCadastroApi = {
   permissions: string[];
 };
 
-export type PermissaoCadastroApi = { id:string; modulo:string; acao:string; descricao:string|null; codigo:string };
+export type PermissaoCadastroApi = {
+  id: string;
+  modulo: string;
+  acao: string;
+  descricao: string | null;
+  codigo: string;
+};
 
 export type CidadeApi = {
   sigla: string;
@@ -655,7 +664,13 @@ export function reajustarTabelaPrecos(
 
 export function publicarTabelaPrecosEncomenda(input: {
   motivo: string;
-  itens: Array<{ origemSigla: string; destinoSigla: string; tamanho: string; valor: number; percentual: number }>;
+  itens: Array<{
+    origemSigla: string;
+    destinoSigla: string;
+    tamanho: string;
+    valor: number;
+    percentual: number;
+  }>;
 }) {
   return request<PrecoItemApi[]>("/precos/encomenda/publicacoes", {
     method: "POST",
@@ -697,38 +712,104 @@ export type EncomendasConfigApi = {
 };
 
 export type EncomendaApi = {
-  id: string; codigo: string; numero_pedido: string; status: string; viagem_id: string;
-  cidade_origem_sigla: string; cidade_destino_sigla: string; valor_declarado: number;
-  valor_cobrado: number; valor_tabela: number; peso_total: number; criado_em: string;
-  viagem_codigo: string; embarcacao_nome: string; remetente_nome: string; remetente_documento: string;
-  remetente_telefone: string; destinatario_nome: string; destinatario_documento: string;
-  destinatario_telefone: string; tamanho_codigo: string | null; conteudo_declarado: string | null;
-  quem_paga: "remetente" | "destinatario" | null; forma_pagamento: string | null;
-  documento_tipo: "NF" | "DC" | null; documento_fiscal_id: string | null; foto_encomenda_url: string | null;
-  motivo_ajuste_valor: string | null; status_documental: "aguardando_documento" | "pronta" | "divergente" | "legado_incompleto";
-  cotacao_id: string | null; tabela_preco_versao: number | null; config_versao: number | null;
-  total_volumes: number; declaracao_id: string | null; dc_assinada: boolean;
-  documento_numero: string | null; documento_url: string | null; documento_status: string | null; legado: boolean;
+  id: string;
+  codigo: string;
+  numero_pedido: string;
+  status: string;
+  viagem_id: string;
+  cidade_origem_sigla: string;
+  cidade_destino_sigla: string;
+  valor_declarado: number;
+  valor_cobrado: number;
+  valor_tabela: number;
+  peso_total: number;
+  criado_em: string;
+  viagem_codigo: string;
+  embarcacao_nome: string;
+  remetente_nome: string;
+  remetente_documento: string;
+  remetente_telefone: string;
+  destinatario_nome: string;
+  destinatario_documento: string;
+  destinatario_telefone: string;
+  tamanho_codigo: string | null;
+  conteudo_declarado: string | null;
+  quem_paga: "remetente" | "destinatario" | null;
+  forma_pagamento: string | null;
+  documento_tipo: "NF" | "DC" | null;
+  documento_fiscal_id: string | null;
+  foto_encomenda_url: string | null;
+  motivo_ajuste_valor: string | null;
+  status_documental: "aguardando_documento" | "pronta" | "divergente" | "legado_incompleto";
+  cotacao_id: string | null;
+  tabela_preco_versao: number | null;
+  config_versao: number | null;
+  total_volumes: number;
+  declaracao_id: string | null;
+  dc_assinada: boolean;
+  documento_numero: string | null;
+  documento_url: string | null;
+  documento_status: string | null;
+  legado: boolean;
 };
 
 export type EncomendaDetailApi = EncomendaApi & {
-  eventos: Array<{ id: string | null; tipo: string | null; ocorrido_em: string | null; criado_em: string; obs: string | null; usuario_nome: string | null; volume_id: string; indice_volume: number; total_volumes: number; entrega_protocolo: string | null; entregue_em: string | null }>;
-  evidencias: Array<{ id: string; tipo: string; arquivo_url: string; arquivo_hash: string; arquivo_nome: string; arquivo_mime: string; arquivo_bytes: number; criado_em: string }>;
+  eventos: Array<{
+    id: string | null;
+    tipo: string | null;
+    ocorrido_em: string | null;
+    criado_em: string;
+    obs: string | null;
+    usuario_nome: string | null;
+    volume_id: string;
+    indice_volume: number;
+    total_volumes: number;
+    entrega_protocolo: string | null;
+    entregue_em: string | null;
+  }>;
+  evidencias: Array<{
+    id: string;
+    tipo: string;
+    arquivo_url: string;
+    arquivo_hash: string;
+    arquivo_nome: string;
+    arquivo_mime: string;
+    arquivo_bytes: number;
+    criado_em: string;
+  }>;
 };
 
-export type EncomendaEvidenceApi = { id: string; tipo: string; arquivo_url: string; arquivo_hash: string; arquivo_nome: string; arquivo_mime: string; arquivo_bytes: number; criado_em: string };
+export type EncomendaEvidenceApi = {
+  id: string;
+  tipo: string;
+  arquivo_url: string;
+  arquivo_hash: string;
+  arquivo_nome: string;
+  arquivo_mime: string;
+  arquivo_bytes: number;
+  criado_em: string;
+};
 
 export type CreateEncomendaInput = {
   viagemId: string;
   clienteRemetenteId: string;
-  remetenteNome: string; remetenteDocumento: string; remetenteTelefone: string;
-  destinatarioNome: string; destinatarioDocumento: string; destinatarioTelefone: string;
+  remetenteNome: string;
+  remetenteDocumento: string;
+  remetenteTelefone: string;
+  destinatarioNome: string;
+  destinatarioDocumento: string;
+  destinatarioTelefone: string;
   cidadeOrigemSigla: string;
   cidadeDestinoSigla: string;
-  tamanhoCodigo: string; conteudoDeclarado: string;
-  quemPaga: "remetente" | "destinatario"; formaPagamento?: string;
-  documentoTipo: "NF" | "DC"; documentoNumero?: string;
-  evidenciaFotoId: string; evidenciaDocumentoId?: string; cotacaoId?: string;
+  tamanhoCodigo: string;
+  conteudoDeclarado: string;
+  quemPaga: "remetente" | "destinatario";
+  formaPagamento?: string;
+  documentoTipo: "NF" | "DC";
+  documentoNumero?: string;
+  evidenciaFotoId: string;
+  evidenciaDocumentoId?: string;
+  cotacaoId?: string;
   valorDeclarado: number;
   valorCobrado?: number;
   motivoAjusteValor?: string;
@@ -844,7 +925,8 @@ export type TmsControleResponseApi = {
   items: TmsControleViagemApi[];
   total: number;
   totals: TmsControleTotaisApi;
-  filtros: Required<Pick<TmsControleParams, "dataInicio" | "dataFim" | "pagina" | "porPagina">> & TmsControleParams;
+  filtros: Required<Pick<TmsControleParams, "dataInicio" | "dataFim" | "pagina" | "porPagina">> &
+    TmsControleParams;
   paginacao: { pagina: number; porPagina: number; total: number; paginas: number };
   configuracao: TmsControleConfigApi;
   atualizadoEm: string;
@@ -1041,9 +1123,28 @@ export type CreateTmsPaleteInput = {
   ativo?: boolean;
 };
 
-export type TmsPaleteOwnerApi = { chave: string; tipo: "AJC" | "cliente" | "fornecedor"; id: string | null; nome: string; documento: string | null };
-export type TmsLocalOperacionalApi = { id: string; codigo: string; nome: string; tipo: "porto" | "patio" | "embarcacao" | "outro"; cidade_sigla: string | null; cidade_nome: string | null; embarcacao_id: string | null; embarcacao_nome: string | null; ativo: boolean };
-export type TmsPaletesResponseApi = { items: TmsPaleteApi[]; paginacao: { pagina: number; porPagina: number; total: number; paginas: number } };
+export type TmsPaleteOwnerApi = {
+  chave: string;
+  tipo: "AJC" | "cliente" | "fornecedor";
+  id: string | null;
+  nome: string;
+  documento: string | null;
+};
+export type TmsLocalOperacionalApi = {
+  id: string;
+  codigo: string;
+  nome: string;
+  tipo: "porto" | "patio" | "embarcacao" | "outro";
+  cidade_sigla: string | null;
+  cidade_nome: string | null;
+  embarcacao_id: string | null;
+  embarcacao_nome: string | null;
+  ativo: boolean;
+};
+export type TmsPaletesResponseApi = {
+  items: TmsPaleteApi[];
+  paginacao: { pagina: number; porPagina: number; total: number; paginas: number };
+};
 
 export type AllocateTmsPaleteInput = {
   viagemId: string;
@@ -1080,7 +1181,25 @@ export type TmsEtiquetaApi = {
   viagem_codigo?: string | null;
   justificativa?: string | null;
 };
-export type TmsEtiquetaTargetApi = { id:string;codigo:string;conferencia_id:string;viagem_id?:string;viagem_codigo:string;cidade_destino_sigla:string;possui_etiqueta:boolean;tipo_unitizacao?:"MP"|"PD"|"PC";estado_composicao?:string;status:string;local_nome?:string;documentos?:number;volumes?:number;indice_volume?:number;total_volumes?:number;carga_codigo?:string;cliente_nome?:string };
+export type TmsEtiquetaTargetApi = {
+  id: string;
+  codigo: string;
+  conferencia_id: string;
+  viagem_id?: string;
+  viagem_codigo: string;
+  cidade_destino_sigla: string;
+  possui_etiqueta: boolean;
+  tipo_unitizacao?: "MP" | "PD" | "PC";
+  estado_composicao?: string;
+  status: string;
+  local_nome?: string;
+  documentos?: number;
+  volumes?: number;
+  indice_volume?: number;
+  total_volumes?: number;
+  carga_codigo?: string;
+  cliente_nome?: string;
+};
 
 export type PrintTmsEtiquetaInput = {
   tipo?: "impressao" | "reimpressao";
@@ -1089,11 +1208,77 @@ export type PrintTmsEtiquetaInput = {
   clientUuid?: string;
 };
 
-export type TmsConferenciaDocumentoApi = { id: string; tipo: string; numero: string | null; status: string; carga_id: string; carga_codigo: string; cidade_destino_sigla: string; tipo_unitizacao: string; cliente_codigo: string; cliente_nome: string; quantidade_declarada: number; quantidade_alocada: number; quantidade_restante: number };
-export type TmsConferenciaVolumeApi = { uuid: string; status: "alocado" | "recebido"; indice: number; total: number };
-export type TmsConferenciaItemApi = { id: string; documentoFiscalId: string; tipo: string; numero: string | null; cargaId: string; cargaCodigo: string; clienteNome: string; destino: string; quantidadeDeclarada: number; quantidadeInformada: number; quantidadeConferida: number; divergencia: boolean; justificativa: string | null; volumes: TmsConferenciaVolumeApi[] | null };
-export type TmsConferenciaApi = { id: string; viagem_id: string; viagem_codigo: string; palete_id: string | null; palete_codigo: string | null; local_operacional_id: string; local_nome: string; tipo_unitizacao: "AVULSA" | "MP" | "PD" | "PC"; status: "aberta" | "fechada" | "divergente" | "cancelada"; estado_composicao: "parcial" | "completo" | null; conferente_nome: string; evidencias: Array<{url:string;hash:string;nome?:string;mime?:string}>; aberta_em: string; fechada_em: string | null; itens: TmsConferenciaItemApi[] };
-export type TmsConferenciaResumoApi = { id: string; viagem_id: string; viagem_codigo: string; palete_id: string | null; palete_codigo: string | null; tipo_unitizacao: string; status: string; estado_composicao: string | null; local_nome: string; conferente_nome: string; documentos: number; volumes_informados: number; volumes_conferidos: number; aberta_em: string; fechada_em: string | null };
+export type TmsConferenciaDocumentoApi = {
+  id: string;
+  tipo: string;
+  numero: string | null;
+  status: string;
+  carga_id: string;
+  carga_codigo: string;
+  cidade_destino_sigla: string;
+  tipo_unitizacao: string;
+  cliente_codigo: string;
+  cliente_nome: string;
+  quantidade_declarada: number;
+  quantidade_alocada: number;
+  quantidade_restante: number;
+};
+export type TmsConferenciaVolumeApi = {
+  uuid: string;
+  status: "alocado" | "recebido";
+  indice: number;
+  total: number;
+};
+export type TmsConferenciaItemApi = {
+  id: string;
+  documentoFiscalId: string;
+  tipo: string;
+  numero: string | null;
+  cargaId: string;
+  cargaCodigo: string;
+  clienteNome: string;
+  destino: string;
+  quantidadeDeclarada: number;
+  quantidadeInformada: number;
+  quantidadeConferida: number;
+  divergencia: boolean;
+  justificativa: string | null;
+  volumes: TmsConferenciaVolumeApi[] | null;
+};
+export type TmsConferenciaApi = {
+  id: string;
+  viagem_id: string;
+  viagem_codigo: string;
+  palete_id: string | null;
+  palete_codigo: string | null;
+  local_operacional_id: string;
+  local_nome: string;
+  tipo_unitizacao: "AVULSA" | "MP" | "PD" | "PC";
+  status: "aberta" | "fechada" | "divergente" | "cancelada";
+  estado_composicao: "parcial" | "completo" | null;
+  conferente_nome: string;
+  evidencias: Array<{ url: string; hash: string; nome?: string; mime?: string }>;
+  aberta_em: string;
+  fechada_em: string | null;
+  itens: TmsConferenciaItemApi[];
+};
+export type TmsConferenciaResumoApi = {
+  id: string;
+  viagem_id: string;
+  viagem_codigo: string;
+  palete_id: string | null;
+  palete_codigo: string | null;
+  tipo_unitizacao: string;
+  status: string;
+  estado_composicao: string | null;
+  local_nome: string;
+  conferente_nome: string;
+  documentos: number;
+  volumes_informados: number;
+  volumes_conferidos: number;
+  aberta_em: string;
+  fechada_em: string | null;
+};
 
 export type TmsPortariaApi = {
   id: string;
@@ -1119,15 +1304,64 @@ export type TmsEntregaApi = {
 
 export type PrestacaoContasItensApi = {
   caixaInicial?: number;
-  receitas: Array<{id?:string;categoria:string;formaPagamento:string;descricao?:string;valor:number;origemSigla?:string;destinoSigla?:string;agencia?:string}>;
-  despesas: Array<{id?:string;categoria:string;escopo:"cidade"|"viagem";cidadeSigla?:string;descricao:string;valor:number}>;
+  receitas: Array<{
+    id?: string;
+    categoria: string;
+    formaPagamento: string;
+    descricao?: string;
+    valor: number;
+    origemSigla?: string;
+    destinoSigla?: string;
+    agencia?: string;
+  }>;
+  despesas: Array<{
+    id?: string;
+    categoria: string;
+    escopo: "cidade" | "viagem";
+    cidadeSigla?: string;
+    descricao: string;
+    valor: number;
+  }>;
   observacoes?: string;
   localFechamento?: string;
   semMovimento?: boolean;
 };
 
-export type PrestacaoConfigApi = { id:string; versao:number; valor:{schemaVersion:1;timezone:string;formasPagamento:Array<{codigo:string;nome:string;ativo:boolean}>;categoriasReceita:Array<{codigo:string;nome:string;ativo:boolean}>;categoriasDespesa:Array<{codigo:string;nome:string;ativo:boolean}>;intertrechos:Array<{origemSigla:string;destinoSigla:string;nome?:string;ativo?:boolean}>;comissoesAgencia:Array<{agenciaId?:string;agenciaNome:string;percentual:number;ativo?:boolean}>;exigirDescricaoDespesa:boolean;exigirCidadeOuViagemDespesa:boolean} };
-export type PrestacaoViagemApi = {id:string;codigo:string;data_hora_saida:string;data_hora_retorno:string|null;origem_sigla:string;destino_sigla:string|null;status:string;embarcacao_nome:string};
+export type PrestacaoConfigApi = {
+  id: string;
+  versao: number;
+  valor: {
+    schemaVersion: 1;
+    timezone: string;
+    formasPagamento: Array<{ codigo: string; nome: string; ativo: boolean }>;
+    categoriasReceita: Array<{ codigo: string; nome: string; ativo: boolean }>;
+    categoriasDespesa: Array<{ codigo: string; nome: string; ativo: boolean }>;
+    intertrechos: Array<{
+      origemSigla: string;
+      destinoSigla: string;
+      nome?: string;
+      ativo?: boolean;
+    }>;
+    comissoesAgencia: Array<{
+      agenciaId?: string;
+      agenciaNome: string;
+      percentual: number;
+      ativo?: boolean;
+    }>;
+    exigirDescricaoDespesa: boolean;
+    exigirCidadeOuViagemDespesa: boolean;
+  };
+};
+export type PrestacaoViagemApi = {
+  id: string;
+  codigo: string;
+  data_hora_saida: string;
+  data_hora_retorno: string | null;
+  origem_sigla: string;
+  destino_sigla: string | null;
+  status: string;
+  embarcacao_nome: string;
+};
 
 export type PrestacaoContasApi = {
   id: string;
@@ -1262,21 +1496,40 @@ export function listEncomendaDeclaracoes() {
 }
 
 export function getEncomendasConfig() {
-  return request<{ versao: number; configVersaoId: string; valor: EncomendasConfigApi }>("/encomendas/configuracao", { auth: true });
+  return request<{ versao: number; configVersaoId: string; valor: EncomendasConfigApi }>(
+    "/encomendas/configuracao",
+    { auth: true },
+  );
 }
 
 export function getEncomendaDetail(id: string) {
   return request<EncomendaDetailApi>(`/encomendas/${id}`, { auth: true });
 }
 
-export async function uploadEncomendaEvidence(file: File, tipo: "foto_encomenda" | "documento_nf" | "documento_dc" | "assinatura_dc", clientUuid = crypto.randomUUID()) {
+export async function uploadEncomendaEvidence(
+  file: File,
+  tipo: "foto_encomenda" | "documento_nf" | "documento_dc" | "assinatura_dc",
+  clientUuid = crypto.randomUUID(),
+) {
   const form = new FormData();
   form.append("arquivo", file);
   const search = new URLSearchParams({ tipo, clientUuid });
-  return request<EncomendaEvidenceApi>(`/encomendas/evidencias?${search.toString()}`, { method: "POST", auth: true, body: form });
+  return request<EncomendaEvidenceApi>(`/encomendas/evidencias?${search.toString()}`, {
+    method: "POST",
+    auth: true,
+    body: form,
+  });
 }
 
-export function saveEncomendaDeclaracao(cargaId: string, input: { evidenciaAssinaturaId: string; aceiteEm?: string; dispositivo?: string; clientUuid: string }) {
+export function saveEncomendaDeclaracao(
+  cargaId: string,
+  input: {
+    evidenciaAssinaturaId: string;
+    aceiteEm?: string;
+    dispositivo?: string;
+    clientUuid: string;
+  },
+) {
   return request<EncomendaDetailApi>(`/encomendas/${cargaId}/declaracao-conteudo`, {
     method: "POST",
     auth: true,
@@ -1297,28 +1550,50 @@ function tmsControleQuery(params: TmsControleParams = {}) {
 }
 
 export function listTmsControleViagens(params: TmsControleParams = {}) {
-  return request<TmsControleResponseApi>(`/tms/controle-viagens${tmsControleQuery(params)}`, { auth: true });
+  return request<TmsControleResponseApi>(`/tms/controle-viagens${tmsControleQuery(params)}`, {
+    auth: true,
+  });
 }
 
-export function exportTmsControleViagens(params: Omit<TmsControleParams, "pagina" | "porPagina"> = {}) {
-  return request<TmsControleResponseApi>(`/tms/controle-viagens/exportacao${tmsControleQuery(params)}`, { auth: true });
-}
-
-export function listTmsControleVolumes(viagemId: string, params: Pick<TmsControleParams, "busca" | "cidadeSigla" | "status" | "pagina" | "porPagina"> = {}) {
-  return request<TmsControleVolumesResponseApi>(`/tms/controle-viagens/${viagemId}/volumes${tmsControleQuery(params)}`, { auth: true });
-}
-
-export function listTmsControleVolumeEventos(volumeId: string) {
-  return request<{ volume: { id: string; uuid: string; carga_codigo: string | null }; items: TmsControleVolumeEventApi[]; limite: number }>(
-    `/tms/controle-viagens/volumes/${volumeId}/eventos`,
+export function exportTmsControleViagens(
+  params: Omit<TmsControleParams, "pagina" | "porPagina"> = {},
+) {
+  return request<TmsControleResponseApi>(
+    `/tms/controle-viagens/exportacao${tmsControleQuery(params)}`,
     { auth: true },
   );
 }
 
-export function listTmsEtiquetas(data?: string) {
-  return request<{ data: string; timezone: string; items: TmsEtiquetaApi[] }>(`/tms/etiquetas${data ? `?data=${encodeURIComponent(data)}` : ""}`, { auth: true });
+export function listTmsControleVolumes(
+  viagemId: string,
+  params: Pick<TmsControleParams, "busca" | "cidadeSigla" | "status" | "pagina" | "porPagina"> = {},
+) {
+  return request<TmsControleVolumesResponseApi>(
+    `/tms/controle-viagens/${viagemId}/volumes${tmsControleQuery(params)}`,
+    { auth: true },
+  );
 }
-export function listTmsEtiquetaTargets(tipo:"palete"|"volume",busca?:string){return request<TmsEtiquetaTargetApi[]>(`/tms/etiquetas-alvos?tipo=${tipo}${busca?`&busca=${encodeURIComponent(busca)}`:""}`,{auth:true});}
+
+export function listTmsControleVolumeEventos(volumeId: string) {
+  return request<{
+    volume: { id: string; uuid: string; carga_codigo: string | null };
+    items: TmsControleVolumeEventApi[];
+    limite: number;
+  }>(`/tms/controle-viagens/volumes/${volumeId}/eventos`, { auth: true });
+}
+
+export function listTmsEtiquetas(data?: string) {
+  return request<{ data: string; timezone: string; items: TmsEtiquetaApi[] }>(
+    `/tms/etiquetas${data ? `?data=${encodeURIComponent(data)}` : ""}`,
+    { auth: true },
+  );
+}
+export function listTmsEtiquetaTargets(tipo: "palete" | "volume", busca?: string) {
+  return request<TmsEtiquetaTargetApi[]>(
+    `/tms/etiquetas-alvos?tipo=${tipo}${busca ? `&busca=${encodeURIComponent(busca)}` : ""}`,
+    { auth: true },
+  );
+}
 
 export function printTmsEtiqueta(volumeId: string, input: PrintTmsEtiquetaInput) {
   return request<TmsEtiquetaApi>(`/tms/volumes/${volumeId}/etiquetas`, {
@@ -1328,12 +1603,28 @@ export function printTmsEtiqueta(volumeId: string, input: PrintTmsEtiquetaInput)
   });
 }
 
-export function printTmsTargetEtiqueta(input: PrintTmsEtiquetaInput & { alvoTipo: "palete" | "volume"; alvoId: string; conferenciaId?: string; justificativa?: string; etiquetaOriginalId?: string }) {
-  return request<TmsEtiquetaApi>("/tms/etiquetas", { method: "POST", auth: true, body: JSON.stringify(input) });
+export function printTmsTargetEtiqueta(
+  input: PrintTmsEtiquetaInput & {
+    alvoTipo: "palete" | "volume";
+    alvoId: string;
+    conferenciaId?: string;
+    justificativa?: string;
+    etiquetaOriginalId?: string;
+  },
+) {
+  return request<TmsEtiquetaApi>("/tms/etiquetas", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
 }
 
 export function confirmTmsEtiqueta(id: string, sucesso: boolean, erro?: string) {
-  return request<TmsEtiquetaApi>(`/tms/etiquetas/${id}/confirmacao`, { method: "POST", auth: true, body: JSON.stringify({ sucesso, erro }) });
+  return request<TmsEtiquetaApi>(`/tms/etiquetas/${id}/confirmacao`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify({ sucesso, erro }),
+  });
 }
 
 export function listTmsDocumentos() {
@@ -1369,10 +1660,23 @@ export function conferirTmsDocumento(
   });
 }
 
-export function listTmsPaletes(params: { busca?: string; status?: string; proprietario?: string; localId?: string; pagina?: number; porPagina?: number } = {}) {
+export function listTmsPaletes(
+  params: {
+    busca?: string;
+    status?: string;
+    proprietario?: string;
+    localId?: string;
+    pagina?: number;
+    porPagina?: number;
+  } = {},
+) {
   const search = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => { if (value !== undefined && value !== "") search.set(key, String(value)); });
-  return request<TmsPaletesResponseApi>(`/tms/paletes${search.size ? `?${search}` : ""}`, { auth: true });
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  });
+  return request<TmsPaletesResponseApi>(`/tms/paletes${search.size ? `?${search}` : ""}`, {
+    auth: true,
+  });
 }
 
 export function createTmsPalete(input: CreateTmsPaleteInput) {
@@ -1384,13 +1688,55 @@ export function createTmsPalete(input: CreateTmsPaleteInput) {
 }
 
 export function updateTmsPalete(id: string, input: CreateTmsPaleteInput) {
-  return request<TmsPaleteApi>(`/tms/paletes/${id}`, { method: "PATCH", auth: true, body: JSON.stringify(input) });
+  return request<TmsPaleteApi>(`/tms/paletes/${id}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
 }
 
-export function listTmsPaleteOwners() { return request<TmsPaleteOwnerApi[]>("/tms/paletes/proprietarios", { auth: true }); }
-export function listTmsLocaisOperacionais(includeInactive = false) { return request<TmsLocalOperacionalApi[]>(`/tms/locais-operacionais${includeInactive ? "?incluirInativos=true" : ""}`, { auth: true }); }
-export function createTmsLocalOperacional(input: Omit<TmsLocalOperacionalApi,"id"|"cidade_nome"|"embarcacao_nome">) { return request<TmsLocalOperacionalApi>("/tms/locais-operacionais", { method:"POST", auth:true, body:JSON.stringify({codigo:input.codigo,nome:input.nome,tipo:input.tipo,cidadeSigla:input.cidade_sigla,embarcacaoId:input.embarcacao_id,ativo:input.ativo}) }); }
-export function updateTmsLocalOperacional(id:string,input:Omit<TmsLocalOperacionalApi,"id"|"cidade_nome"|"embarcacao_nome">) { return request<TmsLocalOperacionalApi>(`/tms/locais-operacionais/${id}`, { method:"PATCH", auth:true, body:JSON.stringify({codigo:input.codigo,nome:input.nome,tipo:input.tipo,cidadeSigla:input.cidade_sigla,embarcacaoId:input.embarcacao_id,ativo:input.ativo}) }); }
+export function listTmsPaleteOwners() {
+  return request<TmsPaleteOwnerApi[]>("/tms/paletes/proprietarios", { auth: true });
+}
+export function listTmsLocaisOperacionais(includeInactive = false) {
+  return request<TmsLocalOperacionalApi[]>(
+    `/tms/locais-operacionais${includeInactive ? "?incluirInativos=true" : ""}`,
+    { auth: true },
+  );
+}
+export function createTmsLocalOperacional(
+  input: Omit<TmsLocalOperacionalApi, "id" | "cidade_nome" | "embarcacao_nome">,
+) {
+  return request<TmsLocalOperacionalApi>("/tms/locais-operacionais", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify({
+      codigo: input.codigo,
+      nome: input.nome,
+      tipo: input.tipo,
+      cidadeSigla: input.cidade_sigla,
+      embarcacaoId: input.embarcacao_id,
+      ativo: input.ativo,
+    }),
+  });
+}
+export function updateTmsLocalOperacional(
+  id: string,
+  input: Omit<TmsLocalOperacionalApi, "id" | "cidade_nome" | "embarcacao_nome">,
+) {
+  return request<TmsLocalOperacionalApi>(`/tms/locais-operacionais/${id}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify({
+      codigo: input.codigo,
+      nome: input.nome,
+      tipo: input.tipo,
+      cidadeSigla: input.cidade_sigla,
+      embarcacaoId: input.embarcacao_id,
+      ativo: input.ativo,
+    }),
+  });
+}
 
 export function allocateTmsPalete(id: string, input: AllocateTmsPaleteInput) {
   return request<TmsPaleteApi>(`/tms/paletes/${id}/alocacoes`, {
@@ -1400,7 +1746,10 @@ export function allocateTmsPalete(id: string, input: AllocateTmsPaleteInput) {
   });
 }
 
-export function releaseTmsPalete(id: string, input: { localOperacionalId: string; motivo: string; clientUuid?: string }) {
+export function releaseTmsPalete(
+  id: string,
+  input: { localOperacionalId: string; motivo: string; clientUuid?: string },
+) {
   return request<TmsPaletesResponseApi>(`/tms/paletes/${id}/liberar`, {
     method: "POST",
     auth: true,
@@ -1408,14 +1757,88 @@ export function releaseTmsPalete(id: string, input: { localOperacionalId: string
   });
 }
 
-export function listTmsConferenciaDocumentos(viagemId:string,busca?:string) { return request<TmsConferenciaDocumentoApi[]>(`/tms/conferencias/documentos-disponiveis?viagemId=${encodeURIComponent(viagemId)}${busca ? `&busca=${encodeURIComponent(busca)}` : ""}`, {auth:true}); }
-export function listTmsConferencias(params:{viagemId?:string;status?:string;paleteId?:string}={}) { const q=new URLSearchParams(); if(params.viagemId)q.set("viagemId",params.viagemId);if(params.status)q.set("status",params.status);if(params.paleteId)q.set("paleteId",params.paleteId);return request<TmsConferenciaResumoApi[]>(`/tms/conferencias${q.size?`?${q}`:""}`,{auth:true}); }
-export function getTmsConferencia(id:string) { return request<TmsConferenciaApi>(`/tms/conferencias/${id}`,{auth:true}); }
-export function openTmsConferencia(input:{viagemId:string;paleteId?:string;localOperacionalId:string;cidadeDestinoSigla:string;tipoUnitizacao:"AVULSA"|"MP"|"PD"|"PC";clientUuid?:string}) { return request<TmsConferenciaApi>("/tms/conferencias",{method:"POST",auth:true,body:JSON.stringify(input)}); }
-export function addTmsConferenciaItem(id:string,input:{documentoFiscalId:string;quantidadeInformada:number;justificativa?:string;clientUuid?:string}) { return request<TmsConferenciaApi>(`/tms/conferencias/${id}/itens`,{method:"POST",auth:true,body:JSON.stringify(input)}); }
-export function scanTmsConferenciaVolume(id:string,input:{volumeUuid:string;clientUuid?:string}) { return request<TmsConferenciaApi>(`/tms/conferencias/${id}/volumes/receber`,{method:"POST",auth:true,body:JSON.stringify(input)}); }
-export function closeTmsConferencia(id:string,input:{estadoComposicao?:"parcial"|"completo";evidencias?:Array<{url:string;hash:string;nome?:string;mime?:string}>;observacao?:string;clientUuid?:string}) { return request<TmsConferenciaApi>(`/tms/conferencias/${id}/fechar`,{method:"POST",auth:true,body:JSON.stringify(input)}); }
-export async function uploadTmsConferenciaEvidencia(file:File) { const body=new FormData();body.append("arquivo",file);return request<{url:string;hash:string;nome:string;mime:string;bytes:number}>("/tms/conferencias/evidencias",{method:"POST",auth:true,body}); }
+export function listTmsConferenciaDocumentos(viagemId: string, busca?: string) {
+  return request<TmsConferenciaDocumentoApi[]>(
+    `/tms/conferencias/documentos-disponiveis?viagemId=${encodeURIComponent(viagemId)}${busca ? `&busca=${encodeURIComponent(busca)}` : ""}`,
+    { auth: true },
+  );
+}
+export function listTmsConferencias(
+  params: { viagemId?: string; status?: string; paleteId?: string } = {},
+) {
+  const q = new URLSearchParams();
+  if (params.viagemId) q.set("viagemId", params.viagemId);
+  if (params.status) q.set("status", params.status);
+  if (params.paleteId) q.set("paleteId", params.paleteId);
+  return request<TmsConferenciaResumoApi[]>(`/tms/conferencias${q.size ? `?${q}` : ""}`, {
+    auth: true,
+  });
+}
+export function getTmsConferencia(id: string) {
+  return request<TmsConferenciaApi>(`/tms/conferencias/${id}`, { auth: true });
+}
+export function openTmsConferencia(input: {
+  viagemId: string;
+  paleteId?: string;
+  localOperacionalId: string;
+  cidadeDestinoSigla: string;
+  tipoUnitizacao: "AVULSA" | "MP" | "PD" | "PC";
+  clientUuid?: string;
+}) {
+  return request<TmsConferenciaApi>("/tms/conferencias", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+export function addTmsConferenciaItem(
+  id: string,
+  input: {
+    documentoFiscalId: string;
+    quantidadeInformada: number;
+    justificativa?: string;
+    clientUuid?: string;
+  },
+) {
+  return request<TmsConferenciaApi>(`/tms/conferencias/${id}/itens`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+export function scanTmsConferenciaVolume(
+  id: string,
+  input: { volumeUuid: string; clientUuid?: string },
+) {
+  return request<TmsConferenciaApi>(`/tms/conferencias/${id}/volumes/receber`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+export function closeTmsConferencia(
+  id: string,
+  input: {
+    estadoComposicao?: "parcial" | "completo";
+    evidencias?: Array<{ url: string; hash: string; nome?: string; mime?: string }>;
+    observacao?: string;
+    clientUuid?: string;
+  },
+) {
+  return request<TmsConferenciaApi>(`/tms/conferencias/${id}/fechar`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+export async function uploadTmsConferenciaEvidencia(file: File) {
+  const body = new FormData();
+  body.append("arquivo", file);
+  return request<{ url: string; hash: string; nome: string; mime: string; bytes: number }>(
+    "/tms/conferencias/evidencias",
+    { method: "POST", auth: true, body },
+  );
+}
 
 export function listTmsPortaria() {
   return request<TmsPortariaApi[]>("/tms/portaria", { auth: true });
@@ -1429,10 +1852,18 @@ export function listTmsPrestacoes() {
   return request<PrestacaoContasApi[]>("/tms/prestacoes", { auth: true });
 }
 
-export function listMinhasTmsPrestacoes() { return request<PrestacaoContasApi[]>("/tms/prestacoes/minhas",{auth:true}); }
-export function getTmsPrestacaoConfig() { return request<PrestacaoConfigApi>("/tms/prestacoes/configuracao",{auth:true}); }
-export function listTmsPrestacaoViagens() { return request<PrestacaoViagemApi[]>("/tms/prestacoes/viagens-disponiveis",{auth:true}); }
-export function listTmsPrestacaoCidades() { return request<CidadeApi[]>("/tms/prestacoes/cidades",{auth:true}); }
+export function listMinhasTmsPrestacoes() {
+  return request<PrestacaoContasApi[]>("/tms/prestacoes/minhas", { auth: true });
+}
+export function getTmsPrestacaoConfig() {
+  return request<PrestacaoConfigApi>("/tms/prestacoes/configuracao", { auth: true });
+}
+export function listTmsPrestacaoViagens() {
+  return request<PrestacaoViagemApi[]>("/tms/prestacoes/viagens-disponiveis", { auth: true });
+}
+export function listTmsPrestacaoCidades() {
+  return request<CidadeApi[]>("/tms/prestacoes/cidades", { auth: true });
+}
 
 export function saveTmsPrestacao(input: {
   viagemId: string;
@@ -1447,8 +1878,23 @@ export function saveTmsPrestacao(input: {
   });
 }
 
-export function enviarTmsPrestacao(id:string) { return request<PrestacaoContasApi>(`/tms/prestacoes/${id}/enviar`,{method:"POST",auth:true,body:"{}"}); }
-export function conferirTmsPrestacao(id:string,input:{observacao?:string;clientUuid?:string}) { return request<PrestacaoContasApi>(`/tms/prestacoes/${id}/conferir`,{method:"POST",auth:true,body:JSON.stringify(input)}); }
+export function enviarTmsPrestacao(id: string) {
+  return request<PrestacaoContasApi>(`/tms/prestacoes/${id}/enviar`, {
+    method: "POST",
+    auth: true,
+    body: "{}",
+  });
+}
+export function conferirTmsPrestacao(
+  id: string,
+  input: { observacao?: string; clientUuid?: string },
+) {
+  return request<PrestacaoContasApi>(`/tms/prestacoes/${id}/conferir`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
 
 export function createTmsPortaria(input: CreateTmsPortariaInput) {
   return request<TmsPortariaApi>("/tms/portaria", {
@@ -1497,6 +1943,8 @@ export type BilheteApi = {
   viagem_codigo: string;
   origem_sigla: string;
   destino_sigla: string | null;
+  bilhete_origem_sigla?: string | null;
+  bilhete_destino_sigla?: string | null;
   data_hora_saida: string;
   embarcacao_nome: string;
   cliente_id: string | null;
@@ -1572,8 +2020,95 @@ export type GratuidadeApi = {
 
 export type ManifestoApi = {
   viagemId: string;
+  totalSaida: number;
+  totaisPorCidade: Record<string, number>;
+  totaisPorOrigem: Record<string, number>;
   resumo: Record<string, { total: number; receita: number }>;
   bilhetes: BilheteApi[];
+};
+
+export type PdvConfigApi = {
+  id: string;
+  versao: number;
+  valor: {
+    schemaVersion: 1;
+    canalPadrao: string;
+    caixa: {
+      tipo: string;
+      referenciaPadrao: string;
+      exigirAbertura: boolean;
+      valorAberturaPadrao: number | null;
+    };
+    formasPagamento: Array<{
+      codigo: "dinheiro" | "pix" | "cartao_credito" | "cartao_debito";
+      nome: string;
+      ativo: boolean;
+      permiteTroco: boolean;
+      parcelasMax: number;
+      acrescimoPercentual: number | null;
+    }>;
+    classes: Array<{
+      codigo: string;
+      nome: string;
+      descricao: string;
+      corPulseira: string | null;
+      ativo: boolean;
+    }>;
+    gratuidades: Array<{
+      codigo: "idoso" | "pcd" | "crianca" | "outro";
+      nome: string;
+      documentoExigido: string;
+      ativo: boolean;
+    }>;
+    fiscal: {
+      pdvPermiteEscolha: boolean;
+      pdvPadraoEmitir: boolean;
+      portalObrigatorio: boolean;
+      agenteOpcional: boolean;
+      integracaoAtiva: boolean;
+    };
+    impressao: { habilitada: boolean; modeloHomologado: string | null };
+  };
+};
+
+export type PdvVendaApi = {
+  id: string;
+  codigo: string;
+  caixa_id: string;
+  viagem_id: string;
+  viagem_codigo: string;
+  origem_sigla: string;
+  destino_sigla: string;
+  total_bruto: number;
+  total_isencoes: number;
+  total_pago: number;
+  troco: number;
+  emitir_bpe: boolean;
+  status: string;
+  criado_em: string;
+  operador_nome: string;
+  bilhetes: Array<{
+    id: string;
+    codigo: string;
+    qrToken: string;
+    classe: string;
+    tipo: string;
+    passageiroNome: string | null;
+    passageiroDocumento: string | null;
+    valor: number;
+  }>;
+  pagamentos: Array<{
+    formaPagamento: string;
+    valorInformado: number;
+    valorAplicado: number;
+    troco: number;
+    parcelas: number;
+  }>;
+};
+
+export type PdvVendaHistoricoApi = Omit<PdvVendaApi, "bilhetes" | "pagamentos"> & {
+  bilhetes: number;
+  pagamentos: Array<{ formaPagamento: string; valor: number; parcelas: number }>;
 };
 
 export type VendasResumoApi = {
@@ -1608,6 +2143,7 @@ export type ValidarBilheteApiResult = {
 
 export type CaixaApi = {
   id: string;
+  operador_id: string;
   tipo: string;
   referencia: string | null;
   status: string;
@@ -1787,6 +2323,50 @@ export function createBilhete(input: CreateBilheteApiInput) {
   });
 }
 
+export function getPdvConfig() {
+  return request<PdvConfigApi>("/vendas/pdv/configuracao", { auth: true });
+}
+
+export function listPdvVendas(params?: { caixaId?: string }) {
+  const search = new URLSearchParams();
+  if (params?.caixaId) search.set("caixaId", params.caixaId);
+  const suffix = search.toString() ? `?${search}` : "";
+  return request<PdvVendaHistoricoApi[]>(`/vendas/pdv/historico${suffix}`, { auth: true });
+}
+
+export function createPdvVenda(input: {
+  caixaId: string;
+  viagemId: string;
+  origemSigla: string;
+  destinoSigla: string;
+  clienteId?: string;
+  canal?: string;
+  emitirBpe?: boolean;
+  itens: Array<{
+    classe: string;
+    itemPrecoId?: string;
+    passageiroNome?: string;
+    passageiroDocumento?: string;
+    tipo?: "pdv" | "cortesia" | "gratuidade";
+    cortesiaCodigo?: string;
+    gratuidadeTipo?: "idoso" | "pcd" | "crianca" | "outro";
+    documentoUrl?: string;
+    observacoes?: string;
+  }>;
+  pagamentos: Array<{
+    formaPagamento: "dinheiro" | "pix" | "cartao_credito" | "cartao_debito";
+    valor: number;
+    parcelas?: number;
+  }>;
+  clientUuid: string;
+}) {
+  return request<PdvVendaApi>("/vendas/pdv/vendas", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
 export function validarBilhete(
   idOrQr: string,
   input?: { qrToken?: string; dispositivo?: string; clientUuid?: string; validadoEm?: string },
@@ -1846,6 +2426,38 @@ export function abrirCaixa(input: { tipo?: string; referencia?: string; valorAbe
     method: "POST",
     auth: true,
     body: JSON.stringify(input),
+  });
+}
+
+export function createCaixaMovimento(
+  caixaId: string,
+  input: {
+    tipo?: "venda_passagem" | "despacho_carga" | "sangria" | "suprimento" | "outro";
+    formaPagamento?:
+      | "dinheiro"
+      | "pix"
+      | "cartao_credito"
+      | "cartao_debito"
+      | "contrato"
+      | "cortesia"
+      | "gratuidade";
+    valor: number;
+    observacao?: string;
+    clientUuid?: string;
+  },
+) {
+  return request<CaixaMovimentoApi>(`/caixa/${caixaId}/movimentos`, {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function fecharCaixa(caixaId: string, valorFechamento?: number) {
+  return request<CaixaApi>(`/caixa/${caixaId}/fechar`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify({ valorFechamento }),
   });
 }
 

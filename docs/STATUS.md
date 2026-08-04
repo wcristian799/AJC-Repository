@@ -1,5 +1,17 @@
 # STATUS — Diário vivo do projeto AJC
 
+## Trabalho 2026-08-04 - Etapa 07: Passagens, PDV e embarque
+- Fonte vigente: requisitos `REQ-07-01` a `REQ-07-06` do documento de validação de 09/jul, usando a referência visual da Frota Martins apenas como inspiração de hierarquia para a estação de caixa.
+- PDV real: `/pos` foi reconstruído como estação operacional autenticada, com caixa explícito por operador, viagem e intertrecho reais, lotação e tarifas publicadas, cliente pesquisável ou venda avulsa, identificação individual, cesta com vários bilhetes, gratuidade legal, cortesia real, pagamento misto, troco, parcelamento condicionado à taxa publicada, histórico, sangria e comprovante com QR.
+- Integridade: `POST /api/vendas/pdv/vendas` recalcula preços e disponibilidade no PostgreSQL, trava concorrência, consome cortesias, cria bilhetes e movimentos de caixa na mesma transação, registra fiscal/auditoria e é idempotente por `client_uuid`. Não há preço, cliente, viagem, cortesia ou código de teste no front.
+- Manifesto e embarque: os totais de saída e por cidade passaram a vir do trecho persistido de cada bilhete; o cálculo visual simulado foi removido. `/embarque` não oferece mais leituras fictícias e usa classes/pulseiras da configuração publicada; QR já utilizado continua bloqueado pela API real.
+- Cadastros: `vendas_pdv_operacao` versiona caixa/canal, meios de pagamento, troco, parcelas/acréscimos, nomes e pulseiras das classes, gratuidades, regras de BP-e e hardware de impressão. Embarcações aceitam URL de foto editável e a viagem entrega a foto ao PDV.
+- Banco: migration `0033_passagens_pdv_operacional.sql` aplicada no WSL dev (`33/33`). Ela cria `venda_pos`, itens e pagamentos, vínculos com bilhete/caixa, origem/destino do bilhete, foto da embarcação, permissão de configuração e configuração inicial versionada.
+- QA: build NestJS aprovado; 9 suítes/30 testes Jest aprovados; build Vite/Nitro/SSR aprovado; smoke real criou `PDV-2026-98231235` e `BIL-2026-040114323D` com dinheiro + PIX, dois movimentos de caixa, manifesto por destino e retry idempotente; inspeção visual e funcional aprovada em 1440×1000 e 390×844.
+- Dependências honestas: BP-e permanece auditado, mas sem autorização real até senha/uso do PFX, credenciamento SEFAZ-PA e fornecedor/API; impressão física só ativa após cadastrar hardware homologado; fotos aparecem após a AJC cadastrar as URLs reais da frota.
+- Publicação: a Etapa 06 foi commitada e enviada como `007230f`. A Etapa 07 permanece local e ainda não foi commitada/pushada.
+- Próximo passo: homologação do operador e, após aceite, commit/push da Etapa 07 e aplicação da migration 0033 em produção.
+
 ## Trabalho 2026-07-31 - Etapa 01 da validação de telas: Início operacional
 - Contexto: a Etapa 01 do documento vivo de 09/jul exige manutenção explícita de alertas e caixas em tempo real separados por Porto, Embarcações e Agentes, com consistência entre os indicadores e as fontes operacionais.
 - O que foi feito: `/app/inicio` ganhou uma Central de Alertas completa sobre a API real, com cadastro, edição, resolução, reabertura, busca, histórico, severidade, módulo, RBAC e distinção entre alertas manuais e alertas automáticos derivados das fontes operacionais. Nenhuma ação usa mock ou altera dados apenas no navegador.

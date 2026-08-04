@@ -20,6 +20,7 @@ import { validateTmsControlConfig } from "../tms/tms-control-config.validator";
 import { validateTmsUnitizacaoConfig } from "../tms/tms-unitizacao-config.validator";
 import { validateTmsPrestacaoConfig } from "../tms/tms-prestacao-config.validator";
 import { validateEncomendasConfig } from "../encomendas/encomendas-config.validator";
+import { validatePdvConfig } from "../vendas/vendas-pdv.validator";
 
 interface PublishConfigBody {
   valor?: unknown;
@@ -65,6 +66,9 @@ export class ConfigController {
     if (chave.trim() === "encomendas_operacao" && !user.permissions.includes("encomendas.configurar")) {
       throw new ForbiddenException("Permissao insuficiente para configurar encomendas");
     }
+    if (chave.trim() === "vendas_pdv_operacao" && !user.permissions.includes("vendas.configurar")) {
+      throw new ForbiddenException("Permissao insuficiente para configurar o PDV");
+    }
     if (chave.trim() === "navegacao_rotas_horarios") {
       validateNavegacaoRoutesConfig(body.valor);
     }
@@ -82,6 +86,9 @@ export class ConfigController {
     }
     if (chave.trim() === "encomendas_operacao") {
       validateEncomendasConfig(body.valor);
+    }
+    if (chave.trim() === "vendas_pdv_operacao") {
+      validatePdvConfig(body.valor);
     }
     return this.repository.publish(chave.trim(), body.valor, user.sub);
   }

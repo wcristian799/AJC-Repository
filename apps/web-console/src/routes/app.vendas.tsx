@@ -1,10 +1,30 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Ticket, Plus, QrCode, Globe, Monitor, Smartphone, Users, FileText, Gift, ClipboardList } from "lucide-react";
+import {
+  Ticket,
+  Plus,
+  QrCode,
+  Globe,
+  Monitor,
+  Smartphone,
+  Users,
+  FileText,
+  Gift,
+  ClipboardList,
+} from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
 import {
-  SectionHeader, KPIStat, DataTable, FilterBar, FilterChip, PrimaryButton, GhostButton,
-  StatusChip, CounterBadge, Tag, brl,
+  SectionHeader,
+  KPIStat,
+  DataTable,
+  FilterBar,
+  FilterChip,
+  PrimaryButton,
+  GhostButton,
+  StatusChip,
+  CounterBadge,
+  Tag,
+  brl,
 } from "@/components/ops/primitives";
 import { CountUp, ShimmerBar } from "@/components/ops/motion-bits";
 import {
@@ -86,7 +106,14 @@ const TIPO_TARIFA_LABEL: Record<TipoTarifa, string> = {
 };
 
 function bilheteToRow(b: BilheteApi): PassagemRow {
-  const tipoLabel = b.tipo === "cortesia" ? "Cortesia" : b.tipo === "gratuidade" ? "Gratuidade" : b.tipo === "contrato" ? "Contrato" : null;
+  const tipoLabel =
+    b.tipo === "cortesia"
+      ? "Cortesia"
+      : b.tipo === "gratuidade"
+        ? "Gratuidade"
+        : b.tipo === "contrato"
+          ? "Contrato"
+          : null;
   return {
     id: b.id,
     qr: b.qr_token ?? b.codigo,
@@ -144,7 +171,18 @@ function canalDescription(canal: string) {
 }
 
 function canaisFromBilhetes(bilhetes: BilheteApi[]) {
-  const map = new Map<string, { id: string; canal: string; rotulo: string; descricao: string; bilhetes: number; receita: number; online: boolean }>();
+  const map = new Map<
+    string,
+    {
+      id: string;
+      canal: string;
+      rotulo: string;
+      descricao: string;
+      bilhetes: number;
+      receita: number;
+      online: boolean;
+    }
+  >();
   for (const bilhete of bilhetes) {
     const canal = bilhete.canal ?? bilhete.tipo;
     const row = map.get(canal) ?? {
@@ -164,9 +202,17 @@ function canaisFromBilhetes(bilhetes: BilheteApi[]) {
 }
 
 function ocupacaoFromBilhetes(bilhetes: BilheteApi[]) {
-  const map = new Map<string, { classe: string; capacidade: number; ocupados: number; receita: number }>();
+  const map = new Map<
+    string,
+    { classe: string; capacidade: number; ocupados: number; receita: number }
+  >();
   for (const bilhete of bilhetes) {
-    const row = map.get(bilhete.classe) ?? { classe: bilhete.classe, capacidade: 0, ocupados: 0, receita: 0 };
+    const row = map.get(bilhete.classe) ?? {
+      classe: bilhete.classe,
+      capacidade: 0,
+      ocupados: 0,
+      receita: 0,
+    };
     row.ocupados += 1;
     row.receita += Number(bilhete.preco_pago ?? 0);
     map.set(bilhete.classe, row);
@@ -175,7 +221,12 @@ function ocupacaoFromBilhetes(bilhetes: BilheteApi[]) {
 }
 
 function viagemLabel(v: NavegacaoViagemApi) {
-  const saida = new Date(v.dataHoraSaida).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const saida = new Date(v.dataHoraSaida).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return `${v.codigo ?? "Viagem"} · ${v.origemSigla} → ${v.destinoSigla ?? ""} · ${saida}`;
 }
 
@@ -199,24 +250,45 @@ function Vendas() {
   const passagens = useMemo(() => bilhetes.map(bilheteToRow), [bilhetes]);
   const total = passagens.length;
   const validadas = passagens.filter((p) => p.status === "validado" || p.status === "usado").length;
-  const gratuidades = gratuidadesApi.length || passagens.filter((p) => p.classe === "Gratuidade").length;
+  const gratuidades =
+    gratuidadesApi.length || passagens.filter((p) => p.classe === "Gratuidade").length;
   const cortesias = passagens.filter((p) => p.classe === "Cortesia").length;
   const receita = passagens.reduce((s, p) => s + p.valor, 0);
 
-  const canais = useMemo(() => resumo?.canais.length ? resumo.canais.map((canal) => ({
-    ...canal,
-    rotulo: canalLabel(canal.canal),
-    descricao: canalDescription(canal.canal),
-  })) : canaisFromBilhetes(bilhetes), [bilhetes, resumo]);
-  const ocupacaoClasses = useMemo(() => resumo?.ocupacao.length ? resumo.ocupacao : ocupacaoFromBilhetes(bilhetes), [bilhetes, resumo]);
+  const canais = useMemo(
+    () =>
+      resumo?.canais.length
+        ? resumo.canais.map((canal) => ({
+            ...canal,
+            rotulo: canalLabel(canal.canal),
+            descricao: canalDescription(canal.canal),
+          }))
+        : canaisFromBilhetes(bilhetes),
+    [bilhetes, resumo],
+  );
+  const ocupacaoClasses = useMemo(
+    () => (resumo?.ocupacao.length ? resumo.ocupacao : ocupacaoFromBilhetes(bilhetes)),
+    [bilhetes, resumo],
+  );
   const agentes = resumo?.agentes ?? [];
   const receitaCanais = canais.reduce((s, c) => s + c.receita, 0);
   const bilhetesCanais = canais.reduce((s, c) => s + c.bilhetes, 0);
-  const passagensRegulatorias = passagens.filter((p) => p.classe === "Gratuidade" || p.classe === "Cortesia");
-  const viagensAtivas = useMemo(() => viagens.filter((v) => v.status !== "concluida" && v.status !== "cancelada"), [viagens]);
-  const viagemSelecionada = viagensAtivas.find((v) => v.id === passagemForm.viagemId) ?? viagensAtivas[0];
+  const passagensRegulatorias = passagens.filter(
+    (p) => p.classe === "Gratuidade" || p.classe === "Cortesia",
+  );
+  const viagensAtivas = useMemo(
+    () => viagens.filter((v) => v.status !== "concluida" && v.status !== "cancelada"),
+    [viagens],
+  );
+  const viagemSelecionada =
+    viagensAtivas.find((v) => v.id === passagemForm.viagemId) ?? viagensAtivas[0];
   const precoNovaPassagem = viagemSelecionada
-    ? precoPassagemPorClasseApi(precosPassagem, viagemSelecionada.origemSigla, viagemSelecionada.destinoSigla ?? "", passagemForm.classe)
+    ? precoPassagemPorClasseApi(
+        precosPassagem,
+        viagemSelecionada.origemSigla,
+        viagemSelecionada.destinoSigla ?? "",
+        passagemForm.classe,
+      )
     : 0;
   const inputCls =
     "h-10 w-full rounded-md bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]";
@@ -245,11 +317,13 @@ function Vendas() {
         setBilhetes(bilhetesApi);
         setGratuidadesApi(gratuidades);
         setResumo(resumoApi);
-        const ativas = viagensApi.filter((v) => v.status !== "concluida" && v.status !== "cancelada");
+        const ativas = viagensApi.filter(
+          (v) => v.status !== "concluida" && v.status !== "cancelada",
+        );
         setViagens(viagensApi);
         setPrecosPassagem(precosApi);
-        if (!passagemForm.viagemId && ativas[0]) {
-          setPassagemForm((prev) => ({ ...prev, viagemId: ativas[0].id }));
+        if (ativas[0]) {
+          setPassagemForm((prev) => (prev.viagemId ? prev : { ...prev, viagemId: ativas[0].id }));
         }
       } catch (error) {
         console.error(error);
@@ -288,7 +362,11 @@ function Vendas() {
         emitirBpe: false,
         clientUuid: crypto.randomUUID(),
       });
-      const [bilhetesApi, gratuidades, resumoApi] = await Promise.all([listBilhetes(), listGratuidades(), getVendasResumo()]);
+      const [bilhetesApi, gratuidades, resumoApi] = await Promise.all([
+        listBilhetes(),
+        listGratuidades(),
+        getVendasResumo(),
+      ]);
       setBilhetes(bilhetesApi.length ? bilhetesApi : [novo, ...bilhetes]);
       setGratuidadesApi(gratuidades);
       setResumo(resumoApi);
@@ -304,15 +382,18 @@ function Vendas() {
   }
 
   function exportarRegulatorioCsv() {
-    downloadCsv("ajc-regulatorio-gratuidades-cortesias.csv", passagensRegulatorias.map((p) => ({
-      qr: p.qr,
-      beneficiario: p.passageiro,
-      documento: p.documento,
-      viagem: p.viagemCodigo,
-      tipo: p.classe,
-      canal: p.canal,
-      status: p.status,
-    })));
+    downloadCsv(
+      "ajc-regulatorio-gratuidades-cortesias.csv",
+      passagensRegulatorias.map((p) => ({
+        qr: p.qr,
+        beneficiario: p.passageiro,
+        documento: p.documento,
+        viagem: p.viagemCodigo,
+        tipo: p.classe,
+        canal: p.canal,
+        status: p.status,
+      })),
+    );
   }
 
   function exportarRegulatorioPdf() {
@@ -339,8 +420,12 @@ function Vendas() {
         description="Portal online, app, PDV, totem e validação por QR. Cortesias e gratuidades com relatório regulatório."
         actions={
           <>
-            <Link to="/pos"><GhostButton icon={Monitor}>Abrir PDV</GhostButton></Link>
-            <Link to="/cliente"><GhostButton icon={Smartphone}>Compra pública</GhostButton></Link>
+            <Link to="/pos">
+              <GhostButton icon={Monitor}>Abrir PDV</GhostButton>
+            </Link>
+            <Link to="/cliente">
+              <GhostButton icon={Smartphone}>Compra pública</GhostButton>
+            </Link>
             <PrimaryButton
               icon={Plus}
               onClick={() => {
@@ -355,10 +440,34 @@ function Vendas() {
       />
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KPIStat index={0} label="Passagens emitidas (hoje)" value={String(total)} hint={`${validadas} já validadas`} delta={{ value: "+18", positive: true }} icon={Ticket} />
-        <KPIStat index={1} label="Receita do dia" value={brl(receita)} hint="líquido de cortesias e gratuidades" delta={{ value: "+12%", positive: true }} />
-        <KPIStat index={2} label="Gratuidades" value={String(gratuidades)} hint="idoso, PCD — controle MP" icon={QrCode} />
-        <KPIStat index={3} label="Cortesias" value={String(cortesias)} hint="limite por viagem aplicado" />
+        <KPIStat
+          index={0}
+          label="Passagens emitidas (hoje)"
+          value={String(total)}
+          hint={`${validadas} já validadas`}
+          delta={{ value: "+18", positive: true }}
+          icon={Ticket}
+        />
+        <KPIStat
+          index={1}
+          label="Receita do dia"
+          value={brl(receita)}
+          hint="líquido de cortesias e gratuidades"
+          delta={{ value: "+12%", positive: true }}
+        />
+        <KPIStat
+          index={2}
+          label="Gratuidades"
+          value={String(gratuidades)}
+          hint="idoso, PCD — controle MP"
+          icon={QrCode}
+        />
+        <KPIStat
+          index={3}
+          label="Cortesias"
+          value={String(cortesias)}
+          hint="limite por viagem aplicado"
+        />
       </section>
       {erro && <p className="mt-3 text-xs text-[color:var(--danger)]">{erro}</p>}
 
@@ -370,7 +479,9 @@ function Vendas() {
             className={`relative -mb-px px-4 py-3 text-sm font-medium transition-colors ${tab === k ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
             {label}
-            {tab === k && <span className="absolute inset-x-2 -bottom-px h-[2px] bg-[color:var(--brand)]" />}
+            {tab === k && (
+              <span className="absolute inset-x-2 -bottom-px h-[2px] bg-[color:var(--brand)]" />
+            )}
           </button>
         ))}
       </div>
@@ -383,7 +494,9 @@ function Vendas() {
                 <Ticket className="h-4 w-4 text-[color:var(--brand)]" />
                 <h3 className="font-display text-lg">Nova passagem</h3>
                 <Tag tone="brand">emissao real</Tag>
-                <span className="ml-auto font-mono text-sm text-[color:var(--brand)]">{brl(precoNovaPassagem)}</span>
+                <span className="ml-auto font-mono text-sm text-[color:var(--brand)]">
+                  {brl(precoNovaPassagem)}
+                </span>
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(260px,1.5fr)_minmax(180px,0.8fr)_minmax(170px,0.7fr)]">
                 <label className="text-xs text-muted-foreground">
@@ -391,9 +504,15 @@ function Vendas() {
                   <select
                     className={`${inputCls} mt-1`}
                     value={viagemSelecionada?.id ?? passagemForm.viagemId}
-                    onChange={(event) => setPassagemForm((prev) => ({ ...prev, viagemId: event.target.value }))}
+                    onChange={(event) =>
+                      setPassagemForm((prev) => ({ ...prev, viagemId: event.target.value }))
+                    }
                   >
-                    {viagensAtivas.map((v) => <option key={v.id} value={v.id}>{viagemLabel(v)}</option>)}
+                    {viagensAtivas.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {viagemLabel(v)}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="text-xs text-muted-foreground">
@@ -401,9 +520,15 @@ function Vendas() {
                   <select
                     className={`${inputCls} mt-1`}
                     value={passagemForm.classe}
-                    onChange={(event) => setPassagemForm((prev) => ({ ...prev, classe: event.target.value }))}
+                    onChange={(event) =>
+                      setPassagemForm((prev) => ({ ...prev, classe: event.target.value }))
+                    }
                   >
-                    {PASSAGEM_CLASSES.map((classe) => <option key={classe} value={classe}>{CLASSE_LABEL[classe]}</option>)}
+                    {PASSAGEM_CLASSES.map((classe) => (
+                      <option key={classe} value={classe}>
+                        {CLASSE_LABEL[classe]}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="text-xs text-muted-foreground">
@@ -411,9 +536,18 @@ function Vendas() {
                   <select
                     className={`${inputCls} mt-1`}
                     value={passagemForm.formaPagamento}
-                    onChange={(event) => setPassagemForm((prev) => ({ ...prev, formaPagamento: event.target.value as FormaPagamentoPassagem }))}
+                    onChange={(event) =>
+                      setPassagemForm((prev) => ({
+                        ...prev,
+                        formaPagamento: event.target.value as FormaPagamentoPassagem,
+                      }))
+                    }
                   >
-                    {Object.entries(FORMA_PAGAMENTO_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    {Object.entries(FORMA_PAGAMENTO_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="text-xs text-muted-foreground">
@@ -421,7 +555,9 @@ function Vendas() {
                   <input
                     className={`${inputCls} mt-1`}
                     value={passagemForm.passageiroNome}
-                    onChange={(event) => setPassagemForm((prev) => ({ ...prev, passageiroNome: event.target.value }))}
+                    onChange={(event) =>
+                      setPassagemForm((prev) => ({ ...prev, passageiroNome: event.target.value }))
+                    }
                     placeholder="Nome completo"
                   />
                 </label>
@@ -430,12 +566,21 @@ function Vendas() {
                   <input
                     className={`${inputCls} mt-1`}
                     value={passagemForm.passageiroDocumento}
-                    onChange={(event) => setPassagemForm((prev) => ({ ...prev, passageiroDocumento: event.target.value }))}
+                    onChange={(event) =>
+                      setPassagemForm((prev) => ({
+                        ...prev,
+                        passageiroDocumento: event.target.value,
+                      }))
+                    }
                     placeholder="CPF/RG"
                   />
                 </label>
                 <div className="flex items-end gap-2">
-                  <PrimaryButton icon={Ticket} onClick={criarPassagem} disabled={salvandoPassagem || !viagemSelecionada || precoNovaPassagem <= 0}>
+                  <PrimaryButton
+                    icon={Ticket}
+                    onClick={criarPassagem}
+                    disabled={salvandoPassagem || !viagemSelecionada || precoNovaPassagem <= 0}
+                  >
                     {salvandoPassagem ? "Emitindo..." : "Emitir"}
                   </PrimaryButton>
                   <GhostButton onClick={() => setNovaPassagemOpen(false)}>Cancelar</GhostButton>
@@ -452,21 +597,70 @@ function Vendas() {
           <DataTable
             rows={passagens}
             columns={[
-              { key: "qr", header: "QR", render: (r) => <span className="font-mono text-[11px]">{r.qr}</span> },
-              { key: "passageiro", header: "Passageiro", render: (r) => (
-                <div>
-                  <p className="font-medium">{r.passageiro}</p>
-                  <p className="font-mono text-[10px] text-muted-foreground">{r.documento}</p>
-                </div>
-              ) },
-              { key: "viagem", header: "Viagem", render: (r) => <span className="font-mono text-xs">{r.viagemCodigo}</span> },
-              { key: "classe", header: "Classe", render: (r) => <Tag tone={r.classe === "Gratuidade" || r.classe === "Cortesia" ? "warning" : "brand"}>{r.classe}</Tag> },
-              { key: "canal", header: "Canal", render: (r) => <span className="text-xs">{r.canal}</span> },
-              { key: "valor", header: "Valor", align: "right", render: (r) => r.valor ? <span className="font-mono">{brl(r.valor)}</span> : <span className="text-xs text-muted-foreground">isento</span> },
-              { key: "status", header: "Status", render: (r) => {
-                const tone = r.status === "validado" ? "success" : r.status === "emitido" ? "info" : r.status === "usado" ? "neutral" : "offline";
-                return <StatusChip tone={tone as never}>{r.status}</StatusChip>;
-              } },
+              {
+                key: "qr",
+                header: "QR",
+                render: (r) => <span className="font-mono text-[11px]">{r.qr}</span>,
+              },
+              {
+                key: "passageiro",
+                header: "Passageiro",
+                render: (r) => (
+                  <div>
+                    <p className="font-medium">{r.passageiro}</p>
+                    <p className="font-mono text-[10px] text-muted-foreground">{r.documento}</p>
+                  </div>
+                ),
+              },
+              {
+                key: "viagem",
+                header: "Viagem",
+                render: (r) => <span className="font-mono text-xs">{r.viagemCodigo}</span>,
+              },
+              {
+                key: "classe",
+                header: "Classe",
+                render: (r) => (
+                  <Tag
+                    tone={
+                      r.classe === "Gratuidade" || r.classe === "Cortesia" ? "warning" : "brand"
+                    }
+                  >
+                    {r.classe}
+                  </Tag>
+                ),
+              },
+              {
+                key: "canal",
+                header: "Canal",
+                render: (r) => <span className="text-xs">{r.canal}</span>,
+              },
+              {
+                key: "valor",
+                header: "Valor",
+                align: "right",
+                render: (r) =>
+                  r.valor ? (
+                    <span className="font-mono">{brl(r.valor)}</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">isento</span>
+                  ),
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (r) => {
+                  const tone =
+                    r.status === "validado"
+                      ? "success"
+                      : r.status === "emitido"
+                        ? "info"
+                        : r.status === "usado"
+                          ? "neutral"
+                          : "offline";
+                  return <StatusChip tone={tone as never}>{r.status}</StatusChip>;
+                },
+              },
             ]}
           />
         </div>
@@ -476,15 +670,23 @@ function Vendas() {
         <div className="mt-5 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="surface-card brand-rail brand-rail-left p-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Receita · todos os canais</p>
-              <p className="big-numeric mt-3 text-3xl text-foreground">R$ <CountUp to={receitaCanais} duration={1.6} /></p>
-              <p className="mt-2 text-xs text-muted-foreground">{bilhetesCanais} bilhetes consolidados hoje</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Receita · todos os canais
+              </p>
+              <p className="big-numeric mt-3 text-3xl text-foreground">
+                R$ <CountUp to={receitaCanais} duration={1.6} />
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {bilhetesCanais} bilhetes consolidados hoje
+              </p>
             </div>
             <div className="surface-card p-5 xl:col-span-3">
               <div className="flex items-center gap-2">
                 <Globe className="h-4 w-4 text-[color:var(--brand)]" />
                 <p className="text-sm font-medium">Participação por canal</p>
-                <span className="ml-auto text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Portal online é MVP</span>
+                <span className="ml-auto text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Portal online é MVP
+                </span>
               </div>
               <div className="mt-4 space-y-3">
                 {canais.map((c) => {
@@ -493,9 +695,13 @@ function Vendas() {
                     <div key={c.id}>
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-medium text-foreground">{c.rotulo}</span>
-                        <span className="font-mono text-muted-foreground">{brl(c.receita)} · {pct}%</span>
+                        <span className="font-mono text-muted-foreground">
+                          {brl(c.receita)} · {pct}%
+                        </span>
                       </div>
-                      <div className="mt-1.5"><ShimmerBar pct={pct} tone={c.id === "portal" ? "brand" : "success"} /></div>
+                      <div className="mt-1.5">
+                        <ShimmerBar pct={pct} tone={c.id === "portal" ? "brand" : "success"} />
+                      </div>
                     </div>
                   );
                 })}
@@ -505,15 +711,37 @@ function Vendas() {
           <DataTable
             rows={canais}
             columns={[
-              { key: "rotulo", header: "Canal", render: (r) => (
-                <div>
-                  <p className="font-medium">{r.rotulo}</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{r.descricao}</p>
-                </div>
-              ) },
-              { key: "online", header: "Pagamento online", render: (r) => <StatusChip tone={r.online ? "success" : "neutral"}>{r.online ? "Integrado" : "Manual"}</StatusChip> },
-              { key: "bilhetes", header: "Bilhetes", align: "right", render: (r) => <span className="font-mono">{r.bilhetes}</span> },
-              { key: "receita", header: "Receita", align: "right", render: (r) => <span className="font-mono">{brl(r.receita)}</span> },
+              {
+                key: "rotulo",
+                header: "Canal",
+                render: (r) => (
+                  <div>
+                    <p className="font-medium">{r.rotulo}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{r.descricao}</p>
+                  </div>
+                ),
+              },
+              {
+                key: "online",
+                header: "Pagamento online",
+                render: (r) => (
+                  <StatusChip tone={r.online ? "success" : "neutral"}>
+                    {r.online ? "Integrado" : "Manual"}
+                  </StatusChip>
+                ),
+              },
+              {
+                key: "bilhetes",
+                header: "Bilhetes",
+                align: "right",
+                render: (r) => <span className="font-mono">{r.bilhetes}</span>,
+              },
+              {
+                key: "receita",
+                header: "Receita",
+                align: "right",
+                render: (r) => <span className="font-mono">{brl(r.receita)}</span>,
+              },
             ]}
           />
 
@@ -525,12 +753,21 @@ function Vendas() {
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {agentes.map((a, i) => (
-                <div key={a.id} className="rounded-lg bg-[color:var(--muted)] p-4 ring-1 ring-[color:var(--hairline)]">
+                <div
+                  key={a.id}
+                  className="rounded-lg bg-[color:var(--muted)] p-4 ring-1 ring-[color:var(--hairline)]"
+                >
                   <p className="text-sm font-medium text-foreground">{a.nome}</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{a.cidadeSigla} · {a.clientes} clientes</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {a.cidadeSigla} · {a.clientes} clientes
+                  </p>
                   <div className="mt-3 flex items-end justify-between gap-2">
-                    <span className="font-mono text-lg text-[color:var(--brand)]">{brl(a.volumeMes)}</span>
-                    <span className="text-[10px] text-muted-foreground">{a.bilhetes || 18 + i * 3} bilhetes</span>
+                    <span className="font-mono text-lg text-[color:var(--brand)]">
+                      {brl(a.volumeMes)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {a.bilhetes || 18 + i * 3} bilhetes
+                    </span>
                   </div>
                 </div>
               ))}
@@ -549,14 +786,21 @@ function Vendas() {
             return (
               <div key={o.classe} className="surface-card brand-rail brand-rail-left p-5">
                 <div className="flex items-center justify-between">
-                  <p className="font-display text-lg text-foreground">{CLASSE_LABEL[o.classe] ?? o.classe}</p>
+                  <p className="font-display text-lg text-foreground">
+                    {CLASSE_LABEL[o.classe] ?? o.classe}
+                  </p>
                   <Tag tone={tone as never}>Pulseira pendente</Tag>
                 </div>
                 <p className="big-numeric mt-4 text-3xl text-foreground">
-                  <CountUp to={o.ocupados} duration={1.4} /><span className="text-foreground/30">/{capacidade}</span>
+                  <CountUp to={o.ocupados} duration={1.4} />
+                  <span className="text-foreground/30">/{capacidade}</span>
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">{pct}% ocupado · {brl(ticketMedio)} ticket medio</p>
-                <div className="mt-4"><ShimmerBar pct={pct} tone={tone as never} /></div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {pct}% ocupado · {brl(ticketMedio)} ticket medio
+                </p>
+                <div className="mt-4">
+                  <ShimmerBar pct={pct} tone={tone as never} />
+                </div>
                 <p className="mt-3 text-[11px] text-muted-foreground">
                   {Math.max(0, capacidade - o.ocupados)} vagas livres · sem overbooking entre canais
                 </p>
@@ -576,36 +820,65 @@ function Vendas() {
             <Globe className="h-4 w-4 text-[color:var(--brand)]" />
             <h3 className="font-display text-lg">Relatório regulatório · MP</h3>
             <div className="ml-auto flex items-center gap-2">
-              <GhostButton icon={FileText} onClick={exportarRegulatorioPdf}>Exportar PDF</GhostButton>
-              <GhostButton icon={Users} onClick={exportarRegulatorioCsv}>Exportar CSV</GhostButton>
+              <GhostButton icon={FileText} onClick={exportarRegulatorioPdf}>
+                Exportar PDF
+              </GhostButton>
+              <GhostButton icon={Users} onClick={exportarRegulatorioCsv}>
+                Exportar CSV
+              </GhostButton>
             </div>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Listagem de gratuidades e cortesias para entrega ao Ministério Público (filtro por período, tipo e viagem). Exportável em PDF/CSV.
+            Listagem de gratuidades e cortesias para entrega ao Ministério Público (filtro por
+            período, tipo e viagem). Exportável em PDF/CSV.
           </p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">BP-e / SEFAZ-PA</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                BP-e / SEFAZ-PA
+              </p>
               <p className="mt-1 text-sm font-medium text-foreground">Obrigatório desde 2019</p>
             </div>
             <div className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
               <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">PDV</p>
-              <p className="mt-1 text-sm font-medium text-foreground">Emitir ou não no ato da venda</p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                Emitir ou não no ato da venda
+              </p>
             </div>
             <div className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Portal/app público</p>
-              <p className="mt-1 text-sm font-medium text-foreground">Emissão automática obrigatória</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                Portal/app público
+              </p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                Emissão automática obrigatória
+              </p>
             </div>
           </div>
           <div className="mt-5">
             <DataTable
               rows={passagensRegulatorias}
               columns={[
-                { key: "qr", header: "QR", render: (r) => <span className="font-mono text-[11px]">{r.qr}</span> },
+                {
+                  key: "qr",
+                  header: "QR",
+                  render: (r) => <span className="font-mono text-[11px]">{r.qr}</span>,
+                },
                 { key: "passageiro", header: "Beneficiário" },
-                { key: "documento", header: "Documento", render: (r) => <span className="font-mono text-xs">{r.documento}</span> },
-                { key: "viagem", header: "Viagem", render: (r) => <span className="font-mono text-xs">{r.viagemCodigo}</span> },
-                { key: "classe", header: "Tipo", render: (r) => <Tag tone="warning">{r.classe}</Tag> },
+                {
+                  key: "documento",
+                  header: "Documento",
+                  render: (r) => <span className="font-mono text-xs">{r.documento}</span>,
+                },
+                {
+                  key: "viagem",
+                  header: "Viagem",
+                  render: (r) => <span className="font-mono text-xs">{r.viagemCodigo}</span>,
+                },
+                {
+                  key: "classe",
+                  header: "Tipo",
+                  render: (r) => <Tag tone="warning">{r.classe}</Tag>,
+                },
                 { key: "canal", header: "Canal" },
               ]}
             />
@@ -620,7 +893,9 @@ function Vendas() {
 
 function parseLimiteCortesia(valor: unknown) {
   if (!valor || typeof valor !== "object") return null;
-  const raw = (valor as { porViagem?: unknown; limite?: unknown }).porViagem ?? (valor as { limite?: unknown }).limite;
+  const raw =
+    (valor as { porViagem?: unknown; limite?: unknown }).porViagem ??
+    (valor as { limite?: unknown }).limite;
   const limite = Number(raw);
   return Number.isInteger(limite) && limite > 0 ? limite : null;
 }
@@ -634,7 +909,9 @@ function CortesiasTab() {
   const [motivoId, setMotivoId] = useState<CortesiaMotivoId>(CORTESIA_MOTIVOS[0].id);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [observacao, setObservacao] = useState("Beneficiário indicado pela diretoria · validar documento no embarque");
+  const [observacao, setObservacao] = useState(
+    "Beneficiário indicado pela diretoria · validar documento no embarque",
+  );
 
   const viagem = viagensAtivas.find((v) => v.id === viagemId);
   const limite = limitePorViagem ?? 0;
@@ -658,7 +935,7 @@ function CortesiasTab() {
         setViagensAtivas(ativas);
         setCortesias(cortesiasApi);
         setLimitePorViagem(parseLimiteCortesia(limiteConfig.valor));
-        if (!viagemId && ativas[0]) setViagemId(ativas[0].id);
+        if (ativas[0]) setViagemId((current) => current || ativas[0].id);
       } catch (error) {
         console.error(error);
         setErro(error instanceof Error ? error.message : "Falha ao carregar cortesias");
@@ -702,32 +979,63 @@ function CortesiasTab() {
           <Tag tone="warning">Influência / relacionamento</Tag>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Cada cortesia gera um código vinculado à viagem. O limite por viagem é configurável em Cadastros.
+          Cada cortesia gera um código vinculado à viagem. O limite por viagem é configurável em
+          Cadastros.
         </p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Viagem</span>
-            <select className={`mt-1.5 ${inputCls}`} value={viagemId} onChange={(e) => setViagemId(e.target.value)}>
+            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Viagem
+            </span>
+            <select
+              className={`mt-1.5 ${inputCls}`}
+              value={viagemId}
+              onChange={(e) => setViagemId(e.target.value)}
+            >
               {viagensAtivas.map((v) => (
-                <option key={v.id} value={v.id}>{viagemLabel(v)}</option>
+                <option key={v.id} value={v.id}>
+                  {viagemLabel(v)}
+                </option>
               ))}
             </select>
           </label>
           <label className="block">
-            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Classe</span>
-            <select className={`mt-1.5 ${inputCls}`} value={classe} onChange={(e) => setClasse(e.target.value as CortesiaClasse)}>
-              {CORTESIA_CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
+            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Classe
+            </span>
+            <select
+              className={`mt-1.5 ${inputCls}`}
+              value={classe}
+              onChange={(e) => setClasse(e.target.value as CortesiaClasse)}
+            >
+              {CORTESIA_CLASSES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           </label>
           <label className="block sm:col-span-2">
-            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Motivo</span>
-            <select className={`mt-1.5 ${inputCls}`} value={motivoId} onChange={(e) => setMotivoId(e.target.value as CortesiaMotivoId)}>
-              {CORTESIA_MOTIVOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Motivo
+            </span>
+            <select
+              className={`mt-1.5 ${inputCls}`}
+              value={motivoId}
+              onChange={(e) => setMotivoId(e.target.value as CortesiaMotivoId)}
+            >
+              {CORTESIA_MOTIVOS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
             </select>
           </label>
           <label className="block sm:col-span-2">
-            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Observação / beneficiário</span>
+            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Observação / beneficiário
+            </span>
             <textarea
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
@@ -737,18 +1045,26 @@ function CortesiasTab() {
         </div>
 
         <p className="mt-3 text-[11px] text-muted-foreground">
-          Categorias/motivos de cortesia serão cadastrados em Cadastros; aqui o operador seleciona e detalha o contexto.
+          Categorias/motivos de cortesia serão cadastrados em Cadastros; aqui o operador seleciona e
+          detalha o contexto.
         </p>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <PrimaryButton icon={Plus} disabled={noLimite || salvando || !viagemId} onClick={gerarCortesia}>
+          <PrimaryButton
+            icon={Plus}
+            disabled={noLimite || salvando || !viagemId}
+            onClick={gerarCortesia}
+          >
             {salvando ? "Gerando..." : "Gerar código"}
           </PrimaryButton>
           {noLimite ? (
-            <StatusChip tone="danger">{limitePorViagem === null ? "Config pendente" : "Limite da viagem atingido"}</StatusChip>
+            <StatusChip tone="danger">
+              {limitePorViagem === null ? "Config pendente" : "Limite da viagem atingido"}
+            </StatusChip>
           ) : (
             <span className="text-xs text-muted-foreground">
-              Restam <strong className="text-foreground">{limite - emitidasCount}</strong> cortesia(s) para esta viagem
+              Restam <strong className="text-foreground">{limite - emitidasCount}</strong>{" "}
+              cortesia(s) para esta viagem
             </span>
           )}
           {erro && <span className="text-xs text-[color:var(--danger)]">{erro}</span>}
@@ -761,9 +1077,13 @@ function CortesiasTab() {
           {viagem?.codigo} · cortesias emitidas
         </p>
         <CounterBadge current={emitidasCount} total={limite} label="Emitidas nesta viagem" />
-        <p className={`text-center text-sm font-medium ${noLimite ? "text-[color:var(--danger)]" : "text-muted-foreground"}`}>
+        <p
+          className={`text-center text-sm font-medium ${noLimite ? "text-[color:var(--danger)]" : "text-muted-foreground"}`}
+        >
           {noLimite
-            ? limitePorViagem === null ? "Configure limite_cortesia em Cadastros para liberar emissão." : "Limite atingido — bloqueado até liberar em Cadastros."
+            ? limitePorViagem === null
+              ? "Configure limite_cortesia em Cadastros para liberar emissão."
+              : "Limite atingido — bloqueado até liberar em Cadastros."
             : `${emitidasCount} de ${limite} usadas nesta viagem`}
         </p>
       </div>
@@ -774,22 +1094,58 @@ function CortesiasTab() {
           rows={emitidasDaViagem}
           empty="Nenhuma cortesia emitida para esta viagem"
           columns={[
-            { key: "codigo", header: "Código", render: (r) => <span className="font-mono text-[11px]">{r.codigo}</span> },
-            { key: "viagem", header: "Viagem", render: (r) => <span className="font-mono text-xs">{r.viagem_codigo}</span> },
-            { key: "classe", header: "Classe", render: (r) => <Tag tone="warning">{r.classe ? CLASSE_LABEL[r.classe] ?? r.classe : "Qualquer"}</Tag> },
-            { key: "motivo", header: "Motivo", render: (r) => <span className="text-xs">{r.motivo}</span> },
-            { key: "observacao", header: "Observação", render: (r) => <span className="text-xs text-muted-foreground">{r.observacoes ?? "-"}</span> },
-            { key: "concedidoPor", header: "Concedido por", render: (r) => (
-              <div>
-                <p className="text-xs font-medium">{r.concedido_por_nome}</p>
-                <p className="text-[10px] text-muted-foreground">{new Date(r.criado_em).toLocaleString("pt-BR")}</p>
-              </div>
-            ) },
-            { key: "status", header: "Status", render: (r) => (
-              <StatusChip tone={r.status === "usada" ? "success" : "neutral"}>
-                {r.status === "usada" ? "Usada" : "Não usada"}
-              </StatusChip>
-            ) },
+            {
+              key: "codigo",
+              header: "Código",
+              render: (r) => <span className="font-mono text-[11px]">{r.codigo}</span>,
+            },
+            {
+              key: "viagem",
+              header: "Viagem",
+              render: (r) => <span className="font-mono text-xs">{r.viagem_codigo}</span>,
+            },
+            {
+              key: "classe",
+              header: "Classe",
+              render: (r) => (
+                <Tag tone="warning">
+                  {r.classe ? (CLASSE_LABEL[r.classe] ?? r.classe) : "Qualquer"}
+                </Tag>
+              ),
+            },
+            {
+              key: "motivo",
+              header: "Motivo",
+              render: (r) => <span className="text-xs">{r.motivo}</span>,
+            },
+            {
+              key: "observacao",
+              header: "Observação",
+              render: (r) => (
+                <span className="text-xs text-muted-foreground">{r.observacoes ?? "-"}</span>
+              ),
+            },
+            {
+              key: "concedidoPor",
+              header: "Concedido por",
+              render: (r) => (
+                <div>
+                  <p className="text-xs font-medium">{r.concedido_por_nome}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {new Date(r.criado_em).toLocaleString("pt-BR")}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: "status",
+              header: "Status",
+              render: (r) => (
+                <StatusChip tone={r.status === "usada" ? "success" : "neutral"}>
+                  {r.status === "usada" ? "Usada" : "Não usada"}
+                </StatusChip>
+              ),
+            },
           ]}
         />
       </div>
@@ -803,6 +1159,8 @@ function ManifestoTab() {
   const [viagensComPassageiros, setViagensComPassageiros] = useState<NavegacaoViagemApi[]>([]);
   const [viagemId, setViagemId] = useState<string>("");
   const [rows, setRows] = useState<PassagemRow[]>([]);
+  const [totaisCidadeApi, setTotaisCidadeApi] = useState<Record<string, number>>({});
+  const [totalSaidaApi, setTotalSaidaApi] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
   const viagem = viagensComPassageiros.find((v) => v.id === viagemId);
   const inputCls =
@@ -815,7 +1173,7 @@ function ManifestoTab() {
         const viagens = await listNavegacaoViagens();
         if (!alive) return;
         setViagensComPassageiros(viagens);
-        if (!viagemId && viagens[0]) setViagemId(viagens[0].id);
+        if (viagens[0]) setViagemId((current) => current || viagens[0].id);
       } catch (error) {
         console.error(error);
         setErro(error instanceof Error ? error.message : "Falha ao carregar viagens do manifesto");
@@ -835,6 +1193,8 @@ function ManifestoTab() {
         const manifesto = await getManifesto(viagemId);
         if (!alive) return;
         setRows(manifesto.bilhetes.map(bilheteToRow));
+        setTotaisCidadeApi(manifesto.totaisPorCidade);
+        setTotalSaidaApi(manifesto.totalSaida);
       } catch (error) {
         console.error(error);
         setErro(error instanceof Error ? error.message : "Falha ao carregar manifesto");
@@ -847,9 +1207,14 @@ function ManifestoTab() {
   }, [viagemId]);
 
   const totaisEscala = useMemo(() => {
-    const escalas = viagem?.escalas.map((e) => e.cidadeSigla) ?? [];
-    return escalas.map((cidade, i) => ({ cidade, total: Math.max(1, Math.round(rows.length / Math.max(escalas.length, 1)) - (i % 2)) }));
-  }, [rows.length, viagem]);
+    const routeCities = [
+      ...new Set([
+        ...(viagem?.escalas.map((e) => e.cidadeSigla) ?? []),
+        ...Object.keys(totaisCidadeApi),
+      ]),
+    ];
+    return routeCities.map((cidade) => ({ cidade, total: totaisCidadeApi[cidade] ?? 0 }));
+  }, [totaisCidadeApi, viagem]);
 
   const totaisClasse = useMemo(() => {
     const m = new Map<string, number>();
@@ -870,23 +1235,29 @@ function ManifestoTab() {
 
   const embarcados = rows.filter((p) => p.status === "usado" || p.status === "validado").length;
   const tarifaTone: Record<TipoTarifa, "brand" | "warning" | "neutral"> = {
-    paga: "brand", cortesia: "warning", gratuidade: "warning", contrato: "neutral",
+    paga: "brand",
+    cortesia: "warning",
+    gratuidade: "warning",
+    contrato: "neutral",
   };
   const manifestoCodigo = viagem?.codigo ?? viagemId ?? "viagem";
   const manifestoNome = `ajc-manifesto-${manifestoCodigo}`;
 
   function exportarManifestoCsv() {
-    downloadCsv(`${manifestoNome}.csv`, rows.map((p) => ({
-      qr: p.qr,
-      passageiro: p.passageiro,
-      documento: p.documento,
-      viagem: p.viagemCodigo,
-      classe: p.classe,
-      canal: p.canal,
-      assento: p.assento ?? "",
-      status: p.status,
-      valor: p.valor,
-    })));
+    downloadCsv(
+      `${manifestoNome}.csv`,
+      rows.map((p) => ({
+        qr: p.qr,
+        passageiro: p.passageiro,
+        documento: p.documento,
+        viagem: p.viagemCodigo,
+        classe: p.classe,
+        canal: p.canal,
+        assento: p.assento ?? "",
+        status: p.status,
+        valor: p.valor,
+      })),
+    );
   }
 
   function exportarManifestoPdf() {
@@ -911,22 +1282,36 @@ function ManifestoTab() {
         <ClipboardList className="h-4 w-4 text-[color:var(--brand)]" />
         <div className="min-w-0">
           <p className="text-sm font-medium">Manifesto de passageiros</p>
-          <p className="text-xs text-muted-foreground">Base de conferência de embarque · derivada das passagens da viagem.</p>
+          <p className="text-xs text-muted-foreground">
+            Base de conferência de embarque · derivada das passagens da viagem.
+          </p>
         </div>
-        <select className={`ml-auto ${inputCls}`} value={viagemId} onChange={(e) => setViagemId(e.target.value)}>
+        <select
+          className={`ml-auto ${inputCls}`}
+          value={viagemId}
+          onChange={(e) => setViagemId(e.target.value)}
+        >
           {viagensComPassageiros.map((v) => (
-            <option key={v.id} value={v.id}>{viagemLabel(v)}</option>
+            <option key={v.id} value={v.id}>
+              {viagemLabel(v)}
+            </option>
           ))}
         </select>
-        <GhostButton icon={FileText} onClick={exportarManifestoPdf}>Exportar PDF</GhostButton>
-        <GhostButton icon={Users} onClick={exportarManifestoCsv}>Exportar CSV</GhostButton>
+        <GhostButton icon={FileText} onClick={exportarManifestoPdf}>
+          Exportar PDF
+        </GhostButton>
+        <GhostButton icon={Users} onClick={exportarManifestoCsv}>
+          Exportar CSV
+        </GhostButton>
         {erro && <span className="text-xs text-[color:var(--danger)]">{erro}</span>}
       </div>
 
       {/* Totais */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
         <div className="surface-card p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total por classe</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Total por classe
+          </p>
           <div className="mt-4 space-y-3">
             {totaisClasse.map(([cl, n]) => {
               const pct = Math.round((n / Math.max(rows.length, 1)) * 100);
@@ -934,16 +1319,22 @@ function ManifestoTab() {
                 <div key={cl}>
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium text-foreground">{cl}</span>
-                    <span className="big-numeric text-base text-foreground"><CountUp to={n} duration={1.2} /></span>
+                    <span className="big-numeric text-base text-foreground">
+                      <CountUp to={n} duration={1.2} />
+                    </span>
                   </div>
-                  <div className="mt-1.5"><ShimmerBar pct={pct} tone="brand" /></div>
+                  <div className="mt-1.5">
+                    <ShimmerBar pct={pct} tone="brand" />
+                  </div>
                 </div>
               );
             })}
           </div>
         </div>
         <div className="surface-card p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total por tipo de tarifa</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Total por tipo de tarifa
+          </p>
           <div className="mt-4 space-y-3">
             {totaisTarifa.map(([t, n]) => {
               const pct = Math.round((n / Math.max(rows.length, 1)) * 100);
@@ -952,31 +1343,52 @@ function ManifestoTab() {
                 <div key={t}>
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium text-foreground">{TIPO_TARIFA_LABEL[t]}</span>
-                    <span className="big-numeric text-base text-foreground"><CountUp to={n} duration={1.2} /></span>
+                    <span className="big-numeric text-base text-foreground">
+                      <CountUp to={n} duration={1.2} />
+                    </span>
                   </div>
-                  <div className="mt-1.5"><ShimmerBar pct={pct} tone={tone} /></div>
+                  <div className="mt-1.5">
+                    <ShimmerBar pct={pct} tone={tone} />
+                  </div>
                 </div>
               );
             })}
           </div>
         </div>
         <div className="surface-card brand-rail brand-rail-left p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total geral da saída</p>
-          <p className="big-numeric mt-3 text-3xl text-foreground">
-            <CountUp to={embarcados} duration={1.4} /><span className="text-foreground/30">/{rows.length}</span>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Total geral da saída
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">{viagem?.codigo} · status de embarque</p>
-          <div className="mt-4"><ShimmerBar pct={Math.round((embarcados / Math.max(rows.length, 1)) * 100)} tone="success" /></div>
+          <p className="big-numeric mt-3 text-3xl text-foreground">
+            <CountUp to={embarcados} duration={1.4} />
+            <span className="text-foreground/30">/{totalSaidaApi}</span>
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {viagem?.codigo} · status de embarque
+          </p>
+          <div className="mt-4">
+            <ShimmerBar
+              pct={Math.round((embarcados / Math.max(totalSaidaApi, 1)) * 100)}
+              tone="success"
+            />
+          </div>
         </div>
       </div>
 
       <div className="surface-card p-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total por cidade / escala</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Total por cidade / escala
+        </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {totaisEscala.map((e) => (
-            <div key={e.cidade} className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
+            <div
+              key={e.cidade}
+              className="rounded-lg bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]"
+            >
               <p className="font-mono text-lg text-foreground">{e.total}</p>
-              <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{e.cidade}</p>
+              <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                {e.cidade}
+              </p>
             </div>
           ))}
         </div>
@@ -986,23 +1398,52 @@ function ManifestoTab() {
         rows={rows}
         empty="Sem passageiros para esta viagem"
         columns={[
-          { key: "passageiro", header: "Passageiro", render: (r) => (
-            <div>
-              <p className="font-medium">{r.passageiro}</p>
-              <p className="font-mono text-[10px] text-muted-foreground">{r.documento}</p>
-            </div>
-          ) },
-          { key: "classe", header: "Classe", render: (r) => <Tag tone={tipoTarifaFromClasse(r.classe) === "paga" ? "brand" : "warning"}>{r.classe}</Tag> },
-          { key: "assento", header: "Assento", render: (r) => r.assento ? <span className="font-mono text-xs">{r.assento}</span> : <span className="text-xs text-muted-foreground">—</span> },
-          { key: "tarifa", header: "Tipo de tarifa", render: (r) => {
-            const t = tipoTarifaFromClasse(r.classe);
-            return <Tag tone={tarifaTone[t]}>{TIPO_TARIFA_LABEL[t]}</Tag>;
-          } },
-          { key: "embarque", header: "Embarque", render: (r) => (
-            <StatusChip tone={r.status === "usado" ? "success" : "neutral"}>
-              {r.status === "usado" ? "Embarcado" : "Não embarcado"}
-            </StatusChip>
-          ) },
+          {
+            key: "passageiro",
+            header: "Passageiro",
+            render: (r) => (
+              <div>
+                <p className="font-medium">{r.passageiro}</p>
+                <p className="font-mono text-[10px] text-muted-foreground">{r.documento}</p>
+              </div>
+            ),
+          },
+          {
+            key: "classe",
+            header: "Classe",
+            render: (r) => (
+              <Tag tone={tipoTarifaFromClasse(r.classe) === "paga" ? "brand" : "warning"}>
+                {r.classe}
+              </Tag>
+            ),
+          },
+          {
+            key: "assento",
+            header: "Assento",
+            render: (r) =>
+              r.assento ? (
+                <span className="font-mono text-xs">{r.assento}</span>
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              ),
+          },
+          {
+            key: "tarifa",
+            header: "Tipo de tarifa",
+            render: (r) => {
+              const t = tipoTarifaFromClasse(r.classe);
+              return <Tag tone={tarifaTone[t]}>{TIPO_TARIFA_LABEL[t]}</Tag>;
+            },
+          },
+          {
+            key: "embarque",
+            header: "Embarque",
+            render: (r) => (
+              <StatusChip tone={r.status === "usado" ? "success" : "neutral"}>
+                {r.status === "usado" ? "Embarcado" : "Não embarcado"}
+              </StatusChip>
+            ),
+          },
         ]}
       />
     </div>
@@ -1031,10 +1472,23 @@ function csvCell(value: unknown) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function printHtmlReport({ title, subtitle, rows }: { title: string; subtitle: string; rows: Array<Record<string, unknown>> }) {
+function printHtmlReport({
+  title,
+  subtitle,
+  rows,
+}: {
+  title: string;
+  subtitle: string;
+  rows: Array<Record<string, unknown>>;
+}) {
   const headers = rows[0] ? Object.keys(rows[0]) : ["Sem dados"];
   const tableRows = rows.length
-    ? rows.map((row) => `<tr>${headers.map((header) => `<td>${escapeHtml(row[header])}</td>`).join("")}</tr>`).join("")
+    ? rows
+        .map(
+          (row) =>
+            `<tr>${headers.map((header) => `<td>${escapeHtml(row[header])}</td>`).join("")}</tr>`,
+        )
+        .join("")
     : `<tr><td colspan="${headers.length}">Sem registros para exportar.</td></tr>`;
   const popup = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800");
   if (!popup) return;

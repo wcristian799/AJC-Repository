@@ -9,7 +9,7 @@ export class CaixaRepository {
   async list() {
     const result = await this.db.query(
       `
-      SELECT c.id, c.tipo, c.referencia, c.status::text, c.aberto_em, c.fechado_em,
+      SELECT c.id, c.operador_id, c.tipo, c.referencia, c.status::text, c.aberto_em, c.fechado_em,
              c.valor_abertura, c.valor_fechamento, u.nome AS operador_nome,
              COALESCE(sum(CASE WHEN cm.valor > 0 THEN cm.valor ELSE 0 END), 0)::numeric(12,2) AS entradas_dia,
              COALESCE(sum(CASE WHEN cm.valor < 0 THEN abs(cm.valor) ELSE 0 END), 0)::numeric(12,2) AS saidas_dia,

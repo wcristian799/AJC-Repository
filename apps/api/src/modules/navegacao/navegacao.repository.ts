@@ -7,6 +7,7 @@ export interface ViagemDto {
   codigo: string | null;
   embarcacaoId: string;
   embarcacaoNome: string;
+  embarcacaoFotoUrl: string | null;
   origemSigla: string;
   destinoSigla: string | null;
   dataHoraSaida: string;
@@ -81,6 +82,7 @@ export class NavegacaoRepository {
       codigo: string | null;
       embarcacao_id: string;
       embarcacao_nome: string;
+      embarcacao_foto_url: string | null;
       origem_sigla: string;
       destino_sigla: string | null;
       data_hora_saida: Date;
@@ -96,7 +98,7 @@ export class NavegacaoRepository {
       motivo_cancelamento: string | null;
     }>(
       `
-      SELECT v.id, v.codigo, v.embarcacao_id, e.nome AS embarcacao_nome,
+      SELECT v.id, v.codigo, v.embarcacao_id, e.nome AS embarcacao_nome, e.foto_url AS embarcacao_foto_url,
              v.origem_sigla, v.destino_sigla, v.data_hora_saida, v.data_hora_retorno,
              v.status::text, v.situacao::text, v.capacidade_pax_disponivel, v.observacoes,
              v.rota_template_id, v.config_versao_id, cv.versao AS config_versao,
@@ -133,6 +135,7 @@ export class NavegacaoRepository {
       codigo: row.codigo,
       embarcacaoId: row.embarcacao_id,
       embarcacaoNome: row.embarcacao_nome,
+      embarcacaoFotoUrl: row.embarcacao_foto_url,
       origemSigla: row.origem_sigla,
       destinoSigla: row.destino_sigla,
       dataHoraSaida: row.data_hora_saida.toISOString(),

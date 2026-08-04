@@ -4,6 +4,8 @@
 >
 > **Escopo MVP:** o **portal público de venda online com pagamento integrado** faz parte do MVP (Fase 1) — detalhamento na **Parte C**. Emissão fiscal do bilhete (BP-e) é dependência parcial: PFX recebido em 29/jun/2026, mas ainda falta senha/validade/credenciamento/fornecedor fiscal (ver §C.7).
 
+> **Etapa 07 implementada (04/ago/2026):** o PDV presencial usa venda transacional real com vários bilhetes e pagamentos, intertrecho persistido, caixa do operador, cortesia/gratuidade auditável, manifesto por cidade e configuração versionada em Cadastros. O layout segue o design Crimson Prestige e usa a estação da Frota Martins apenas como referência de hierarquia, sem copiar identidade visual. Detalhes e aceite: `docs/feedback/2026-08-04-etapa-07-passagens-pdv.md`.
+
 ---
 
 ## Parte A — SPEC técnica

@@ -18,6 +18,7 @@ export interface EmbarcacaoDto {
   status: string;
   capacidadeCarga: number | null;
   capacidadePax: Record<string, unknown>;
+  fotoUrl: string | null;
 }
 
 export interface AgenteDto {
@@ -69,6 +70,7 @@ export interface SaveEmbarcacaoInput {
   status?: 'ativa' | 'manutencao' | 'alugada';
   capacidadeCarga?: number | null;
   capacidadePax?: Record<string, unknown>;
+  fotoUrl?: string | null;
 }
 
 export interface SaveUsuarioInput {
@@ -329,9 +331,10 @@ export class CadastrosRepository {
       status: string;
       capacidade_carga: string | null;
       capacidade_pax: Record<string, unknown> | null;
+      foto_url: string | null;
     }>(
       `
-      SELECT id, nome, tipo::text, status::text, capacidade_carga, capacidade_pax
+      SELECT id, nome, tipo::text, status::text, capacidade_carga, capacidade_pax, foto_url
       FROM embarcacao
       WHERE excluido_em IS NULL
       ORDER BY nome
@@ -344,6 +347,7 @@ export class CadastrosRepository {
       status: row.status,
       capacidadeCarga: row.capacidade_carga ? Number(row.capacidade_carga) : null,
       capacidadePax: row.capacidade_pax ?? {},
+      fotoUrl: row.foto_url ?? null,
     }));
   }
 
@@ -361,15 +365,16 @@ export class CadastrosRepository {
       throw new BadRequestException('capacidadeCarga invalida');
     }
     const capacidadePax = sanitizeCapacidadePax(input.capacidadePax ?? {});
+    const fotoUrl = input.fotoUrl?.trim() || null;
     const row = await this.db.one<{ id: string }>(
       `
-      INSERT INTO embarcacao (nome, tipo, capacidade_carga, capacidade_pax, status)
-      VALUES ($1, $2::tipo_embarcacao, $3, $4::jsonb, $5::status_embarcacao)
+      INSERT INTO embarcacao (nome, tipo, capacidade_carga, capacidade_pax, status, foto_url)
+      VALUES ($1, $2::tipo_embarcacao, $3, $4::jsonb, $5::status_embarcacao, $6)
       RETURNING id
       `,
-      [nome, tipo, capacidadeCarga, JSON.stringify(capacidadePax), status],
+      [nome, tipo, capacidadeCarga, JSON.stringify(capacidadePax), status, fotoUrl],
     );
-    await this.audit('embarcacao', row!.id, 'criar', userId, { nome, tipo, status, capacidadeCarga, capacidadePax });
+    await this.audit('embarcacao', row!.id, 'criar', userId, { nome, tipo, status, capacidadeCarga, capacidadePax, fotoUrl });
     return this.findEmbarcacao(row!.id);
   }
 
@@ -391,6 +396,7 @@ export class CadastrosRepository {
       throw new BadRequestException('capacidadeCarga invalida');
     }
     const capacidadePax = input.capacidadePax === undefined ? before.capacidadePax : sanitizeCapacidadePax(input.capacidadePax ?? {});
+    const fotoUrl = input.fotoUrl === undefined ? before.fotoUrl : input.fotoUrl?.trim() || null;
     await this.db.query(
       `
       UPDATE embarcacao
@@ -399,12 +405,13 @@ export class CadastrosRepository {
           capacidade_carga = $4,
           capacidade_pax = $5::jsonb,
           status = $6::status_embarcacao,
+          foto_url = $7,
           atualizado_em = now()
       WHERE id = $1::uuid AND excluido_em IS NULL
       `,
-      [id, nome, tipo, capacidadeCarga ?? null, JSON.stringify(capacidadePax), status],
+      [id, nome, tipo, capacidadeCarga ?? null, JSON.stringify(capacidadePax), status, fotoUrl],
     );
-    await this.audit('embarcacao', id, 'atualizar', userId, { before, after: { nome, tipo, status, capacidadeCarga, capacidadePax } });
+    await this.audit('embarcacao', id, 'atualizar', userId, { before, after: { nome, tipo, status, capacidadeCarga, capacidadePax, fotoUrl } });
     return this.findEmbarcacao(id);
   }
 
@@ -735,9 +742,10 @@ export class CadastrosRepository {
       status: string;
       capacidade_carga: string | null;
       capacidade_pax: Record<string, unknown> | null;
+      foto_url: string | null;
     }>(
       `
-      SELECT id, nome, tipo::text, status::text, capacidade_carga, capacidade_pax
+      SELECT id, nome, tipo::text, status::text, capacidade_carga, capacidade_pax, foto_url
       FROM embarcacao
       WHERE id = $1 AND excluido_em IS NULL
       `,
@@ -751,6 +759,7 @@ export class CadastrosRepository {
       status: row.status,
       capacidadeCarga: row.capacidade_carga ? Number(row.capacidade_carga) : null,
       capacidadePax: row.capacidade_pax ?? {},
+      fotoUrl: row.foto_url ?? null,
     };
   }
 

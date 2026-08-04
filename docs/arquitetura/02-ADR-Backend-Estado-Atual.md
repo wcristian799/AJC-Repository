@@ -245,6 +245,19 @@ curl http://localhost:3000/api/auth/login -X POST \
 
 ## 6. Pendências externas (🔶)
 
+### Etapa 07 — contratos do PDV presencial
+
+| Metodo | Path | Auth | Descricao |
+|---|---|---|---|
+| GET | `/api/vendas/pdv/configuracao` | `campo.pdv`/vendas | Retorna a versão publicada de caixa, pagamentos, classes, gratuidades, fiscal e impressão |
+| GET | `/api/vendas/pdv/historico?caixaId=` | `vendas.ver` | Lista vendas conciliadas sem duplicar bilhetes quando há multipagamento |
+| POST | `/api/vendas/pdv/vendas` | `vendas.vender` | Venda transacional/idempotente, com lotação, tarifa, cortesias, bilhetes, caixa, fiscal e auditoria |
+| GET | `/api/vendas/manifesto/:viagemId` | `vendas.ver` | Manifesto com total de saída e totais reais por origem/destino |
+
+O domínio é criado pela migration `0033_passagens_pdv_operacional.sql`. A regra comercial é
+consumida de `vendas_pdv_operacao` e da tabela de preço publicada; o servidor recalcula tudo e
+não confia em valores enviados pelo navegador.
+
 Não bloqueiam o MVP funcional, mas precisam ser resolvidas para ir a produção:
 
 | Pendência | Impacto | Onde |

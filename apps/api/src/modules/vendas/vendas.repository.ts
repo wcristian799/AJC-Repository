@@ -2,7 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomBytes, randomUUID } from 'node:crypto';
 import { DatabaseService } from '../../database/database.service';
 import { AuthTokenPayload } from '../auth/auth.types';
-import { CreateBilheteInput, CreateCortesiaInput, ValidarBilheteInput } from './vendas.types';
+import { CreateBilheteInput, CreateCortesiaInput, CreatePdvVendaInput, ValidarBilheteInput } from './vendas.types';
+import { PdvConfig, reconcilePdvPayments, roundMoney, validatePdvConfig } from './vendas-pdv.validator';
 
 @Injectable()
 export class VendasRepository {
@@ -135,7 +136,14 @@ export class VendasRepository {
              e.nome AS embarcacao_nome, b.cliente_id, c.nome AS cliente_nome,
              b.passageiro_nome, b.passageiro_documento, b.classe::text, b.subtipo,
              b.tipo::text, b.canal, b.assento, b.preco_pago, b.status::text,
-             b.validado_em, b.criado_em, cm.forma_pagamento::text
+             COALESCE(b.origem_sigla, v.origem_sigla) AS bilhete_origem_sigla,
+             COALESCE(b.destino_sigla, v.destino_sigla) AS bilhete_destino_sigla,
+             b.validado_em, b.criado_em,
+             COALESCE(
+               (SELECT string_agg(vpp.forma_pagamento::text, ' + ' ORDER BY vpp.criado_em)
+                FROM venda_pos_pagamento vpp WHERE vpp.venda_pos_id=b.venda_pos_id),
+               cm.forma_pagamento::text
+             ) AS forma_pagamento
       FROM bilhete b
       JOIN viagem v ON v.id = b.viagem_id
       JOIN embarcacao e ON e.id = v.embarcacao_id
@@ -213,10 +221,10 @@ export class VendasRepository {
         INSERT INTO bilhete (
           codigo, viagem_id, cliente_id, passageiro_nome, passageiro_documento,
           classe, subtipo, tipo, canal, item_preco_id, preco_pago, qr_token,
-          assento, observacoes, client_uuid, criado_por
+          assento, observacoes, origem_sigla, destino_sigla, client_uuid, criado_por
         )
         VALUES ($1, $2, $3, $4, $5, $6::classe_passagem, $7, $8::tipo_bilhete, $9,
-                $10, $11::numeric, $12, $13, $14, $15::uuid, $16)
+                $10, $11::numeric, $12, $13, $14, $15, $16, $17::uuid, $18)
         ON CONFLICT (client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING
         RETURNING id
         `,
@@ -235,6 +243,8 @@ export class VendasRepository {
           qrToken,
           input.assento ?? null,
           input.observacoes ?? null,
+          input.origemSigla ?? null,
+          input.destinoSigla ?? null,
           input.clientUuid ?? null,
           userId,
         ],
@@ -302,6 +312,197 @@ export class VendasRepository {
     return this.findBilhete(bilheteId);
   }
 
+  async getPdvConfig() {
+    const row = await this.db.one<{ id: string; versao: number; valor: unknown }>(
+      `
+      SELECT cv.id, cv.versao, cv.valor
+      FROM config_chave cc
+      JOIN config_versao cv ON cv.chave_id = cc.id AND cv.ativo = true
+      WHERE cc.chave = 'vendas_pdv_operacao' AND cc.ativo = true
+      LIMIT 1
+      `,
+    );
+    if (!row) throw new BadRequestException('Configuracao do PDV nao publicada');
+    validatePdvConfig(row.valor);
+    return { id: row.id, versao: row.versao, valor: row.valor };
+  }
+
+  async listPdvSales(caixaId?: string) {
+    const params: unknown[] = [];
+    const filter = caixaId ? 'WHERE vp.caixa_id = $1::uuid' : '';
+    if (caixaId) params.push(caixaId);
+    const result = await this.db.query(
+      `
+      SELECT vp.id, vp.codigo, vp.caixa_id, vp.viagem_id, v.codigo AS viagem_codigo,
+             vp.origem_sigla, vp.destino_sigla, vp.total_bruto, vp.total_isencoes,
+             vp.total_pago, vp.troco, vp.emitir_bpe, vp.status, vp.criado_em,
+             u.nome AS operador_nome, count(DISTINCT vpi.id)::text AS bilhetes,
+             COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
+               'formaPagamento', vpp.forma_pagamento::text,
+               'valor', vpp.valor_aplicado,
+               'parcelas', vpp.parcelas
+             )) FILTER (WHERE vpp.id IS NOT NULL), '[]'::jsonb) AS pagamentos
+      FROM venda_pos vp
+      JOIN viagem v ON v.id = vp.viagem_id
+      JOIN usuario u ON u.id = vp.criado_por
+      LEFT JOIN venda_pos_item vpi ON vpi.venda_pos_id = vp.id
+      LEFT JOIN venda_pos_pagamento vpp ON vpp.venda_pos_id = vp.id
+      ${filter}
+      GROUP BY vp.id, v.codigo, u.nome
+      ORDER BY vp.criado_em DESC
+      LIMIT 100
+      `,
+      params,
+    );
+    return result.rows.map((row) => ({
+      ...row,
+      bilhetes: Number(row.bilhetes),
+      total_bruto: Number(row.total_bruto),
+      total_isencoes: Number(row.total_isencoes),
+      total_pago: Number(row.total_pago),
+      troco: Number(row.troco),
+    }));
+  }
+
+  async createPdvSale(input: CreatePdvVendaInput, userId: string) {
+    if (!Array.isArray(input.itens) || !input.itens.length) throw new BadRequestException('Adicione ao menos uma passagem');
+    if (input.itens.length > 30) throw new BadRequestException('Uma venda pode conter no maximo 30 passagens');
+    const saleId = await this.db.tx(async (client) => {
+      const existing = await client.query<{ id: string }>('SELECT id FROM venda_pos WHERE client_uuid = $1::uuid LIMIT 1', [input.clientUuid]);
+      if (existing.rows[0]) return existing.rows[0].id;
+
+      const configResult = await client.query<{ id: string; versao: number; valor: unknown }>(
+        `SELECT cv.id, cv.versao, cv.valor FROM config_chave cc
+         JOIN config_versao cv ON cv.chave_id=cc.id AND cv.ativo=true
+         WHERE cc.chave='vendas_pdv_operacao' AND cc.ativo=true LIMIT 1`,
+      );
+      const configRow = configResult.rows[0];
+      if (!configRow) throw new BadRequestException('Configuracao do PDV nao publicada');
+      validatePdvConfig(configRow.valor);
+      const config = configRow.valor as PdvConfig;
+
+      const cash = await client.query<{ id: string }>(
+        `SELECT id FROM caixa WHERE id=$1::uuid AND operador_id=$2::uuid AND status='aberto'::status_caixa FOR UPDATE`,
+        [input.caixaId, userId],
+      );
+      if (!cash.rows[0]) throw new BadRequestException('Abra o seu caixa antes de vender');
+
+      const tripResult = await client.query<{ origem_sigla: string; destino_sigla: string | null; capacidade_pax_disponivel: Record<string, unknown> | null }>(
+        `SELECT origem_sigla, destino_sigla, capacidade_pax_disponivel FROM viagem WHERE id=$1::uuid AND status <> 'cancelada' FOR UPDATE`,
+        [input.viagemId],
+      );
+      const trip = tripResult.rows[0];
+      if (!trip) throw new NotFoundException('Viagem disponivel nao encontrada');
+      const stopsResult = await client.query<{ cidade_sigla: string; ordem: number }>(
+        `SELECT cidade_sigla, ordem FROM viagem_escala WHERE viagem_id=$1::uuid ORDER BY ordem`,
+        [input.viagemId],
+      );
+      const route = [trip.origem_sigla, ...stopsResult.rows.map((item) => item.cidade_sigla)];
+      if (trip.destino_sigla && !route.includes(trip.destino_sigla)) route.push(trip.destino_sigla);
+      const originIndex = route.indexOf(input.origemSigla);
+      const destinationIndex = route.indexOf(input.destinoSigla);
+      if (originIndex < 0 || destinationIndex <= originIndex) throw new BadRequestException('Intertrecho nao pertence a sequencia da viagem');
+
+      const activeTable = await client.query<{ id: string }>("SELECT id FROM tabela_preco WHERE tipo='passagem' AND ativo=true LIMIT 1");
+      const tableId = activeTable.rows[0]?.id;
+      if (!tableId) throw new BadRequestException('Tabela de passagem nao publicada');
+      const pricedItems: Array<{ input: CreatePdvVendaInput['itens'][number]; itemPriceId: string | null; tablePrice: number; charged: number; type: 'pdv' | 'cortesia' | 'gratuidade' }> = [];
+      for (const item of input.itens) {
+        const type = item.tipo ?? 'pdv';
+        if (!config.classes.some((entry) => entry.codigo === item.classe && entry.ativo)) throw new BadRequestException(`Classe indisponivel: ${item.classe}`);
+        const priceResult = await client.query<{ id: string; valor: string }>(
+          `SELECT ip.id, ip.valor FROM item_preco ip
+           WHERE ip.tabela_id=$1::uuid AND ip.classe=$2::classe_passagem
+             AND ip.origem_sigla=$3 AND ip.destino_sigla=$4 AND ip.valor IS NOT NULL
+             AND ($5::uuid IS NULL OR ip.id=$5::uuid)
+           ORDER BY CASE WHEN ip.id=$5::uuid THEN 0 ELSE 1 END, ip.subtipo NULLS FIRST LIMIT 1`,
+          [tableId, item.classe, input.origemSigla, input.destinoSigla, item.itemPrecoId ?? null],
+        );
+        const price = priceResult.rows[0];
+        if (!price) throw new BadRequestException(`Preco nao publicado para ${item.classe} em ${input.origemSigla}-${input.destinoSigla}`);
+        if (type === 'gratuidade' && !config.gratuidades.some((entry) => entry.codigo === item.gratuidadeTipo && entry.ativo)) {
+          throw new BadRequestException('Tipo de gratuidade indisponivel');
+        }
+        if (type === 'cortesia' && !item.cortesiaCodigo) throw new BadRequestException('Codigo da cortesia obrigatorio');
+        const tablePrice = Number(price.valor);
+        pricedItems.push({ input: item, itemPriceId: price.id, tablePrice, charged: type === 'pdv' ? tablePrice : 0, type });
+      }
+
+      const counts = new Map<string, number>();
+      for (const item of pricedItems) counts.set(item.input.classe, (counts.get(item.input.classe) ?? 0) + 1);
+      for (const [ticketClass, requested] of counts) {
+        const capacity = this.capacidadeDaClasse(trip.capacidade_pax_disponivel, ticketClass);
+        if (capacity === null) throw new BadRequestException(`Capacidade nao configurada para ${ticketClass}`);
+        const occupied = await client.query<{ total: string }>(
+          `SELECT count(*)::text AS total FROM bilhete WHERE viagem_id=$1 AND classe=$2::classe_passagem AND status <> 'cancelado'`,
+          [input.viagemId, ticketClass],
+        );
+        if (Number(occupied.rows[0]?.total ?? 0) + requested > capacity) throw new BadRequestException(`Capacidade insuficiente para ${ticketClass}`);
+      }
+
+      const total = roundMoney(pricedItems.reduce((sum, item) => sum + item.charged, 0));
+      const exemptions = roundMoney(pricedItems.reduce((sum, item) => sum + (item.type === 'pdv' ? 0 : item.tablePrice), 0));
+      const reconciled = reconcilePdvPayments(total, input.pagamentos ?? [], config);
+      const saleCode = `PDV-${new Date().getFullYear()}-${randomBytes(4).toString('hex').toUpperCase()}`;
+      const sale = await client.query<{ id: string }>(
+        `INSERT INTO venda_pos (codigo,caixa_id,viagem_id,origem_sigla,destino_sigla,cliente_id,canal,total_bruto,total_isencoes,total_pago,troco,emitir_bpe,config_versao_id,tabela_preco_id,client_uuid,criado_por)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::uuid,$16) RETURNING id`,
+        [saleCode, input.caixaId, input.viagemId, input.origemSigla, input.destinoSigla, input.clienteId ?? null, input.canal ?? config.canalPadrao, total, exemptions, total, reconciled.troco, Boolean(input.emitirBpe), configRow.id, tableId, input.clientUuid, userId],
+      );
+      const id = sale.rows[0].id;
+      const ticketIds: string[] = [];
+      for (const item of pricedItems) {
+        const code = `BIL-${new Date().getFullYear()}-${randomBytes(5).toString('hex').toUpperCase()}`;
+        const qr = await this.nextQrToken(code);
+        const ticket = await client.query<{ id: string }>(
+          `INSERT INTO bilhete (codigo,viagem_id,cliente_id,passageiro_nome,passageiro_documento,classe,tipo,canal,item_preco_id,preco_pago,qr_token,observacoes,origem_sigla,destino_sigla,venda_pos_id,client_uuid,criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6::classe_passagem,$7::tipo_bilhete,$8,$9,$10,$11,$12,$13,$14,$15,$16::uuid,$17) RETURNING id`,
+          [code, input.viagemId, input.clienteId ?? null, item.input.passageiroNome?.trim() || null, item.input.passageiroDocumento?.trim() || null, item.input.classe, item.type, input.canal ?? config.canalPadrao, item.itemPriceId, item.charged, qr, item.input.observacoes ?? null, input.origemSigla, input.destinoSigla, id, randomUUID(), userId],
+        );
+        const ticketId = ticket.rows[0].id;
+        ticketIds.push(ticketId);
+        await client.query(`INSERT INTO venda_pos_item (venda_pos_id,bilhete_id,item_preco_id,valor_tabela,valor_cobrado,tipo,observacoes) VALUES ($1,$2,$3,$4,$5,$6::tipo_bilhete,$7)`, [id, ticketId, item.itemPriceId, item.tablePrice, item.charged, item.type, item.input.observacoes ?? null]);
+        if (item.type === 'gratuidade') {
+          await client.query(`INSERT INTO gratuidade (bilhete_id,tipo_legal,documento_url,registrado_por) VALUES ($1,$2::tipo_gratuidade,$3,$4)`, [ticketId, item.input.gratuidadeTipo, item.input.documentoUrl ?? null, userId]);
+        }
+        if (item.type === 'cortesia') {
+          const consumed = await client.query(`UPDATE cortesia SET bilhete_id=$2 WHERE codigo=$1 AND viagem_id=$3 AND bilhete_id IS NULL AND (classe IS NULL OR classe=$4::classe_passagem) RETURNING id`, [item.input.cortesiaCodigo, ticketId, input.viagemId, item.input.classe]);
+          if (!consumed.rows[0]) throw new BadRequestException(`Cortesia ${item.input.cortesiaCodigo} invalida ou ja utilizada`);
+        }
+        if (input.emitirBpe) {
+          await client.query(`INSERT INTO bilhete_documento_fiscal (bilhete_id,status,servico,payload,emitido_em) VALUES ($1,$2,$3,$4::jsonb,now()) ON CONFLICT (bilhete_id) DO NOTHING`, [ticketId, config.fiscal.integracaoAtiva ? 'pendente' : 'stub_emitido', config.fiscal.integracaoAtiva ? 'fiscal' : 'stub', JSON.stringify({ configVersao: configRow.versao, motivo: config.fiscal.integracaoAtiva ? null : 'Integracao fiscal ainda nao ativada em Cadastros' })]);
+        }
+      }
+      let firstMovementId: string | null = null;
+      for (const payment of reconciled.items) {
+        const movement = await client.query<{ id: string }>(
+          `INSERT INTO caixa_movimento (caixa_id,tipo,forma_pagamento,valor,venda_pos_id,criado_por,client_uuid,observacao)
+           VALUES ($1,'venda_passagem',$2::forma_pagamento,$3,$4,$5,$6::uuid,$7) RETURNING id`,
+          [input.caixaId, payment.formaPagamento, payment.valorAplicado, id, userId, randomUUID(), `Venda ${saleCode} · ${payment.parcelas}x`],
+        );
+        firstMovementId ??= movement.rows[0].id;
+        await client.query(`INSERT INTO venda_pos_pagamento (venda_pos_id,caixa_movimento_id,forma_pagamento,valor_informado,valor_aplicado,troco,parcelas) VALUES ($1,$2,$3::forma_pagamento,$4,$5,$6,$7)`, [id, movement.rows[0].id, payment.formaPagamento, payment.valorInformado, payment.valorAplicado, payment.troco, payment.parcelas]);
+      }
+      if (firstMovementId) await client.query('UPDATE bilhete SET caixa_movimento_id=$2 WHERE id=ANY($1::uuid[])', [ticketIds, firstMovementId]);
+      await client.query(`INSERT INTO audit_evento (entidade,entidade_id,acao,usuario_id,dados_depois,client_uuid) VALUES ('venda_pos',$1,'criar',$2,$3::jsonb,$4::uuid)`, [id, userId, JSON.stringify({ codigo: saleCode, bilhetes: ticketIds.length, total, formasPagamento: reconciled.items.map((item) => item.formaPagamento), origem: input.origemSigla, destino: input.destinoSigla }), input.clientUuid]);
+      return id;
+    });
+    return this.findPdvSale(saleId);
+  }
+
+  private async findPdvSale(id: string) {
+    const sales = await this.db.query(
+      `SELECT vp.*, v.codigo AS viagem_codigo, u.nome AS operador_nome,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('id',b.id,'codigo',b.codigo,'qrToken',b.qr_token,'classe',b.classe::text,'tipo',b.tipo::text,'passageiroNome',b.passageiro_nome,'passageiroDocumento',b.passageiro_documento,'valor',b.preco_pago) ORDER BY b.criado_em) FROM bilhete b WHERE b.venda_pos_id=vp.id),'[]'::jsonb) AS bilhetes,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('formaPagamento',p.forma_pagamento::text,'valorInformado',p.valor_informado,'valorAplicado',p.valor_aplicado,'troco',p.troco,'parcelas',p.parcelas) ORDER BY p.criado_em) FROM venda_pos_pagamento p WHERE p.venda_pos_id=vp.id),'[]'::jsonb) AS pagamentos
+       FROM venda_pos vp JOIN viagem v ON v.id=vp.viagem_id JOIN usuario u ON u.id=vp.criado_por WHERE vp.id=$1`,
+      [id],
+    );
+    const row = sales.rows[0];
+    if (!row) throw new NotFoundException('Venda do PDV nao encontrada');
+    return { ...row, total_bruto: Number(row.total_bruto), total_isencoes: Number(row.total_isencoes), total_pago: Number(row.total_pago), troco: Number(row.troco) };
+  }
+
   private capacidadeDaClasse(capacidadePax: Record<string, unknown> | null, classe: string): number | null {
     const raw = capacidadePax?.[classe];
     const value = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
@@ -355,7 +556,17 @@ export class VendasRepository {
       acc[key].receita += Number(bilhete.preco_pago ?? 0);
       return acc;
     }, {});
-    return { viagemId, resumo, bilhetes };
+    const totaisPorCidade = bilhetes.reduce<Record<string, number>>((acc, bilhete) => {
+      const cidade = String(bilhete.bilhete_destino_sigla ?? bilhete.destino_sigla ?? 'NAO_INFORMADO');
+      acc[cidade] = (acc[cidade] ?? 0) + 1;
+      return acc;
+    }, {});
+    const totaisPorOrigem = bilhetes.reduce<Record<string, number>>((acc, bilhete) => {
+      const cidade = String(bilhete.bilhete_origem_sigla ?? bilhete.origem_sigla ?? 'NAO_INFORMADO');
+      acc[cidade] = (acc[cidade] ?? 0) + 1;
+      return acc;
+    }, {});
+    return { viagemId, totalSaida: bilhetes.length, totaisPorCidade, totaisPorOrigem, resumo, bilhetes };
   }
 
   async listCortesias(viagemId?: string) {

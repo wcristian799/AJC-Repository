@@ -1249,6 +1249,7 @@ function BoatFormModal({
   const [cargo, setCargo] = useState(
     boat?.capacidadeCarga == null ? "" : String(boat.capacidadeCarga),
   );
+  const [photoUrl, setPhotoUrl] = useState(boat?.fotoUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const initialClassData = extractBoatClassSettings(boat?.capacidadePax ?? {});
@@ -1288,6 +1289,7 @@ function BoatFormModal({
         status,
         capacidadeCarga: cargo ? Number(cargo.replace(",", ".")) : null,
         capacidadePax: { classes, capacidadePorClasse },
+        fotoUrl: photoUrl.trim() || null,
       };
       const saved = boat
         ? await updateEmbarcacao(boat.id, payload)
@@ -1324,6 +1326,14 @@ function BoatFormModal({
         </FormField>
         <FormField label="Capacidade de carga">
           <input inputMode="decimal" value={cargo} onChange={(e) => setCargo(e.target.value)} />
+        </FormField>
+        <FormField label="Foto da embarcação" wide>
+          <input
+            type="url"
+            placeholder="URL da foto cadastrada"
+            value={photoUrl}
+            onChange={(e) => setPhotoUrl(e.target.value)}
+          />
         </FormField>
       </div>
       {type !== "carga" && (

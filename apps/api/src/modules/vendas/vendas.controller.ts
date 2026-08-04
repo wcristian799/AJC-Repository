@@ -4,7 +4,7 @@ import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { VendasRepository } from './vendas.repository';
-import { CreateBilheteInput, CreateCortesiaInput, ValidarBilheteInput } from './vendas.types';
+import { CreateBilheteInput, CreateCortesiaInput, CreatePdvVendaInput, ValidarBilheteInput } from './vendas.types';
 
 @UseGuards(AuthGuard)
 @Controller('vendas')
@@ -35,6 +35,29 @@ export class VendasController {
     this.require(body.viagemId, 'viagemId');
     this.require(body.classe, 'classe');
     return this.repository.createBilhete(body, user.sub);
+  }
+
+  @Get('pdv/configuracao')
+  @RequirePermissions('vendas.vender')
+  configuracaoPdv() {
+    return this.repository.getPdvConfig();
+  }
+
+  @Get('pdv/historico')
+  @RequirePermissions('vendas.vender')
+  historicoPdv(@Query('caixaId') caixaId?: string) {
+    return this.repository.listPdvSales(caixaId);
+  }
+
+  @Post('pdv/vendas')
+  @RequirePermissions('vendas.vender')
+  createPdvVenda(@Body() body: CreatePdvVendaInput, @CurrentUser() user: AuthTokenPayload) {
+    this.require(body.caixaId, 'caixaId');
+    this.require(body.viagemId, 'viagemId');
+    this.require(body.origemSigla, 'origemSigla');
+    this.require(body.destinoSigla, 'destinoSigla');
+    this.require(body.clientUuid, 'clientUuid');
+    return this.repository.createPdvSale(body, user.sub);
   }
 
   @Post('bilhetes/:id/validar')

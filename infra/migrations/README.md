@@ -98,6 +98,15 @@ cotacoes, permissoes granulares e a configuracao versionada `encomendas_operacao
 precos comerciais nem texto juridico ficticio: ambos devem ser revisados e publicados em Cadastros.
 Registros anteriores permanecem em `carga` e sao exibidos pela API como legado incompleto.
 
+## Etapa 07 - Passagens e PDV presencial
+
+`0033_passagens_pdv_operacional.sql` cria `venda_pos`, `venda_pos_item` e
+`venda_pos_pagamento`, relaciona bilhetes e movimentos de caixa à venda, grava origem/destino
+do bilhete, adiciona a foto configurável da embarcação e publica `vendas_pdv_operacao`.
+O contrato permite multipagamento e conciliação transacional sem mover preços ou regras
+comerciais para o front. BP-e e impressão física só devem ser ativados na configuração quando
+os respectivos adapters e equipamentos estiverem homologados.
+
 ## Auditoria imutável (produção)
 
 `audit_evento` é append-only. Em produção, revogar `UPDATE`/`DELETE` da role da aplicação
