@@ -37,7 +37,7 @@ AJC/
 ├── libs/
 │   └── shared/domain-types/ # enums/tipos compartilhados
 ├── infra/
-│   ├── migrations/          # 0001..0023 .sql + run.mjs
+│   ├── migrations/          # 0001..0034 .sql + run.mjs
 │   ├── seed/                # 0001_seed_minimo.sql + run.mjs
 │   ├── docker/              # compose de dev
 │   └── *.sh                 # scripts WSL (apply, verify, open-pg, run-api)
@@ -153,7 +153,7 @@ Funções exportadas, por área (nome → método/rota):
 
 - **Auth/sessão:** `getStoredAuth`, `setStoredAuth`, `hasStoredAuth`, `loginAjc` (`POST /auth/login`), `refreshAjc` (`POST /auth/refresh`), `getMeAjc` (`GET /auth/me`), `logoutAjc` (`POST /auth/logout`).
 - **Navegação:** `listNavegacaoViagens`, `listNavegacaoTemplatesRotas`, `listNavegacaoEscalasColaboradores`, `notifyNavegacaoEscalas`, `createNavegacaoViagem`, `updateNavegacaoViagem`.
-- **Cadastros:** `listEmbarcacoes`, `createEmbarcacao`, `updateEmbarcacao`, `listCidades`, `listUsuariosCadastro`, `listPerfisCadastro`, `createUsuarioCadastro`, `updateUsuarioCadastro`, `createPerfilCadastro`, `updatePerfilCadastro`, `listFornecedores`, `createFornecedor`, `listColaboradores`, `createColaborador`, `listAgentes`, `listClientes`, `createCliente`, `updateCliente`.
+- **Cadastros:** `listEmbarcacoes`, `createEmbarcacao`, `updateEmbarcacao`, `listCidades`, `createCidade`, `updateCidade`, `listUsuariosCadastro`, `listPerfisCadastro`, `createUsuarioCadastro`, `updateUsuarioCadastro`, `createPerfilCadastro`, `updatePerfilCadastro`, `listFornecedores`, `createFornecedor`, `listColaboradores`, `createColaborador`, `listAgentes`, `listClientes`, `createCliente`, `updateCliente`.
 - **CRM:** `listCrmCotacoes`, `createCrmCotacao`, `getCrmHistoricoCliente`.
 - **Preços/Config:** `listPrecosPassagemMatriz`, `getConfigValue`, `listPrecos`, `reajustarTabelaPrecos`.
 - **TMS/Carga/Encomendas/Veículos:** `listTmsCargas`, `listTmsAgendamentoDisponibilidade`, `createTmsCarga`, `listEncomendas`, `createEncomenda`, `listEncomendaDeclaracoes`, `saveEncomendaDeclaracao`, `listTmsVolumes`, `listTmsControleViagens`, `exportTmsControleViagens`, `listTmsControleVolumes`, `listTmsControleVolumeEventos`, `listTmsEtiquetas`, `printTmsEtiqueta`, `listTmsDocumentos`, `analyzeTmsDocumento`, `createTmsDocumento`, `conferirTmsDocumento`, `listTmsPaletes`, `createTmsPalete`, `allocateTmsPalete`, `releaseTmsPalete`, `listTmsPortaria`, `listTmsEntregas`, `listTmsPrestacoes`, `saveTmsPrestacao`, `createTmsPortaria`, `addTmsVolumeEvent`, `createTmsEntrega`, `listVeiculosEnvios`, `createVeiculoEnvio`.
@@ -344,7 +344,7 @@ Bloqueia overbooking por classe (capacidade em `viagem.capacidade_pax_disponivel
 
 ## 4. DADOS / INFRA — `infra/`
 
-### 4.1. Migrations — `infra/migrations/*.sql` (0001..0027)
+### 4.1. Migrations — `infra/migrations/*.sql` (0001..0034)
 
 SQL puro, idempotente. Convenções: PK `uuid`, `criado_em`/`atualizado_em`, soft-delete via `excluido_em`, trigger `set_atualizado_em()`, `client_uuid` + índice único parcial para sync offline, provas com `*_url` + `*_hash`.
 
@@ -377,10 +377,17 @@ SQL puro, idempotente. Convenções: PK `uuid`, `criado_em`/`atualizado_em`, sof
 | 0025 | `tms_lancamento_nf_unificado.sql` | Fluxo unificado de lançamento/upload NF/DC. |
 | 0026 | `documento_fiscal_origem_operacao.sql` | Amplia a origem válida do documento fiscal para `operacao`. |
 | 0027 | `tms_controle_viagem_config.sql` | Chave versionada `tms_controle_viagem` e suporte `unaccent` às buscas. |
+| 0028 | `tms_volume_cadastrado_status.sql` | Status inicial real do volume recebido. |
+| 0029 | `tms_paletizacao_etiquetas.sql` | Paletização, etiquetas, evidências e configuração operacional. |
+| 0030 | `corrige_nome_local_porto.sql` | Saneamento dos nomes de locais operacionais. |
+| 0031 | `campo_rbac_prestacao_contas.sql` | Apps de campo, permissões e prestação de contas auditável. |
+| 0032 | `encomendas_operacionais.sql` | Domínio operacional de encomendas. |
+| 0033 | `passagens_pdv_operacional.sql` | Venda presencial, PDV e multipagamento reais. |
+| 0034 | `cidades_cadastro_operacional.sql` | UUID auditável e criação/edição de cidades sem alterar a sigla operacional. |
 
 **Principais tabelas (colunas-chave):**
 - **Acesso:** `usuario`(login uk, senha_hash, perfil_id), `perfil`, `permissao`(uk `modulo,acao`), `perfil_permissao` (N:N), `sessao`(refresh_hash), `colaborador`.
-- **Base:** `cidade`(sigla PK), `config_chave`/`config_versao`(1 ativa por chave).
+- **Base:** `cidade`(sigla PK imutável + id UUID auditável), `config_chave`/`config_versao`(1 ativa por chave).
 - **Preços:** `tabela_preco`(tipo, versao, ativo), `item_preco`(classe, tamanho, origem/destino, valor, percentual).
 - **Navegação:** `embarcacao`(capacidade_pax jsonb), `viagem`(codigo uk, capacidade_pax_disponivel jsonb), `viagem_escala`, `posicao_embarcacao`(geography + GiST).
 - **TMS:** `carga`, `volume`(id = UUID do QR), `evento_volume`(append-only), `palete`, `documento_fiscal`(pagamento CIF/FOB, agendado_para), `entrega_comprovante`(2 fotos+hash, protocolo), `registro_portaria`.

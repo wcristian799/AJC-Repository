@@ -1,5 +1,26 @@
 # STATUS — Diário vivo do projeto AJC
 
+## Trabalho 2026-08-04 - Intertrechos em horas e minutos
+- Cadastros > Configuracoes operacionais > Navegacao passou a editar o tempo de cada parada em campos separados de horas e minutos, preservando offsetMinutos no JSON versionado e no backend.
+- Exemplo: 960 minutos e apresentado como 16 h 00 min. O campo de minutos limita a faixa visual a 0-59 e a conversao para o total permanece automatica.
+- QA visual desktop/mobile aprovado sem overflow; nenhuma configuracao foi publicada durante o teste.
+
+## Trabalho 2026-08-04 - Cadastro operacional de cidades
+- Criada a area Cadastros > Cidades com criacao, edicao, busca, filtros e UX responsiva; a cidade salva passa a alimentar os seletores de configuracao de rota sem seed ou recarga manual.
+- POST/PATCH /api/cadastros/cidades usam RBAC, validacao server-side e auditoria transacional. A sigla e imutavel e a desativacao e bloqueada quando houver viagem futura ou rota publicada ativa.
+- Migration 0034_cidades_cadastro_operacional.sql adiciona UUID auditavel preservando a sigla operacional. Aplicada localmente; smoke real de criar/editar/listar passou e o registro de QA foi removido.
+- QA: backend build aprovado, 9 suites/33 testes aprovados, front build aprovado e inspecao visual desktop/mobile sem overflow. Documento: docs/feedback/2026-08-04-cadastro-cidades-operacionais.md.
+- Producao: aplicar node infra/migrations/run.mjs antes de usar o novo cadastro.
+
+## Trabalho 2026-08-04 - PDF manual do checklist 01 a 07
+- Gerado output/pdf/checklist-etapas-01-a-07-ajc.pdf em 13 paginas A4, com caixas vazias para marcacao manual, selo de estado tecnico, pagina de observacoes e numeracao.
+- O PDF foi renderizado integralmente e inspecionado em todas as paginas; nao foram encontrados cortes, sobreposicoes ou caixas preenchidas indevidamente.
+
+## Trabalho 2026-08-04 - Checklist Etapas 01 a 07
+- Criado docs/feedback/2026-08-04-checklist-etapas-01-a-07.md a partir do Word vigente e dos documentos de fechamento das Etapas 03 a 07.
+- O checklist separa entrega de engenharia, migrations, configuracao de producao, homologacao e bloqueios externos; BP-e, impressao fisica, MinIO e dados comerciais nao foram marcados como concluidos sem evidencia real.
+- Estado Git de referencia: Etapa 07 ja publicada no commit 41e2281; este novo checklist e a atualizacao do mapa documental ainda nao foram commitados.
+
 ## Trabalho 2026-08-04 - Etapa 07: Passagens, PDV e embarque
 - Fonte vigente: requisitos `REQ-07-01` a `REQ-07-06` do documento de validação de 09/jul, usando a referência visual da Frota Martins apenas como inspiração de hierarquia para a estação de caixa.
 - PDV real: `/pos` foi reconstruído como estação operacional autenticada, com caixa explícito por operador, viagem e intertrecho reais, lotação e tarifas publicadas, cliente pesquisável ou venda avulsa, identificação individual, cesta com vários bilhetes, gratuidade legal, cortesia real, pagamento misto, troco, parcelamento condicionado à taxa publicada, histórico, sangria e comprovante com QR.

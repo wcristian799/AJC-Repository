@@ -3,7 +3,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
-import { CadastrosRepository, SaveClienteInput, SaveColaboradorInput, SaveEmbarcacaoInput, SaveFornecedorInput, SavePerfilInput, SaveUsuarioInput } from './cadastros.repository';
+import { CadastrosRepository, SaveCidadeInput, SaveClienteInput, SaveColaboradorInput, SaveEmbarcacaoInput, SaveFornecedorInput, SavePerfilInput, SaveUsuarioInput } from './cadastros.repository';
 
 @UseGuards(AuthGuard)
 @Controller('cadastros')
@@ -56,6 +56,18 @@ export class CadastrosController {
   @RequirePermissions('cadastros.ver')
   listCidades() {
     return this.repository.listCidades();
+  }
+
+  @Post('cidades')
+  @RequirePermissions('cadastros.criar')
+  createCidade(@Body() body: SaveCidadeInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.repository.createCidade(body, user.sub);
+  }
+
+  @Patch('cidades/:sigla')
+  @RequirePermissions('cadastros.editar')
+  updateCidade(@Param('sigla') sigla: string, @Body() body: SaveCidadeInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.repository.updateCidade(sigla, body, user.sub);
   }
 
   @Get('embarcacoes')

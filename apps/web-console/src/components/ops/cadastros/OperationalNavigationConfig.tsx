@@ -300,7 +300,7 @@ export function OperationalNavigationConfig({ cidades }: { cidades: CidadeApi[] 
               {selected.paradas.map((stop, index) => (
                 <div
                   key={`${selected.id}-${index}`}
-                  className="grid items-center gap-2 border-b border-[color:var(--hairline)] py-2 sm:grid-cols-[36px_minmax(150px,1fr)_150px_36px]"
+                  className="grid items-center gap-2 border-b border-[color:var(--hairline)] py-3 sm:grid-cols-[36px_minmax(150px,1fr)_minmax(230px,280px)_36px]"
                 >
                   <span className="font-mono text-xs text-muted-foreground">
                     {String(index + 1).padStart(2, "0")}
@@ -310,16 +310,11 @@ export function OperationalNavigationConfig({ cidades }: { cidades: CidadeApi[] 
                     cidades={cidades}
                     onChange={(value) => updateStop(index, { cidadeSigla: value })}
                   />
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <input
-                      type="number"
-                      min={1}
-                      value={stop.offsetMinutos}
-                      onChange={(e) => updateStop(index, { offsetMinutos: Number(e.target.value) })}
-                      className="w-24"
-                    />{" "}
-                    min após saída
-                  </label>
+                  <StopOffsetInput
+                    value={stop.offsetMinutos}
+                    index={index}
+                    onChange={(offsetMinutos) => updateStop(index, { offsetMinutos })}
+                  />
                   <button
                     aria-label="Remover parada"
                     onClick={() => removeStop(index)}
@@ -372,6 +367,70 @@ export function OperationalNavigationConfig({ cidades }: { cidades: CidadeApi[] 
         </div>
       )}
     </div>
+  );
+}
+
+function StopOffsetInput({
+  value,
+  index,
+  onChange,
+}: {
+  value: number;
+  index: number;
+  onChange: (value: number) => void;
+}) {
+  const totalMinutes = Math.max(0, Math.trunc(Number(value) || 0));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  function updateHours(nextHours: number) {
+    onChange(Math.max(0, Math.trunc(nextHours || 0)) * 60 + minutes);
+  }
+
+  function updateMinutes(nextMinutes: number) {
+    const normalizedMinutes = Math.min(59, Math.max(0, Math.trunc(nextMinutes || 0)));
+    onChange(hours * 60 + normalizedMinutes);
+  }
+
+  return (
+    <fieldset className="min-w-0">
+      <legend className="mb-1 text-[11px] font-medium text-muted-foreground">
+        Tempo após a saída
+      </legend>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="relative min-w-0">
+          <span className="sr-only">Horas após a saída da parada {index + 1}</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            value={hours}
+            onChange={(event) => updateHours(Number(event.target.value))}
+            className="w-full pr-9 tabular-nums"
+          />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
+            h
+          </span>
+        </label>
+        <label className="relative min-w-0">
+          <span className="sr-only">Minutos após a saída da parada {index + 1}</span>
+          <input
+            type="number"
+            min={0}
+            max={59}
+            step={1}
+            inputMode="numeric"
+            value={minutes}
+            onChange={(event) => updateMinutes(Number(event.target.value))}
+            className="w-full pr-11 tabular-nums"
+          />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
+            min
+          </span>
+        </label>
+      </div>
+    </fieldset>
   );
 }
 

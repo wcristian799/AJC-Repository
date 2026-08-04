@@ -4,11 +4,20 @@ import { DatabaseService } from '../../database/database.service';
 import { PasswordService } from '../auth/password.service';
 
 export interface CidadeDto {
+  id: string;
   sigla: string;
   nome: string;
   uf: string;
   isBase: boolean;
   ativo: boolean;
+}
+
+export interface SaveCidadeInput {
+  sigla?: string;
+  nome?: string;
+  uf?: string;
+  isBase?: boolean;
+  ativo?: boolean;
 }
 
 export interface EmbarcacaoDto {
@@ -302,6 +311,7 @@ export class CadastrosRepository {
 
   async listCidades(): Promise<CidadeDto[]> {
     const result = await this.db.query<{
+      id: string;
       sigla: string;
       nome: string;
       uf: string;
@@ -309,18 +319,117 @@ export class CadastrosRepository {
       ativo: boolean;
     }>(
       `
-      SELECT sigla, nome, uf, is_base, ativo
+      SELECT id, sigla, nome, uf, is_base, ativo
       FROM cidade
       ORDER BY is_base DESC, nome
       `,
     );
     return result.rows.map((row) => ({
+      id: row.id,
       sigla: row.sigla,
       nome: row.nome,
       uf: row.uf,
       isBase: row.is_base,
       ativo: row.ativo,
     }));
+  }
+
+  async createCidade(input: SaveCidadeInput, userId: string): Promise<CidadeDto> {
+    const normalized = normalizeCidadeInput(input, true);
+    const saved = await this.db.tx(async (client) => {
+      const result = await client.query<{
+        id: string; sigla: string; nome: string; uf: string; is_base: boolean; ativo: boolean;
+      }>(
+        `
+        INSERT INTO cidade (sigla, nome, uf, is_base, ativo)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, sigla, nome, uf, is_base, ativo
+        `,
+        [normalized.sigla, normalized.nome, normalized.uf, normalized.isBase, normalized.ativo],
+      ).catch((error: { code?: string }) => {
+        if (error.code === '23505') throw new BadRequestException('Ja existe uma cidade com esta sigla');
+        throw error;
+      });
+      const row = result.rows[0];
+      await this.auditWithClient(client, 'cidade', row.id, 'criar', userId, null, normalized);
+      return row;
+    });
+    return mapCidade(saved);
+  }
+
+  async updateCidade(siglaParam: string, input: SaveCidadeInput, userId: string): Promise<CidadeDto> {
+    const sigla = normalizeCidadeSigla(siglaParam);
+    return this.db.tx(async (client) => {
+      const beforeResult = await client.query<{
+        id: string; sigla: string; nome: string; uf: string; is_base: boolean; ativo: boolean;
+      }>('SELECT id, sigla, nome, uf, is_base, ativo FROM cidade WHERE sigla = $1 FOR UPDATE', [sigla]);
+      const before = beforeResult.rows[0];
+      if (!before) throw new NotFoundException('Cidade nao encontrada');
+      if (input.sigla !== undefined && normalizeCidadeSigla(input.sigla) !== sigla) {
+        throw new BadRequestException('A sigla e imutavel; crie outra cidade para usar uma nova sigla');
+      }
+      const normalized = normalizeCidadeInput({
+        sigla,
+        nome: input.nome ?? before.nome,
+        uf: input.uf ?? before.uf,
+        isBase: input.isBase ?? before.is_base,
+        ativo: input.ativo ?? before.ativo,
+      }, true);
+      if (before.ativo && !normalized.ativo) {
+        await this.ensureCidadeCanBeDisabled(client, sigla);
+      }
+      const updatedResult = await client.query<{
+        id: string; sigla: string; nome: string; uf: string; is_base: boolean; ativo: boolean;
+      }>(
+        `
+        UPDATE cidade
+        SET nome = $2, uf = $3, is_base = $4, ativo = $5
+        WHERE sigla = $1
+        RETURNING id, sigla, nome, uf, is_base, ativo
+        `,
+        [sigla, normalized.nome, normalized.uf, normalized.isBase, normalized.ativo],
+      );
+      const updated = updatedResult.rows[0];
+      await this.auditWithClient(client, 'cidade', updated.id, 'atualizar', userId, mapCidade(before), mapCidade(updated));
+      return mapCidade(updated);
+    });
+  }
+
+  private async ensureCidadeCanBeDisabled(client: PoolClient, sigla: string) {
+    const futureTrips = await client.query<{ total: number }>(
+      `
+      SELECT COUNT(DISTINCT v.id)::int AS total
+      FROM viagem v
+      LEFT JOIN viagem_escala e ON e.viagem_id = v.id
+      WHERE v.status <> 'cancelada'
+        AND v.data_hora_saida >= now()
+        AND (v.origem_sigla = $1 OR v.destino_sigla = $1 OR e.cidade_sigla = $1)
+      `,
+      [sigla],
+    );
+    if (Number(futureTrips.rows[0]?.total ?? 0) > 0) {
+      throw new BadRequestException('Cidade possui viagem futura; remova-a da programacao antes de desativar');
+    }
+
+    const configResult = await client.query<{ valor: { rotas?: Array<Record<string, unknown>> } }>(
+      `
+      SELECT v.valor
+      FROM config_chave c
+      JOIN config_versao v ON v.chave_id = c.id AND v.ativo = true
+      WHERE c.chave = 'navegacao_rotas_horarios'
+      LIMIT 1
+      `,
+    );
+    const routes = configResult.rows[0]?.valor?.rotas ?? [];
+    const referenced = routes.some((route) => {
+      if (route.ativo === false) return false;
+      if (route.origemSigla === sigla || route.destinoSigla === sigla) return true;
+      const stops = Array.isArray(route.paradas) ? route.paradas : [];
+      return stops.some((stop) => isRecord(stop) && stop.cidadeSigla === sigla);
+    });
+    if (referenced) {
+      throw new BadRequestException('Cidade pertence a uma rota ativa; retire-a da rota e publique a configuracao antes de desativar');
+    }
   }
 
   async listEmbarcacoes(): Promise<EmbarcacaoDto[]> {
@@ -862,6 +971,31 @@ export class CadastrosRepository {
     );
   }
 
+  private async auditWithClient(
+    client: PoolClient,
+    entidade: string,
+    entidadeId: string,
+    acao: string,
+    userId: string,
+    dadosAntes: unknown,
+    dadosDepois: unknown,
+  ) {
+    await client.query(
+      `
+      INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_antes, dados_depois)
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+      `,
+      [
+        entidade,
+        entidadeId,
+        acao,
+        userId,
+        dadosAntes === null ? null : JSON.stringify(dadosAntes),
+        JSON.stringify(dadosDepois ?? {}),
+      ],
+    );
+  }
+
   async listPermissoes() {
     const result = await this.db.query<{
       id: string; modulo: string; acao: string; descricao: string | null;
@@ -873,6 +1007,53 @@ export class CadastrosRepository {
     `);
     return result.rows.map((row) => ({ ...row, codigo: `${row.modulo}.${row.acao}` }));
   }
+}
+
+type CidadeRow = {
+  id: string;
+  sigla: string;
+  nome: string;
+  uf: string;
+  is_base: boolean;
+  ativo: boolean;
+};
+
+function mapCidade(row: CidadeRow): CidadeDto {
+  return {
+    id: row.id,
+    sigla: row.sigla,
+    nome: row.nome,
+    uf: row.uf,
+    isBase: row.is_base,
+    ativo: row.ativo,
+  };
+}
+
+export function normalizeCidadeSigla(value: string | undefined): string {
+  const sigla = value?.trim().toUpperCase() ?? '';
+  if (!/^[A-Z0-9]{2,4}$/.test(sigla)) {
+    throw new BadRequestException('Sigla deve ter de 2 a 4 letras ou numeros');
+  }
+  return sigla;
+}
+
+export function normalizeCidadeInput(input: SaveCidadeInput, requireSigla: boolean) {
+  const sigla = requireSigla ? normalizeCidadeSigla(input.sigla) : undefined;
+  const nome = input.nome?.trim().replace(/\s+/g, ' ') ?? '';
+  const uf = input.uf?.trim().toUpperCase() ?? '';
+  if (nome.length < 2 || nome.length > 120) {
+    throw new BadRequestException('Nome da cidade deve ter de 2 a 120 caracteres');
+  }
+  if (!/^[A-Z]{2}$/.test(uf)) {
+    throw new BadRequestException('UF deve conter duas letras');
+  }
+  return {
+    sigla: sigla!,
+    nome,
+    uf,
+    isBase: input.isBase === true,
+    ativo: input.ativo !== false,
+  };
 }
 
 function emptyToNull(value: string | null | undefined) {

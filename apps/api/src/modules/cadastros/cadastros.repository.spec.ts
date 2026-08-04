@@ -1,5 +1,32 @@
 import { BadRequestException } from "@nestjs/common";
-import { sanitizeCapacidadePax } from "./cadastros.repository";
+import { normalizeCidadeInput, normalizeCidadeSigla, sanitizeCapacidadePax } from "./cadastros.repository";
+
+describe("cadastro de cidades", () => {
+  it("normaliza sigla, nome e UF sem inventar valores", () => {
+    expect(normalizeCidadeInput({
+      sigla: "  mcp ",
+      nome: "  Melgaco   Centro  ",
+      uf: "pa",
+      isBase: false,
+      ativo: true,
+    }, true)).toEqual({
+      sigla: "MCP",
+      nome: "Melgaco Centro",
+      uf: "PA",
+      isBase: false,
+      ativo: true,
+    });
+  });
+
+  it("rejeita sigla fora do contrato operacional", () => {
+    expect(() => normalizeCidadeSigla("cidade-grande")).toThrow("Sigla deve ter de 2 a 4");
+  });
+
+  it("rejeita UF invalida", () => {
+    expect(() => normalizeCidadeInput({ sigla: "MCP", nome: "Melgaco", uf: "PARA" }, true))
+      .toThrow("UF deve conter duas letras");
+  });
+});
 
 describe("sanitizeCapacidadePax", () => {
   it("preserva o contrato estruturado usado pelo formulario de embarcacoes", () => {

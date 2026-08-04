@@ -50,7 +50,7 @@ apps/api/
 
 ## 2. Migrations (`infra/migrations/`)
 
-SQL puro, controlado por `schema_migrations` + runner `infra/migrations/run.mjs`. **27 migrations disponíveis** (status local verificado 27/27 em 02/ago/2026).
+SQL puro, controlado por `schema_migrations` + runner `infra/migrations/run.mjs`. **34 migrations disponíveis** (status local verificado 34/34 em 04/ago/2026).
 
 | # | Arquivo | Conteúdo |
 |---|---|---|
@@ -77,6 +77,11 @@ SQL puro, controlado por `schema_migrations` + runner `infra/migrations/run.mjs`
 | 0025 | `tms_lancamento_nf_unificado.sql` | Unificação do lançamento de NF/DC e upload |
 | 0026 | `documento_fiscal_origem_operacao.sql` | Origem `operacao` aceita no documento fiscal |
 | 0027 | `tms_controle_viagem_config.sql` | Configuração versionada do Controle por viagem + extensão `unaccent` |
+| 0028–0030 | recebimento/paletização | Status cadastrado, paletização/etiquetas e saneamento de local operacional |
+| 0031 | `campo_rbac_prestacao_contas.sql` | Apps de campo, RBAC e prestação de contas auditável |
+| 0032 | `encomendas_operacionais.sql` | Domínio operacional real de encomendas |
+| 0033 | `passagens_pdv_operacional.sql` | Venda presencial, PDV, multipagamento e configuração operacional |
+| 0034 | `cidades_cadastro_operacional.sql` | UUID auditável e cadastro mutável de cidades mantendo a sigla operacional |
 
 ### 2.1 Como aplicar
 

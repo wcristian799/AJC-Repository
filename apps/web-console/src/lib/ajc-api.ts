@@ -333,7 +333,16 @@ export type PermissaoCadastroApi = {
 };
 
 export type CidadeApi = {
+  id: string;
   sigla: string;
+  nome: string;
+  uf: string;
+  isBase: boolean;
+  ativo: boolean;
+};
+
+export type SaveCidadeInput = {
+  sigla?: string;
   nome: string;
   uf: string;
   isBase: boolean;
@@ -481,6 +490,22 @@ export type PrecoItemApi = {
 
 export function listCidades() {
   return request<CidadeApi[]>("/cadastros/cidades", { auth: true });
+}
+
+export function createCidade(input: SaveCidadeInput) {
+  return request<CidadeApi>("/cadastros/cidades", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCidade(sigla: string, input: SaveCidadeInput) {
+  return request<CidadeApi>(`/cadastros/cidades/${encodeURIComponent(sigla)}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(input),
+  });
 }
 
 export function listUsuariosCadastro() {

@@ -9,6 +9,7 @@ import { OperationalUnitizacaoConfig } from "@/components/ops/cadastros/Operatio
 import { OperationalPrestacaoConfig } from "@/components/ops/cadastros/OperationalPrestacaoConfig";
 import { OperationalEncomendasConfig } from "@/components/ops/cadastros/OperationalEncomendasConfig";
 import { OperationalPdvConfig } from "@/components/ops/cadastros/OperationalPdvConfig";
+import { CitiesRegistry } from "@/components/ops/cadastros/CitiesRegistry";
 import {
   SectionHeader,
   DataTable,
@@ -52,6 +53,7 @@ export const Route = createFileRoute("/app/cadastros")({
 
 type Tab =
   | "config_operacional"
+  | "cidades"
   | "usuarios"
   | "perfis"
   | "precos_passagem"
@@ -367,6 +369,7 @@ function Cadastros() {
   }
 
   const tabs: [Tab, string][] = [
+    ["cidades", "Cidades"],
     ["config_operacional", "Configurações operacionais"],
     ["usuarios", "Usuários"],
     ["perfis", "Perfis e permissões"],
@@ -383,7 +386,7 @@ function Cadastros() {
         title="Cadastros e motor de preços"
         description="Parâmetros operacionais versionados, acessos, preços e dados-mestre — sem regras presas no código."
         actions={
-          tab !== "config_operacional" ? (
+          tab !== "config_operacional" && tab !== "cidades" ? (
             <PrimaryButton icon={Plus} onClick={abrirNovoCadastroGeral}>
               Novo cadastro
             </PrimaryButton>
@@ -419,6 +422,10 @@ function Cadastros() {
           <OperationalPdvConfig />
           <OperationalNavigationConfig cidades={cidades} />
         </div>
+      )}
+
+      {tab === "cidades" && (
+        <CitiesRegistry cidades={cidades} onCidadesChange={setCidades} />
       )}
 
       {tab === "usuarios" && (
