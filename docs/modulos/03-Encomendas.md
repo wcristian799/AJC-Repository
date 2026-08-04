@@ -120,3 +120,17 @@ DeclaracaoConteudo (id, encomenda_id, descricao, valor_declarado, texto_termo_ve
 - 🔶 Texto da Declaração de Conteúdo + cláusula de exclusão de responsabilidade — Lucas.
 - Definir limite de reembolso e política de extravio formalmente.
 - Confirmar modelo de balança e integração com o PDV.
+
+---
+
+## Estado funcional - Etapa 06 (03/ago/2026)
+
+- O despacho usa dominio estruturado em `encomenda_detalhe`; informacoes operacionais deixaram de ser empacotadas em observacoes JSON.
+- Remetente e destinatario exigem nome, CPF/CNPJ e telefone. Cliente existente e pesquisavel; cliente novo e cadastrado pelo mesmo fluxo.
+- Foto da encomenda, NF/DC e assinatura usam MinIO privado, hash SHA-256, MIME/tamanho validados e vinculo auditavel.
+- O servidor recalcula o preco pela tabela publicada e aceita ajuste manual somente com motivo. Pagamento pelo remetente gera movimento no caixa aberto; pagamento pelo destinatario gera titulo a receber.
+- A DC somente pode ser assinada quando o texto juridico estiver publicado em Cadastros. Nao ha termo demonstrativo nem assinatura simulada.
+- Cotacao e convertida no despacho sem redigitacao. Controle por viagem, CSV e rastreamento consomem o mesmo registro e eventos fisicos do TMS.
+- Registros criados pelo modelo anterior continuam visiveis como `legado_incompleto`; campos ausentes nao sao inventados.
+- Limites P/M/G, valor de corte, meios de pagamento, prazo a receber, exigencias documentais, texto do termo e precos por trecho sao versionados em Cadastros.
+- Leitura automatica de balanca permanece bloqueada ate homologacao do equipamento; a interface nao finge integracao inexistente.

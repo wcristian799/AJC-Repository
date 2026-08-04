@@ -19,7 +19,7 @@
 | Bucket sugerido | Status | Modulo | Uso |
 |---|---|---|---|
 | `documentos-fiscais` | ativo | TMS / Encomendas | NF-e, NFC-e, DC e anexos fiscais. MinIO privado, referencia `s3://`, SHA-256 e upload temporario auditavel. |
-| `declaracoes-conteudo-assinaturas` | pendente | Encomendas | Assinaturas da declaracao de conteudo (`declaracao_conteudo.assinatura_url`) |
+| `encomendas-evidencias` | ativo | Encomendas | Foto do volume, NF/DC e assinatura da declaracao. MinIO privado, referencia `s3://`, MIME validado, limite de 12 MB, SHA-256 e vinculo auditavel ao despacho. |
 | `portaria-fotos` | pendente | TMS | Fotos de registro de portaria (`registro_portaria.foto_url`) |
 | `recebimento-fotos` | ativo | TMS | Evidencias fotograficas da conferencia fisica. MinIO privado, MIME de imagem validado, limite de 12 MB, SHA-256 e referencia `s3://` armazenados na conferencia. Quando o aparelho esta offline, o blob fica no IndexedDB ate a sincronizacao autenticada. |
 | `entregas-comprovantes` | pendente | TMS | Assinatura e fotos obrigatorias de entrega (`entrega_comprovante.assinatura_url`, `foto1_url`, `foto2_url`) |
@@ -39,3 +39,7 @@
 1. Definir e rotacionar as credenciais MinIO no Coolify.
 2. Configurar backup externo e lifecycle dos uploads temporarios abandonados.
 3. Ligar os demais fluxos gradualmente, com hash SHA-256 e trilha de auditoria.
+
+O bucket historico proposto `declaracoes-conteudo-assinaturas` foi substituido pelo bucket ativo
+`encomendas-evidencias`, que mantem no mesmo dominio privado todas as provas do despacho sem tornar
+arquivos publicos ou duplicar politicas de acesso.

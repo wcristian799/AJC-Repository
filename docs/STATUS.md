@@ -834,3 +834,16 @@ Integrar front?back removendo mocks residuais por m�dulo (prioridade: `/campo/*`
 - Migration 0031 adiciona permissões, idempotência, versão da configuração, timestamps/responsáveis de envio/conferência e a chave versionada `tms_prestacao_contas`. Ambiente local em 31/31.
 - QA: backend build WSL; 7 suítes/23 testes; front SSR/Vercel build; smoke autenticado HTTP 200; inspeção visual desktop/mobile sem overflow.
 - Deploy: aplicar 0031, publicar API/front juntos e exigir novo login para renovar as permissões presentes no token. Documento: `docs/feedback/2026-08-03-etapa-05-app-gerente-prestacao.md`.
+## Trabalho 2026-08-03 - Etapa 06: Encomendas
+
+- `/app/encomendas` deixou de depender de dados demonstrativos: despacho, NF/DC, cotacao, controle por viagem e rastreamento consomem API e banco reais.
+- Migration 0032 cria `encomenda_detalhe`, `encomenda_evidencia`, permissoes e configuracao versionada `encomendas_operacao`; ambiente local em 32/32.
+- Despacho exige partes completas, viagem/trecho, foto, documento conforme regra, conteudo, peso/volumes e pagamento. O preco e recalculado no servidor e ajuste exige justificativa.
+- Evidencias ficam no bucket privado `encomendas-evidencias`, com MIME/12 MB/SHA-256; DC usa termo publicado e assinatura real em tela.
+- Pagamento pelo remetente movimenta caixa aberto; pagamento no destino cria titulo a receber. Cotacao converte sem redigitacao e com idempotencia.
+- Cadastros publica tamanhos, pesos, limite fixo/percentual, meios de pagamento, prazo AR, exigencias documentais, termo juridico e tabela completa por trecho.
+- Controle por viagem exporta CSV e rastreamento usa eventos reais do TMS. Registros anteriores continuam visiveis como legado incompleto, sem dados fabricados.
+- QA automatizado: migration 32/32, backend build, 8 suites/26 testes Jest, front SSR/Nitro/Vercel build e smoke HTTP autenticado dos contratos de configuracao/listagem/precos.
+- Dependencias para producao: configurar MinIO, publicar precos reais e termo juridico aprovado, renovar login/RBAC e abrir caixa para pagamento no remetente. Documento: `docs/feedback/2026-08-03-etapa-06-encomendas.md`.
+- Proximo passo: Etapa 07 do documento vigente; a Etapa 06 permanece sem commit/push ate revisao do dono.
+- Inspecao visual concluida em desktop e 390x844 para Encomendas e Cadastros: sem overflow horizontal de pagina, sem erro de console e com navegacao movel refinada.

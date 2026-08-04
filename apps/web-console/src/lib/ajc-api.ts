@@ -579,6 +579,7 @@ export function createCrmCotacao(input: {
   parametros?: Record<string, unknown>;
   valorEstimado?: number | null;
   validade?: string | null;
+  clientUuid?: string | null;
 }) {
   return request<CrmCotacaoApi>("/crm/cotacoes", {
     method: "POST",
@@ -652,6 +653,17 @@ export function reajustarTabelaPrecos(
   });
 }
 
+export function publicarTabelaPrecosEncomenda(input: {
+  motivo: string;
+  itens: Array<{ origemSigla: string; destinoSigla: string; tamanho: string; valor: number; percentual: number }>;
+}) {
+  return request<PrecoItemApi[]>("/precos/encomenda/publicacoes", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(input),
+  });
+}
+
 export type TmsCargaApi = {
   id: string;
   codigo: string | null;
@@ -674,27 +686,55 @@ export type TmsCargaApi = {
   tipo_unitizacao?: "AVULSA" | "MP" | "PD" | "PC";
 };
 
+export type EncomendasConfigApi = {
+  limiteValorFixo: number;
+  tamanhos: Array<{ codigo: string; nome: string; pesoMaxKg: number; ativo: boolean }>;
+  formasPagamento: Array<{ codigo: string; nome: string; ativo: boolean }>;
+  prazoRecebimentoDias: number;
+  exigeFotoEncomenda: boolean;
+  exigeDocumento: boolean;
+  termo: { publicado: boolean; titulo: string; texto: string; clausulas: string[] };
+};
+
+export type EncomendaApi = {
+  id: string; codigo: string; numero_pedido: string; status: string; viagem_id: string;
+  cidade_origem_sigla: string; cidade_destino_sigla: string; valor_declarado: number;
+  valor_cobrado: number; valor_tabela: number; peso_total: number; criado_em: string;
+  viagem_codigo: string; embarcacao_nome: string; remetente_nome: string; remetente_documento: string;
+  remetente_telefone: string; destinatario_nome: string; destinatario_documento: string;
+  destinatario_telefone: string; tamanho_codigo: string | null; conteudo_declarado: string | null;
+  quem_paga: "remetente" | "destinatario" | null; forma_pagamento: string | null;
+  documento_tipo: "NF" | "DC" | null; documento_fiscal_id: string | null; foto_encomenda_url: string | null;
+  motivo_ajuste_valor: string | null; status_documental: "aguardando_documento" | "pronta" | "divergente" | "legado_incompleto";
+  cotacao_id: string | null; tabela_preco_versao: number | null; config_versao: number | null;
+  total_volumes: number; declaracao_id: string | null; dc_assinada: boolean;
+  documento_numero: string | null; documento_url: string | null; documento_status: string | null; legado: boolean;
+};
+
+export type EncomendaDetailApi = EncomendaApi & {
+  eventos: Array<{ id: string | null; tipo: string | null; ocorrido_em: string | null; criado_em: string; obs: string | null; usuario_nome: string | null; volume_id: string; indice_volume: number; total_volumes: number; entrega_protocolo: string | null; entregue_em: string | null }>;
+  evidencias: Array<{ id: string; tipo: string; arquivo_url: string; arquivo_hash: string; arquivo_nome: string; arquivo_mime: string; arquivo_bytes: number; criado_em: string }>;
+};
+
+export type EncomendaEvidenceApi = { id: string; tipo: string; arquivo_url: string; arquivo_hash: string; arquivo_nome: string; arquivo_mime: string; arquivo_bytes: number; criado_em: string };
+
 export type CreateEncomendaInput = {
   viagemId: string;
   clienteRemetenteId: string;
-  destinatarioNome?: string;
-  cidadeOrigemSigla?: string;
+  remetenteNome: string; remetenteDocumento: string; remetenteTelefone: string;
+  destinatarioNome: string; destinatarioDocumento: string; destinatarioTelefone: string;
+  cidadeOrigemSigla: string;
   cidadeDestinoSigla: string;
-  valorDeclarado?: number;
+  tamanhoCodigo: string; conteudoDeclarado: string;
+  quemPaga: "remetente" | "destinatario"; formaPagamento?: string;
+  documentoTipo: "NF" | "DC"; documentoNumero?: string;
+  evidenciaFotoId: string; evidenciaDocumentoId?: string; cotacaoId?: string;
+  valorDeclarado: number;
   valorCobrado?: number;
-  pesoTotal?: number;
-  totalVolumes?: number;
-  numeroDocumento?: string;
-  observacoes?: string;
-  clientUuid?: string;
-  documento?: {
-    tipo: "NFe" | "NFCe" | "DC";
-    numero?: string;
-    valor?: number;
-    arquivoUrl?: string;
-    arquivoHash?: string;
-    origem?: "cliente" | "agente" | "manual";
-  };
+  motivoAjusteValor?: string;
+  pesoTotal: number;
+  totalVolumes: number;
+  clientUuid: string;
 };
 
 export type CreateTmsCargaInput = CreateEncomendaInput & {
@@ -1206,11 +1246,11 @@ export function createTmsCarga(input: CreateTmsCargaInput) {
 }
 
 export function listEncomendas() {
-  return request<TmsCargaApi[]>("/encomendas", { auth: true });
+  return request<EncomendaApi[]>("/encomendas", { auth: true });
 }
 
 export function createEncomenda(input: CreateEncomendaInput) {
-  return request<TmsCargaApi>("/encomendas", {
+  return request<EncomendaDetailApi>("/encomendas", {
     method: "POST",
     auth: true,
     body: JSON.stringify(input),
@@ -1221,8 +1261,23 @@ export function listEncomendaDeclaracoes() {
   return request<EncomendaDeclaracaoApi[]>("/encomendas/declaracoes", { auth: true });
 }
 
-export function saveEncomendaDeclaracao(cargaId: string, input: SaveEncomendaDeclaracaoInput) {
-  return request<EncomendaDeclaracaoApi>(`/encomendas/${cargaId}/declaracao-conteudo`, {
+export function getEncomendasConfig() {
+  return request<{ versao: number; configVersaoId: string; valor: EncomendasConfigApi }>("/encomendas/configuracao", { auth: true });
+}
+
+export function getEncomendaDetail(id: string) {
+  return request<EncomendaDetailApi>(`/encomendas/${id}`, { auth: true });
+}
+
+export async function uploadEncomendaEvidence(file: File, tipo: "foto_encomenda" | "documento_nf" | "documento_dc" | "assinatura_dc", clientUuid = crypto.randomUUID()) {
+  const form = new FormData();
+  form.append("arquivo", file);
+  const search = new URLSearchParams({ tipo, clientUuid });
+  return request<EncomendaEvidenceApi>(`/encomendas/evidencias?${search.toString()}`, { method: "POST", auth: true, body: form });
+}
+
+export function saveEncomendaDeclaracao(cargaId: string, input: { evidenciaAssinaturaId: string; aceiteEm?: string; dispositivo?: string; clientUuid: string }) {
+  return request<EncomendaDetailApi>(`/encomendas/${cargaId}/declaracao-conteudo`, {
     method: "POST",
     auth: true,
     body: JSON.stringify(input),

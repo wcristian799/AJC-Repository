@@ -91,6 +91,13 @@ done
 
 > Desde `0008`, existe controle em `schema_migrations`. As migrations 0001-0008 foram registradas via `--baseline` porque já estavam aplicadas manualmente no banco de dev. Novas migrations devem ser aplicadas pelo runner.
 
+## Etapa 06 - Encomendas
+
+`0032_encomendas_operacionais.sql` cria o dominio estruturado, evidencias privadas, idempotencia de
+cotacoes, permissoes granulares e a configuracao versionada `encomendas_operacao`. Ela nao publica
+precos comerciais nem texto juridico ficticio: ambos devem ser revisados e publicados em Cadastros.
+Registros anteriores permanecem em `carga` e sao exibidos pela API como legado incompleto.
+
 ## Auditoria imutável (produção)
 
 `audit_evento` é append-only. Em produção, revogar `UPDATE`/`DELETE` da role da aplicação

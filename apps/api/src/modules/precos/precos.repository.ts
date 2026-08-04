@@ -26,6 +26,11 @@ export interface ReajustarTabelaPrecoInput {
   motivo?: string;
 }
 
+export interface PublicarTabelaEncomendaInput {
+  motivo: string;
+  itens: Array<{ origemSigla: string; destinoSigla: string; tamanho: string; valor: number; percentual: number }>;
+}
+
 @Injectable()
 export class PrecosRepository {
   constructor(private readonly db: DatabaseService) {}
@@ -94,6 +99,44 @@ export class PrecosRepository {
       grouped.set(key, current);
     }
     return [...grouped.values()];
+  }
+
+  async publicarTabelaEncomenda(input: PublicarTabelaEncomendaInput, userId: string) {
+    if (!input.motivo?.trim()) throw new BadRequestException('Motivo da publicacao obrigatorio');
+    if (!Array.isArray(input.itens) || !input.itens.length) throw new BadRequestException('Cadastre ao menos um preco de encomenda');
+    const config = await this.db.one<{ valor: { tamanhos?: Array<{ codigo: string; ativo: boolean }> } }>(`
+      SELECT cv.valor FROM config_versao cv JOIN config_chave cc ON cc.id=cv.chave_id
+      WHERE cc.chave='encomendas_operacao' AND cv.ativo=true LIMIT 1`);
+    const sizeCodes = new Set((config?.valor?.tamanhos ?? []).filter((item) => item.ativo).map((item) => item.codigo));
+    const keys = new Set<string>();
+    for (const item of input.itens) {
+      const origem = item.origemSigla?.trim().toUpperCase();
+      const destino = item.destinoSigla?.trim().toUpperCase();
+      const tamanho = item.tamanho?.trim().toUpperCase();
+      if (!origem || !destino || origem === destino) throw new BadRequestException('Trecho de encomenda invalido');
+      if (!sizeCodes.has(tamanho)) throw new BadRequestException(`Tamanho nao publicado: ${tamanho}`);
+      if (!Number.isFinite(Number(item.valor)) || Number(item.valor) < 0) throw new BadRequestException('Valor fixo invalido');
+      if (!Number.isFinite(Number(item.percentual)) || Number(item.percentual) <= 0 || Number(item.percentual) > 100) throw new BadRequestException('Percentual deve ser maior que zero e no maximo 100');
+      const key = `${origem}|${destino}|${tamanho}`;
+      if (keys.has(key)) throw new BadRequestException(`Preco duplicado: ${key}`);
+      keys.add(key);
+    }
+    await this.db.tx(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('tabela_preco:encomenda'))");
+      const cities = [...new Set(input.itens.flatMap((item) => [item.origemSigla.toUpperCase(), item.destinoSigla.toUpperCase()]))];
+      const existing = await client.query<{ sigla: string }>('SELECT sigla FROM cidade WHERE sigla=ANY($1::varchar[]) AND ativo=true', [cities]);
+      if (existing.rows.length !== cities.length) throw new BadRequestException('Uma ou mais cidades do preco nao existem ou estao inativas');
+      const version = await client.query<{ versao: number }>("SELECT COALESCE(max(versao),0)+1 AS versao FROM tabela_preco WHERE tipo='encomenda'");
+      await client.query("UPDATE tabela_preco SET ativo=false, vigente_ate=now() WHERE tipo='encomenda' AND ativo=true");
+      const table = await client.query<{ id: string }>(`INSERT INTO tabela_preco (tipo,versao,ativo,motivo,criado_por) VALUES ('encomenda',$1,true,$2,$3) RETURNING id`, [version.rows[0].versao, input.motivo.trim(), userId]);
+      for (const item of input.itens) {
+        await client.query(`INSERT INTO item_preco (tabela_id,tamanho,origem_sigla,destino_sigla,valor,percentual)
+          VALUES ($1,$2,$3,$4,$5,$6)`, [table.rows[0].id, item.tamanho.toUpperCase(), item.origemSigla.toUpperCase(), item.destinoSigla.toUpperCase(), item.valor, item.percentual]);
+      }
+      await client.query(`INSERT INTO audit_evento (entidade,entidade_id,acao,usuario_id,dados_depois)
+        VALUES ('tabela_preco',$1,'publicar_encomendas',$2,$3::jsonb)`, [table.rows[0].id, userId, JSON.stringify({ versao: version.rows[0].versao, motivo: input.motivo, itens: input.itens.length })]);
+    });
+    return this.listActive('encomenda');
   }
 
   async reajustarTabela(tipo: string, input: ReajustarTabelaPrecoInput, userId: string) {

@@ -1,218 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calculator, ArrowRight, CalendarClock, Ship, Save } from "lucide-react";
-import {
-  SectionHeader, GhostButton, PrimaryButton, Tag,
-} from "@/components/ops/primitives";
+import { ArrowRight, Calculator, CalendarClock, Save, Search, Ship } from "lucide-react";
+import { GhostButton, PrimaryButton, SectionHeader, Tag } from "@/components/ops/primitives";
 import { createCrmCotacao } from "@/lib/ajc-api";
-import { calcularPrecoEncomenda, ENCOMENDA_TAMANHOS } from "./pricing";
+import { calcularPrecoEncomenda, sugerirTamanhoPorPeso } from "./pricing";
 import { PrecoDestaque } from "./shared";
-import type { ClienteEncomendaUi, EncomendaTamanho, PrecoEncomendaTabela, ViagemEncomendaUi } from "./types";
+import type { ClienteEncomendaUi, EncomendaConfigUi, PrecoEncomendaTabela, ViagemEncomendaUi } from "./types";
 
-/** B.3 — Cotação de encomenda com registro real no CRM. */
-export function CotacaoTab({
-  onConverter,
-  clientes = [],
-  viagens = [],
-  precos = [],
-  limiteFixo = null,
-}: {
-  onConverter?: () => void;
-  clientes?: ClienteEncomendaUi[];
-  viagens?: ViagemEncomendaUi[];
-  precos?: PrecoEncomendaTabela[];
-  limiteFixo?: number | null;
-}) {
-  const trechos = useMemo(() => precos.map((p) => p.trecho), [precos]);
-  const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
-  const [trecho, setTrecho] = useState(trechos[0] ?? "");
-  const [tamanho, setTamanho] = useState<EncomendaTamanho>("M");
-  const [peso, setPeso] = useState(12);
-  const [valorDeclarado, setValorDeclarado] = useState(500);
-  const [salvando, setSalvando] = useState(false);
-  const [mensagem, setMensagem] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!trechos.includes(trecho) && trechos[0]) setTrecho(trechos[0]);
-  }, [trecho, trechos]);
-
-  useEffect(() => {
-    if (!clienteId && clientes[0]?.id) setClienteId(clientes[0].id);
-  }, [clienteId, clientes]);
-
-  const resultado = useMemo(
-    () => limiteFixo ? calcularPrecoEncomenda(precos, { trecho, tamanho, valorDeclarado, limiteFixo }) : null,
-    [limiteFixo, precos, trecho, tamanho, valorDeclarado],
-  );
-
-  const origemSigla = trecho.split("->")[0]?.trim();
-  const destinoSigla = trecho.split("->")[1]?.trim();
-  const proximaViagem = useMemo(() => {
-    return viagens
-      .filter((v) => v.status === "planejada" || v.status === "em_curso")
-      .find((v) => v.destino === destinoSigla || v.escalas.some((e) => e.cidade === destinoSigla));
-  }, [destinoSigla, viagens]);
-  const embarcacao = proximaViagem?.embarcacaoNome;
-  const saida = proximaViagem?.escalas[0]?.horaPrevista ?? "proxima janela";
-  const podeSalvar = Boolean(clienteId && origemSigla && destinoSigla && resultado && !salvando);
-
-  async function salvarCotacao() {
-    if (!podeSalvar || !resultado) return;
-    setSalvando(true);
-    setMensagem(null);
-    try {
-      const cotacao = await createCrmCotacao({
-        tipo: "encomenda",
-        clienteId,
-        origemSigla,
-        destinoSigla,
-        valorEstimado: resultado.preco,
-        parametros: {
-          origem: "encomendas_cotacao",
-          trecho,
-          tamanho,
-          peso,
-          valorDeclarado,
-          modoPreco: resultado.modo,
-          limiteFixo: resultado.limiteFixo,
-          percentual: resultado.percentual ?? null,
-          proximaViagemId: proximaViagem?.id ?? null,
-          proximaViagemCodigo: proximaViagem?.codigo ?? null,
-        },
-      });
-      setMensagem(`Cotacao ${cotacao.id.slice(0, 8).toUpperCase()} registrada no CRM.`);
-    } catch (error) {
-      setMensagem(error instanceof Error ? error.message : "Nao foi possivel registrar a cotacao.");
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div className="mt-5 space-y-4">
-      <SectionHeader
-        eyebrow="Atendimento · CRM · cliente"
-        title="Cotação de encomenda"
-        description="Calcula e registra a cotação no CRM sem criar encomenda nem reservar espaço. Entrada: cliente, trecho, tamanho/peso e valor declarado."
-      />
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-        <div className="surface-card p-5">
-          <div className="flex items-center gap-2">
-            <Calculator className="h-4 w-4 text-[color:var(--brand)]" />
-            <h3 className="font-display text-lg">Cotação</h3>
-          </div>
-
-          <div className="mt-4 space-y-4">
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Cliente</p>
-              <select
-                value={clienteId}
-                onChange={(event) => setClienteId(event.target.value)}
-                className="mt-1.5 h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
-              >
-                <option value="">Selecione o cliente</option>
-                {clientes.map((cliente) => (
-                  <option key={cliente.id} value={cliente.id}>
-                    {cliente.nome} - {cliente.documento || cliente.cidade}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Trecho</p>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {trechos.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTrecho(t)}
-                    className={`h-9 rounded-md px-3 font-mono text-xs font-medium transition-colors ${
-                      trecho === t
-                        ? "bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)]"
-                        : "bg-[color:var(--muted)] text-foreground/80 ring-1 ring-[color:var(--hairline)] hover:bg-[color:var(--accent)]"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tamanho</p>
-              <div className="mt-1.5 grid grid-cols-3 gap-2">
-                {ENCOMENDA_TAMANHOS.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setTamanho(t.id)}
-                    className={`rounded-lg px-3 py-2.5 text-left transition-colors ${
-                      tamanho === t.id
-                        ? "bg-[color:color-mix(in_oklab,var(--brand)_12%,transparent)] ring-1 ring-[color:var(--hairline-brand)]"
-                        : "bg-[color:var(--muted)] ring-1 ring-[color:var(--hairline)] hover:bg-[color:var(--accent)]"
-                    }`}
-                  >
-                    <span className={`big-numeric text-xl ${tamanho === t.id ? "text-[color:var(--brand)]" : "text-foreground"}`}>{t.id}</span>
-                    <span className="mt-0.5 block text-[10px] text-muted-foreground">até {t.pesoMax} kg</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Peso (kg)</label>
-                <input
-                  type="number" min={0} value={peso || ""}
-                  onChange={(e) => setPeso(Number(e.target.value))}
-                  className="mt-1 h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Valor declarado (R$)</label>
-                <input
-                  type="number" min={0} value={valorDeclarado || ""}
-                  onChange={(e) => setValorDeclarado(Number(e.target.value))}
-                  className="mt-1 h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
-                />
-              </div>
-            </div>
-
-            <p className="text-[11px] text-muted-foreground">
-              Cotação não cria encomenda nem reserva espaço. <Tag tone="brand">tabela versionada</Tag>
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <PrecoDestaque resultado={resultado} trecho={trecho} tamanho={tamanho} />
-
-          <div className="surface-card p-5">
-            <div className="flex items-center gap-2">
-              <CalendarClock className="h-4 w-4 text-[color:var(--brand)]" />
-              <h3 className="font-display text-base">Prazo · próxima viagem</h3>
-            </div>
-            {proximaViagem ? (
-              <div className="mt-3 space-y-1">
-                <p className="inline-flex items-center gap-1.5 font-display text-lg">
-                  <Ship className="h-4 w-4 text-[color:var(--brand)]" />
-                  {proximaViagem.origem} → {proximaViagem.destino} · {proximaViagem.codigo}
-                </p>
-                <p className="text-xs text-muted-foreground">{embarcacao} · saída {saida}</p>
-                <p className="text-xs text-muted-foreground">Previsão de chegada no destino: {proximaViagem.escalas.find((e) => e.cidade === destinoSigla)?.horaPrevista ?? "—"}</p>
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-muted-foreground">Sem viagem programada para {destinoSigla} no momento. Cotação válida; embarque na próxima janela.</p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <PrimaryButton icon={Save} onClick={salvarCotacao} disabled={!podeSalvar}>{salvando ? "Salvando..." : "Salvar cotacao"}</PrimaryButton>
-            <GhostButton icon={ArrowRight} onClick={onConverter}>Converter em despacho</GhostButton>
-          </div>
-          {mensagem && <p className="rounded-lg bg-[color:var(--muted)] px-3 py-2 text-xs text-muted-foreground">{mensagem}</p>}
-        </div>
-      </div>
-    </div>
-  );
+export type CotacaoParaDespacho = { cotacaoId: string; clienteId: string; trecho: string; tamanhoCodigo: string; peso: number; valorDeclarado: number; valorEstimado: number };
+export function CotacaoTab({ onConverter, clientes, viagens, precos, config }: { onConverter: (draft: CotacaoParaDespacho) => void; clientes: ClienteEncomendaUi[]; viagens: ViagemEncomendaUi[]; precos: PrecoEncomendaTabela[]; config: EncomendaConfigUi }) {
+  const [query, setQuery] = useState(""); const [clienteId, setClienteId] = useState("");
+  const [trecho, setTrecho] = useState(""); const [tamanho, setTamanho] = useState(config.tamanhos.find((item) => item.ativo)?.codigo ?? "");
+  const [peso, setPeso] = useState(0); const [valor, setValor] = useState(0); const [saving, setSaving] = useState(false); const [message, setMessage] = useState(""); const [saved, setSaved] = useState<CotacaoParaDespacho | null>(null);
+  const rows = useMemo(() => clientes.filter((item) => normalize(`${item.nome} ${item.documento} ${item.codigo}`).includes(normalize(query))).slice(0, 30), [clientes, query]);
+  const result = useMemo(() => calcularPrecoEncomenda(precos, { trecho, tamanho, valorDeclarado: valor, limiteFixo: config.limiteValorFixo }), [precos, trecho, tamanho, valor, config.limiteValorFixo]);
+  const [origem, destino] = trecho.split("->").map((item) => item.trim());
+  const trip = viagens.find((item) => ["planejada","em_curso"].includes(item.status) && includesCity(item, origem) && includesCity(item, destino));
+  useEffect(() => { const suggested = sugerirTamanhoPorPeso(config.tamanhos, peso); if (suggested) setTamanho(suggested); }, [peso, config.tamanhos]);
+  async function save() { if (!clienteId || !result || !origem || !destino) return; setSaving(true); setMessage(""); try { const row = await createCrmCotacao({ tipo: "encomenda", clienteId, origemSigla: origem, destinoSigla: destino, valorEstimado: result.preco, clientUuid: crypto.randomUUID(), parametros: { trecho, tamanho, peso, valorDeclarado: valor, tabelaVersao: result.tabelaVersao, modoPreco: result.modo, proximaViagemId: trip?.id ?? null } }); const draft = { cotacaoId: row.id, clienteId, trecho, tamanhoCodigo: tamanho, peso, valorDeclarado: valor, valorEstimado: result.preco }; setSaved(draft); setMessage(`Cotação ${row.id.slice(0,8).toUpperCase()} registrada.`); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha ao salvar cotação"); } finally { setSaving(false); } }
+  return <div className="mt-5 space-y-4"><SectionHeader eyebrow="Atendimento · sem reservar espaço" title="Cotação de encomenda" description="Simule com a tabela publicada. Ao converter, cliente, trecho, tamanho, peso e valor seguem para o despacho sem redigitação."/>
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]"><section className="surface-card p-5"><div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-[color:var(--brand)]"/><h3 className="font-semibold">Dados da cotação</h3></div>
+      <label className="mt-4 block text-xs text-muted-foreground">Buscar cliente</label><div className="relative mt-1"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground"/><input className="field pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nome, código ou CPF/CNPJ"/></div>
+      {query && <div className="mt-2 max-h-48 overflow-auto rounded-lg ring-1 ring-[color:var(--hairline)]">{rows.map((item) => <button key={item.id} onClick={() => { setClienteId(item.id); setQuery(item.nome); }} className={`block w-full px-3 py-2 text-left text-sm hover:bg-[color:var(--accent)] ${clienteId === item.id ? "bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)]" : ""}`}><span className="font-medium">{item.nome}</span><span className="ml-2 text-xs text-muted-foreground">{item.codigo} · {item.documento}</span></button>)}</div>}
+      <label className="mt-4 block text-xs text-muted-foreground">Trecho publicado</label><select className="field mt-1" value={trecho} onChange={(e) => setTrecho(e.target.value)}><option value="">Selecione</option>{precos.map((item) => <option key={item.trecho}>{item.trecho}</option>)}</select>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-xs text-muted-foreground">Peso (kg)<input className="field mt-1" type="number" min="0.001" step="0.001" value={peso || ""} onChange={(e) => setPeso(Number(e.target.value))}/></label><label className="text-xs text-muted-foreground">Valor declarado<input className="field mt-1" type="number" min="0.01" step="0.01" value={valor || ""} onChange={(e) => setValor(Number(e.target.value))}/></label></div>
+      <label className="mt-4 block text-xs text-muted-foreground">Tamanho</label><div className="mt-2 flex flex-wrap gap-2">{config.tamanhos.filter((item) => item.ativo).map((item) => <button key={item.codigo} onClick={() => setTamanho(item.codigo)} className={`rounded-lg px-3 py-2 text-sm ring-1 ${tamanho === item.codigo ? "text-[color:var(--brand)] ring-[color:var(--hairline-brand)]" : "ring-[color:var(--hairline)]"}`}><strong>{item.codigo}</strong> · até {item.pesoMaxKg} kg</button>)}</div>
+      <p className="mt-4 text-xs text-muted-foreground"><Tag tone="neutral">cotação não cria envio</Tag> A reserva só nasce no despacho.</p></section>
+      <aside className="space-y-4"><PrecoDestaque resultado={result} trecho={trecho} tamanho={tamanho}/><div className="surface-card p-4"><div className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-[color:var(--brand)]"/><h3 className="font-semibold">Próxima viagem compatível</h3></div>{trip ? <div className="mt-3"><p className="inline-flex items-center gap-2 text-sm font-medium"><Ship className="h-4 w-4"/>{trip.codigo} · {trip.embarcacaoNome}</p><p className="mt-1 text-xs text-muted-foreground">{origem} → {destino}</p></div> : <p className="mt-3 text-sm text-muted-foreground">Nenhuma viagem ativa cobre o trecho. A cotação pode ser salva, mas o despacho exigirá viagem.</p>}</div>
+        <div className="flex flex-wrap gap-2"><PrimaryButton icon={Save} disabled={!clienteId || !result || saving} onClick={save}>{saving ? "Salvando…" : "Salvar cotação"}</PrimaryButton><GhostButton icon={ArrowRight} disabled={!saved} onClick={() => saved && onConverter(saved)}>Converter</GhostButton></div>{message && <p className="rounded-lg bg-[color:var(--muted)] p-3 text-xs text-muted-foreground">{message}</p>}</aside></div></div>;
 }
-
+function includesCity(trip: ViagemEncomendaUi, city: string) { return trip.origem === city || trip.destino === city || trip.escalas.some((item) => item.cidade === city); }
+function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\W/g, ""); }

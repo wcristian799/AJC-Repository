@@ -1,374 +1,48 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import {
-  User, UserCheck, MapPin, Scale, Wallet, FileSignature,
-  CheckCircle2, AlertTriangle, Printer, Search, Ruler,
-} from "lucide-react";
-import {
-  SectionHeader, PrimaryButton, GhostButton, StatusChip, Tag, OfflineBanner, brl,
-} from "@/components/ops/primitives";
-import { createEncomenda } from "@/lib/ajc-api";
-import { calcularPrecoEncomenda, ENCOMENDA_TAMANHOS, sugerirTamanhoPorPeso } from "./pricing";
-import { PrecoDestaque, TermoDC, ResumoLinha } from "./shared";
-import type { ClienteEncomendaUi, EncomendaPagador, EncomendaTamanho, PrecoEncomendaTabela, ViagemEncomendaUi } from "./types";
+import { AlertTriangle, Camera, CheckCircle2, FileText, PackagePlus, Search, UserPlus, Wallet } from "lucide-react";
+import { GhostButton, PrimaryButton, SectionHeader, StatusChip, Tag, brl } from "@/components/ops/primitives";
+import { createCliente, createEncomenda, uploadEncomendaEvidence, type EncomendaEvidenceApi } from "@/lib/ajc-api";
+import { calcularPrecoEncomenda, sugerirTamanhoPorPeso } from "./pricing";
+import { PrecoDestaque, ResumoLinha } from "./shared";
+import type { CotacaoParaDespacho } from "./CotacaoTab";
+import type { ClienteEncomendaUi, EncomendaConfigUi, PrecoEncomendaTabela, ViagemEncomendaUi } from "./types";
 
-/** B.1 — Despacho de encomenda (PDV / balcão do porto). */
-export function DespachoTab({
-  clientes = [],
-  viagens = [],
-  precos = [],
-  limiteFixo = null,
-}: {
-  clientes?: ClienteEncomendaUi[];
-  viagens?: ViagemEncomendaUi[];
-  precos?: PrecoEncomendaTabela[];
-  limiteFixo?: number | null;
-}) {
-  const clientesBase = useMemo<ClienteEncomendaUi[]>(() => (
-    clientes
-  ), [clientes]);
-  const trechos = useMemo(() => precos.map((p) => p.trecho), [precos]);
-
-  const [remetenteId, setRemetenteId] = useState(clientesBase[0]?.id ?? "");
-  const [remetente, setRemetente] = useState(clientesBase[0]?.nome ?? "");
-  const [remDoc, setRemDoc] = useState(clientesBase[0]?.documento ?? "");
-  const [remContato, setRemContato] = useState("(91) 98888-1000");
-  const [destinatario, setDestinatario] = useState("");
-  const [destDoc, setDestDoc] = useState("");
-  const [destContato, setDestContato] = useState("");
-  const [trecho, setTrecho] = useState(trechos[0] ?? "");
-  const [tamanho, setTamanho] = useState<EncomendaTamanho>("M");
-  const [peso, setPeso] = useState(0);
-  const [valorDeclarado, setValorDeclarado] = useState(0);
-  const [conteudo, setConteudo] = useState("");
-  const [quemPaga, setQuemPaga] = useState<EncomendaPagador>("remetente");
-  const [documentoTipo, setDocumentoTipo] = useState<"DC" | "NF">("DC");
-  const [dcAssinada, setDcAssinada] = useState(false);
-  const [emitido, setEmitido] = useState(false);
-  const [emitindo, setEmitindo] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (remetenteId || clientesBase.length === 0) return;
-    setRemetenteId(clientesBase[0].id);
-    setRemetente(clientesBase[0].nome);
-    setRemDoc(clientesBase[0].documento);
-  }, [clientesBase, remetenteId]);
-
-  useEffect(() => {
-    if (!trechos.includes(trecho) && trechos[0]) setTrecho(trechos[0]);
-  }, [trecho, trechos]);
-
-  const resultado = useMemo(
-    () => limiteFixo ? calcularPrecoEncomenda(precos, { trecho, tamanho, valorDeclarado, limiteFixo }) : null,
-    [limiteFixo, precos, trecho, tamanho, valorDeclarado],
-  );
-
-  const tamSel = ENCOMENDA_TAMANHOS.find((t) => t.id === tamanho)!;
-  const pesoExcede = peso > 0 && peso > tamSel.pesoMax;
-  const tamanhoSugerido = peso > 0 ? sugerirTamanhoPorPeso(peso) : null;
-  const valorObrigatorioVazio = valorDeclarado <= 0;
-  const [origemSigla, destinoSigla] = trecho.split("->").map((p) => p.trim());
-  const viagemDestino = useMemo(() => (
-    viagens.find((v) => v.destino === destinoSigla || v.escalas.some((e) => e.cidade === destinoSigla))
-  ), [destinoSigla, viagens]);
-  const podeConfirmar = !!remetenteId && !!remDoc && !!remContato && !!destinatario && !!destDoc && !!destContato
-    && !valorObrigatorioVazio && !pesoExcede && dcAssinada && !!viagemDestino && !!resultado && !emitindo;
-
-  async function confirmarDespacho() {
-    if (!podeConfirmar || !viagemDestino || !resultado) return;
-    const numeroDc = `DC-${Date.now()}`;
-    setEmitindo(true);
-    setErro(null);
-    setEmitido(false);
-    try {
-      await createEncomenda({
-        viagemId: viagemDestino.id,
-        clienteRemetenteId: remetenteId,
-        destinatarioNome: destinatario,
-        cidadeOrigemSigla: origemSigla || "BEL",
-        cidadeDestinoSigla: destinoSigla,
-        valorDeclarado,
-        valorCobrado: resultado.preco,
-        pesoTotal: peso || tamSel.pesoMax,
-        totalVolumes: 1,
-        numeroDocumento: documentoTipo === "DC" ? numeroDc : undefined,
-        observacoes: JSON.stringify({
-          destinatario,
-          destinatarioDocumento: destDoc,
-          destinatarioContato: destContato,
-          remetenteContato: remContato,
-          trecho,
-          tamanho,
-          conteudo,
-          quemPaga,
-          dcAssinada,
-        }),
-        clientUuid: crypto.randomUUID(),
-        documento: {
-          tipo: documentoTipo === "NF" ? "NFe" : "DC",
-          numero: documentoTipo === "DC" ? numeroDc : undefined,
-          valor: valorDeclarado,
-          origem: "manual",
-        },
-      });
-      setEmitido(true);
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : "Falha ao criar encomenda");
-    } finally {
-      setEmitindo(false);
-    }
-  }
-
-  return (
-    <div className="mt-5 space-y-4">
-      <SectionHeader
-        eyebrow="PDV · balcão do porto"
-        title="Despacho de encomenda"
-        description="Fluxo do operador de caixa com balança ao lado: remetente → destinatário → trecho → tamanho/peso → valor declarado → preço automático → quem paga → Declaração de Conteúdo."
-        actions={<GhostButton icon={Search}>Buscar encomenda</GhostButton>}
-      />
-
-      <OfflineBanner pending={2} />
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-        <div className="space-y-4">
-          <StepCard n={1} icon={User} title="Remetente" hint="CPF/CNPJ busca cadastro; se não existir, cadastro rápido.">
-            <label className="block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Cliente cadastrado</label>
-            <select
-              value={remetenteId}
-              onChange={(e) => {
-                const cliente = clientesBase.find((c) => c.id === e.target.value);
-                setRemetenteId(e.target.value);
-                setRemetente(cliente?.nome ?? "");
-                setRemDoc(cliente?.documento ?? "");
-              }}
-              className="mt-1 h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
-            >
-              {clientesBase.map((c) => (
-                <option key={c.id} value={c.id}>{c.nome} · {c.documento || "sem documento"}</option>
-              ))}
-            </select>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Field label="CPF/CNPJ do remetente">
-                <input value={remDoc} onChange={(e) => setRemDoc(e.target.value)} className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
-              </Field>
-              <Field label="Telefone do remetente">
-                <input value={remContato} onChange={(e) => setRemContato(e.target.value)} className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
-              </Field>
-            </div>
-          </StepCard>
-
-          <StepCard n={2} icon={UserCheck} title="Destinatário" hint="Nome + contato para notificação de entrega (WhatsApp/SMS).">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Nome do destinatário">
-                <input value={destinatario} onChange={(e) => setDestinatario(e.target.value)} placeholder="Nome completo" className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
-              </Field>
-              <Field label="CPF/CNPJ">
-                <input value={destDoc} onChange={(e) => setDestDoc(e.target.value)} placeholder="CPF ou CNPJ" className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
-              </Field>
-              <Field label="Contato (telefone)">
-                <input value={destContato} onChange={(e) => setDestContato(e.target.value)} placeholder="(00) 90000-0000" className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
-              </Field>
-            </div>
-          </StepCard>
-
-          <StepCard n={3} icon={MapPin} title="Trecho" hint="Cidade de origem → destino (preço varia por trecho).">
-            <div className="flex flex-wrap gap-1.5">
-              {trechos.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTrecho(t)}
-                  className={`h-9 rounded-md px-3 font-mono text-xs font-medium transition-colors ${
-                    trecho === t
-                      ? "bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)]"
-                      : "bg-[color:var(--muted)] text-foreground/80 ring-1 ring-[color:var(--hairline)] hover:bg-[color:var(--accent)]"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            {!viagemDestino && <p className="mt-2 text-[11px] text-[color:var(--warning)]">Sem viagem real carregada para esse destino. Carregue a API ou selecione outro trecho.</p>}
-          </StepCard>
-
-          <StepCard n={4} icon={Scale} title="Dimensionamento" hint="Selecione o tamanho ou leia o peso da balança e informe o valor declarado.">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tamanho</p>
-            <div className="mt-1.5 grid grid-cols-3 gap-2">
-              {ENCOMENDA_TAMANHOS.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setTamanho(t.id)}
-                  className={`rounded-lg px-3 py-2.5 text-left transition-colors ${
-                    tamanho === t.id
-                      ? "bg-[color:color-mix(in_oklab,var(--brand)_12%,transparent)] ring-1 ring-[color:var(--hairline-brand)]"
-                      : "bg-[color:var(--muted)] ring-1 ring-[color:var(--hairline)] hover:bg-[color:var(--accent)]"
-                  }`}
-                >
-                  <span className={`big-numeric text-xl ${tamanho === t.id ? "text-[color:var(--brand)]" : "text-foreground"}`}>{t.id}</span>
-                  <span className="mt-0.5 block text-[10px] text-muted-foreground">até {t.pesoMax} kg</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Field label="Peso da balança (kg)">
-                <div className="flex items-center gap-2">
-                  <input type="number" min={0} value={peso || ""} onChange={(e) => setPeso(Number(e.target.value))} placeholder="0" className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
-                  <button onClick={() => setPeso(tamSel.pesoMax - 2)} title="Ler balança (simulado)" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[color:var(--muted)] text-[color:var(--brand)] ring-1 ring-[color:var(--hairline)] hover:bg-[color:var(--accent)]">
-                    <Ruler className="h-4 w-4" />
-                  </button>
-                </div>
-              </Field>
-              <Field label="Valor declarado (R$)">
-                <input type="number" min={0} value={valorDeclarado || ""} onChange={(e) => setValorDeclarado(Number(e.target.value))} placeholder="0" className={`h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 focus:outline-none focus:ring-[color:var(--ring)] ${valorObrigatorioVazio ? "ring-[color:color-mix(in_oklab,var(--danger)_45%,transparent)]" : "ring-[color:var(--hairline)]"}`} />
-              </Field>
-            </div>
-
-            <Field label="Conteúdo declarado (descrição)" className="mt-3">
-              <input value={conteudo} onChange={(e) => setConteudo(e.target.value)} placeholder="Ex.: peças de vestuário" className="h-10 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" />
-            </Field>
-
-            <AnimatePresence>
-              {pesoExcede && tamanhoSugerido && (
-                <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-[color:color-mix(in_oklab,var(--danger)_12%,transparent)] px-3 py-2 text-[12px] font-medium text-[color:var(--danger)]">
-                  <AlertTriangle className="h-4 w-4" />
-                  Peso {peso} kg excede o tamanho {tamanho}. Sugerido: tamanho {tamanhoSugerido}.
-                  <button onClick={() => setTamanho(tamanhoSugerido)} className="ml-1 underline">aplicar</button>
-                </motion.p>
-              )}
-            </AnimatePresence>
-            {valorObrigatorioVazio && (
-              <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-[color:var(--danger)]">
-                <AlertTriangle className="h-3.5 w-3.5" /> Valor declarado é obrigatório para precificar e para a DC.
-              </p>
-            )}
-          </StepCard>
-
-          <StepCard n={6} icon={Wallet} title="Quem paga" hint="Remetente ou destinatário arca com o frete.">
-            <div className="grid grid-cols-2 gap-2">
-              {(["remetente", "destinatario"] as EncomendaPagador[]).map((p) => (
-                <button key={p} onClick={() => setQuemPaga(p)} className={`h-11 rounded-lg text-sm font-medium capitalize transition-colors ${quemPaga === p ? "bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)]" : "bg-[color:var(--muted)] text-foreground/80 ring-1 ring-[color:var(--hairline)] hover:bg-[color:var(--accent)]"}`}>
-                  {p}
-                </button>
-              ))}
-            </div>
-          </StepCard>
-
-          <StepCard n={7} icon={FileSignature} title="Declaração de Conteúdo" hint="Abre o termo com cláusula de exclusão e assinatura em tela (aba dedicada).">
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              {(["DC", "NF"] as const).map((tipo) => (
-                <button key={tipo} onClick={() => setDocumentoTipo(tipo)} className={`h-10 rounded-lg text-sm font-medium ring-1 transition-colors ${documentoTipo === tipo ? "bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-[color:var(--brand)] ring-[color:var(--hairline-brand)]" : "bg-[color:var(--muted)] text-foreground/80 ring-[color:var(--hairline)]"}`}>
-                  {tipo === "DC" ? "Declaração de Conteúdo" : "Nota Fiscal"}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                {dcAssinada
-                  ? <StatusChip tone="success"><CheckCircle2 className="h-3 w-3" /> DC assinada</StatusChip>
-                  : <StatusChip tone="warning"><AlertTriangle className="h-3 w-3" /> DC pendente de assinatura</StatusChip>}
-              </div>
-              <button onClick={() => setDcAssinada((v) => !v)} className="h-9 rounded-md bg-[color:var(--surface-elev)] px-3 text-xs font-medium text-foreground/85 ring-1 ring-[color:var(--hairline)] hover:bg-[color:var(--accent)]">
-                {dcAssinada ? "Refazer assinatura" : "Coletar assinatura (simular)"}
-              </button>
-            </div>
-          </StepCard>
-        </div>
-
-        <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <PrecoDestaque resultado={resultado} trecho={trecho} tamanho={tamanho} />
-
-          <div className="surface-card p-5">
-            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Resumo do despacho</p>
-            <div className="mt-2">
-              <ResumoLinha label="Remetente"><span className="truncate">{remetente}</span></ResumoLinha>
-              <ResumoLinha label="CPF/CNPJ remetente">{remDoc || <span className="text-muted-foreground">—</span>}</ResumoLinha>
-              <ResumoLinha label="Telefone remetente">{remContato || <span className="text-muted-foreground">—</span>}</ResumoLinha>
-              <ResumoLinha label="Destinatário">{destinatario || <span className="text-muted-foreground">—</span>}</ResumoLinha>
-              <ResumoLinha label="CPF/CNPJ destinatário">{destDoc || <span className="text-muted-foreground">—</span>}</ResumoLinha>
-              <ResumoLinha label="Telefone destinatário">{destContato || <span className="text-muted-foreground">—</span>}</ResumoLinha>
-              <ResumoLinha label="Trecho"><span className="font-mono">{trecho}</span></ResumoLinha>
-              <ResumoLinha label="Viagem">{viagemDestino?.codigo ?? <span className="text-muted-foreground">—</span>}</ResumoLinha>
-              <ResumoLinha label="Tamanho / peso">{tamanho} · {peso || 0} kg</ResumoLinha>
-              <ResumoLinha label="Valor declarado">{brl(valorDeclarado)}</ResumoLinha>
-              <ResumoLinha label="Documento">{documentoTipo}</ResumoLinha>
-              <ResumoLinha label="Quem paga"><span className="capitalize">{quemPaga}</span></ResumoLinha>
-              <ResumoLinha label="Efeito financeiro">{quemPaga === "remetente" ? "entra no caixa" : "gera contas a receber"}</ResumoLinha>
-              <ResumoLinha label="Frete cobrado"><span className="text-[color:var(--brand)]">{brl(resultado?.preco ?? 0)}</span></ResumoLinha>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-2">
-              <PrimaryButton icon={Printer} disabled={!podeConfirmar} onClick={confirmarDespacho}>
-                {emitindo ? "Criando encomenda..." : "Confirmar e imprimir etiqueta"}
-              </PrimaryButton>
-              {!podeConfirmar && (
-                <p className="text-[11px] text-muted-foreground">
-                  Para confirmar: remetente/destinatário completos, valor declarado, peso compatível, viagem disponível e documento assinado/anexado.
-                </p>
-              )}
-              {erro && (
-                <div className="rounded-lg bg-[color:color-mix(in_oklab,var(--danger)_12%,transparent)] px-3 py-2.5 text-[12px] text-[color:var(--danger)]">
-                  <p className="font-medium">Não foi possível criar a encomenda.</p>
-                  <p className="mt-0.5 text-muted-foreground">{erro}</p>
-                </div>
-              )}
-              {emitido && (
-                <div className="rounded-lg bg-[color:color-mix(in_oklab,var(--success)_12%,transparent)] px-3 py-2.5 text-[12px] text-[color:var(--success)]">
-                  <p className="font-medium">Encomenda gerada no backend · etiqueta + recibo prontos.</p>
-                  <p className="mt-0.5 text-muted-foreground">Volume criado no TMS e frete registrado no fluxo de encomendas.</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="surface-card p-4">
-            <p className="text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground">Regra A.1:</span> até {limiteFixo ? brl(limiteFixo) : "o limite configurado"} de valor declarado o preço é fixo por tamanho; acima, percentual sobre o declarado.
-            </p>
-            <p className="mt-1.5"><Tag tone="brand">tabela versionada</Tag></p>
-          </div>
-        </div>
-      </div>
-
-      <TermoDC compact />
-    </div>
-  );
+export function DespachoTab({ clientes, viagens, precos, config, conversao, onCreated }: { clientes: ClienteEncomendaUi[]; viagens: ViagemEncomendaUi[]; precos: PrecoEncomendaTabela[]; config: EncomendaConfigUi; conversao: CotacaoParaDespacho | null; onCreated: () => void }) {
+  const [query, setQuery] = useState(""); const [clienteId, setClienteId] = useState(""); const [novo, setNovo] = useState(false);
+  const [remetente, setRemetente] = useState(""); const [remDoc, setRemDoc] = useState(""); const [remTel, setRemTel] = useState("");
+  const [destinatario, setDestinatario] = useState(""); const [destDoc, setDestDoc] = useState(""); const [destTel, setDestTel] = useState("");
+  const [trecho, setTrecho] = useState(""); const [viagemId, setViagemId] = useState(""); const [tamanho, setTamanho] = useState(config.tamanhos.find((item) => item.ativo)?.codigo ?? "");
+  const [peso, setPeso] = useState(0); const [volumes, setVolumes] = useState(1); const [valorDeclarado, setValorDeclarado] = useState(0); const [conteudo, setConteudo] = useState("");
+  const [quemPaga, setQuemPaga] = useState<"remetente"|"destinatario">("remetente"); const [forma, setForma] = useState(config.formasPagamento.find((item) => item.ativo)?.codigo ?? "");
+  const [documentoTipo, setDocumentoTipo] = useState<"NF"|"DC">("DC"); const [documentoNumero, setDocumentoNumero] = useState("");
+  const [foto, setFoto] = useState<EncomendaEvidenceApi | null>(null); const [documento, setDocumento] = useState<EncomendaEvidenceApi | null>(null); const [uploading, setUploading] = useState<"foto"|"documento"|null>(null);
+  const [valorCobrado, setValorCobrado] = useState(0); const [motivo, setMotivo] = useState(""); const [saving, setSaving] = useState(false); const [message, setMessage] = useState("");
+  const results = useMemo(() => clientes.filter((item) => normalize(`${item.nome} ${item.documento} ${item.codigo}`).includes(normalize(query))).slice(0, 40), [clientes, query]);
+  const calculated = useMemo(() => calcularPrecoEncomenda(precos, { trecho, tamanho, valorDeclarado, limiteFixo: config.limiteValorFixo }), [precos, trecho, tamanho, valorDeclarado, config.limiteValorFixo]);
+  useEffect(() => { if (calculated) setValorCobrado(calculated.preco); }, [calculated]);
+  useEffect(() => { const suggested = sugerirTamanhoPorPeso(config.tamanhos, peso); if (suggested) setTamanho(suggested); }, [peso, config.tamanhos]);
+  useEffect(() => { if (!conversao) return; setClienteId(conversao.clienteId); const client = clientes.find((item) => item.id === conversao.clienteId); if (client) selectClient(client); setTrecho(conversao.trecho); setTamanho(conversao.tamanhoCodigo); setPeso(conversao.peso); setValorDeclarado(conversao.valorDeclarado); setValorCobrado(conversao.valorEstimado); }, [conversao, clientes]);
+  const [origem, destino] = trecho.split("->").map((item) => item.trim());
+  const compatibleTrips = viagens.filter((trip) => ["planejada","em_curso"].includes(trip.status) && includesCity(trip, origem) && includesCity(trip, destino));
+  useEffect(() => { if (!compatibleTrips.some((item) => item.id === viagemId)) setViagemId(compatibleTrips[0]?.id ?? ""); }, [trecho, viagens]);
+  const size = config.tamanhos.find((item) => item.codigo === tamanho); const adjusted = calculated ? Math.abs(valorCobrado - calculated.preco) > .009 : false;
+  const ready = Boolean(remetente && remDoc && remTel && destinatario && destDoc && destTel && origem && destino && viagemId && size && peso > 0 && peso <= size.pesoMaxKg && volumes > 0 && valorDeclarado > 0 && conteudo && calculated && valorCobrado >= 0 && (!adjusted || motivo.trim()) && foto && (documentoTipo === "DC" ? config.termo.publicado : documento) && (quemPaga === "destinatario" || forma) && !saving);
+  function selectClient(item: ClienteEncomendaUi) { setClienteId(item.id); setNovo(false); setQuery(item.nome); setRemetente(item.nome); setRemDoc(item.documento); setRemTel(item.telefone ?? ""); }
+  async function upload(file: File, kind: "foto"|"documento") { setUploading(kind); setMessage(""); try { const row = await uploadEncomendaEvidence(file, kind === "foto" ? "foto_encomenda" : documentoTipo === "NF" ? "documento_nf" : "documento_dc"); kind === "foto" ? setFoto(row) : setDocumento(row); } catch (error) { setMessage(error instanceof Error ? error.message : "Falha no upload"); } finally { setUploading(null); } }
+  async function save() { if (!ready || !calculated) return; setSaving(true); setMessage(""); try { let actualClientId = clienteId; if (novo) { const created = await createCliente({ tipo: remDoc.replace(/\D/g,"").length > 11 ? "PJ" : "PF", nome: remetente, cpfCnpj: remDoc, cidadeSigla: origem, contatos: [{ tipo: "telefone", valor: remTel }] }); actualClientId = created.id; } await createEncomenda({ viagemId, clienteRemetenteId: actualClientId, remetenteNome: remetente, remetenteDocumento: remDoc, remetenteTelefone: remTel, destinatarioNome: destinatario, destinatarioDocumento: destDoc, destinatarioTelefone: destTel, cidadeOrigemSigla: origem, cidadeDestinoSigla: destino, tamanhoCodigo: tamanho, pesoTotal: peso, totalVolumes: volumes, valorDeclarado, valorCobrado, motivoAjusteValor: adjusted ? motivo : undefined, conteudoDeclarado: conteudo, quemPaga, formaPagamento: quemPaga === "remetente" ? forma : undefined, documentoTipo, documentoNumero: documentoNumero || undefined, evidenciaFotoId: foto!.id, evidenciaDocumentoId: documento?.id, cotacaoId: conversao?.cotacaoId, clientUuid: crypto.randomUUID() }); setMessage(documentoTipo === "DC" ? "Despacho criado. A DC precisa ser assinada na aba Documentos e assinatura antes de avançar." : "Despacho criado com NF e foto vinculadas."); reset(); onCreated(); } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível criar o despacho"); } finally { setSaving(false); } }
+  function reset() { setClienteId(""); setNovo(false); setQuery(""); setRemetente(""); setRemDoc(""); setRemTel(""); setDestinatario(""); setDestDoc(""); setDestTel(""); setTrecho(""); setViagemId(""); setPeso(0); setVolumes(1); setValorDeclarado(0); setConteudo(""); setFoto(null); setDocumento(null); setDocumentoNumero(""); setMotivo(""); }
+  return <div className="mt-5 space-y-4"><SectionHeader eyebrow="Balcão · cadastro definitivo" title={conversao ? "Converter cotação em despacho" : "Novo despacho de encomenda"} description="Dados estruturados, preço recalculado pelo servidor, foto e documento em storage privado. Nenhuma assinatura ou leitura de balança é simulada."/>
+    {conversao && <div className="rounded-lg bg-[color:color-mix(in_oklab,var(--info)_9%,transparent)] p-3 text-sm ring-1 ring-[color:color-mix(in_oklab,var(--info)_25%,transparent)]">Cotação {conversao.cotacaoId.slice(0,8).toUpperCase()} carregada. Complete destinatário, documento, foto e pagamento.</div>}
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]"><div className="space-y-4">
+      <Panel title="1. Remetente" icon={Search}><label className="text-xs text-muted-foreground">Buscar cliente existente</label><input className="field mt-1" value={query} onChange={(e) => { setQuery(e.target.value); setClienteId(""); }} placeholder="Nome, código ou CPF/CNPJ"/>{query && !clienteId && !novo && <div className="mt-2 max-h-52 overflow-auto rounded-lg ring-1 ring-[color:var(--hairline)]">{results.map((item) => <button key={item.id} onClick={() => selectClient(item)} className="block w-full px-3 py-2 text-left hover:bg-[color:var(--accent)]"><span className="text-sm font-medium">{item.nome}</span><span className="ml-2 text-xs text-muted-foreground">{item.codigo} · {item.documento}</span></button>)}<button onClick={() => { setNovo(true); setClienteId(""); setRemetente(query); }} className="flex w-full items-center gap-2 border-t border-[color:var(--hairline)] px-3 py-2 text-sm text-[color:var(--brand)]"><UserPlus className="h-4 w-4"/>Cadastrar “{query}”</button></div>}<div className="mt-3 grid gap-3 sm:grid-cols-3"><Field label="Nome / razão social"><input className="field" value={remetente} onChange={(e) => setRemetente(e.target.value)} disabled={Boolean(clienteId)}/></Field><Field label="CPF/CNPJ"><input className="field" value={remDoc} onChange={(e) => setRemDoc(e.target.value)} disabled={Boolean(clienteId)}/></Field><Field label="Telefone"><input className="field" value={remTel} onChange={(e) => setRemTel(e.target.value)}/></Field></div>{novo && <p className="mt-2 text-xs text-muted-foreground">O cliente será cadastrado pela mesma ação do despacho.</p>}</Panel>
+      <Panel title="2. Destinatário" icon={PackagePlus}><div className="grid gap-3 sm:grid-cols-3"><Field label="Nome / razão social"><input className="field" value={destinatario} onChange={(e) => setDestinatario(e.target.value)}/></Field><Field label="CPF/CNPJ"><input className="field" value={destDoc} onChange={(e) => setDestDoc(e.target.value)}/></Field><Field label="Telefone"><input className="field" value={destTel} onChange={(e) => setDestTel(e.target.value)}/></Field></div></Panel>
+      <Panel title="3. Viagem e dimensionamento" icon={PackagePlus}><div className="grid gap-3 md:grid-cols-2"><Field label="Trecho com preço publicado"><select className="field" value={trecho} onChange={(e) => setTrecho(e.target.value)}><option value="">Selecione</option>{precos.map((item) => <option key={item.trecho}>{item.trecho}</option>)}</select></Field><Field label="Viagem compatível"><select className="field" value={viagemId} onChange={(e) => setViagemId(e.target.value)}><option value="">Selecione</option>{compatibleTrips.map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.embarcacaoNome}</option>)}</select></Field></div><div className="mt-3 grid gap-3 sm:grid-cols-3"><Field label="Peso real (kg)"><input className="field" type="number" min="0.001" step="0.001" value={peso || ""} onChange={(e) => setPeso(Number(e.target.value))}/></Field><Field label="Volumes"><input className="field" type="number" min="1" step="1" value={volumes} onChange={(e) => setVolumes(Number(e.target.value))}/></Field><Field label="Valor declarado"><input className="field" type="number" min="0.01" step="0.01" value={valorDeclarado || ""} onChange={(e) => setValorDeclarado(Number(e.target.value))}/></Field></div><div className="mt-3 flex flex-wrap gap-2">{config.tamanhos.filter((item) => item.ativo).map((item) => <button key={item.codigo} onClick={() => setTamanho(item.codigo)} className={`rounded-lg px-3 py-2 text-sm ring-1 ${tamanho === item.codigo ? "text-[color:var(--brand)] ring-[color:var(--hairline-brand)]" : "ring-[color:var(--hairline)]"}`}><strong>{item.codigo}</strong> · {item.nome} · até {item.pesoMaxKg} kg</button>)}</div>{size && peso > size.pesoMaxKg && <p className="mt-3 inline-flex items-center gap-2 text-sm text-[color:var(--danger)]"><AlertTriangle className="h-4 w-4"/>O peso ultrapassa o limite publicado do tamanho.</p>}<Field label="Conteúdo declarado" className="mt-3"><textarea className="min-h-20 w-full rounded-xl bg-[color:var(--surface-elev)] p-3 text-sm ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]" value={conteudo} onChange={(e) => setConteudo(e.target.value)}/></Field></Panel>
+      <Panel title="4. Documento e foto" icon={FileText}><div className="flex gap-2">{(["DC","NF"] as const).map((kind) => <button key={kind} onClick={() => { setDocumentoTipo(kind); setDocumento(null); }} className={`h-10 rounded-lg px-4 text-sm ring-1 ${documentoTipo === kind ? "text-[color:var(--brand)] ring-[color:var(--hairline-brand)]" : "ring-[color:var(--hairline)]"}`}>{kind === "DC" ? "Declaração de Conteúdo" : "Nota Fiscal"}</button>)}</div>{documentoTipo === "DC" && !config.termo.publicado && <p className="mt-3 text-sm text-[color:var(--warning)]">O termo final ainda não foi publicado em Cadastros. Despachos com DC permanecem bloqueados.</p>}<div className="mt-3 grid gap-3 sm:grid-cols-2"><Upload label="Foto real da encomenda" icon={Camera} accept="image/jpeg,image/png,image/webp" value={foto} loading={uploading === "foto"} onFile={(file) => upload(file,"foto")}/><Upload label={documentoTipo === "NF" ? "XML, PDF ou foto da NF" : "Foto/PDF de DC externa (opcional)"} icon={FileText} accept=".xml,.pdf,image/jpeg,image/png,image/webp" value={documento} loading={uploading === "documento"} onFile={(file) => upload(file,"documento")}/></div>{documentoTipo === "NF" && <Field label="Número/chave da NF" className="mt-3"><input className="field" value={documentoNumero} onChange={(e) => setDocumentoNumero(e.target.value)}/></Field>}</Panel>
+      <Panel title="5. Pagamento" icon={Wallet}><div className="grid gap-2 sm:grid-cols-2">{(["remetente","destinatario"] as const).map((item) => <button key={item} onClick={() => setQuemPaga(item)} className={`h-11 rounded-lg text-sm font-medium ring-1 ${quemPaga === item ? "text-[color:var(--brand)] ring-[color:var(--hairline-brand)]" : "ring-[color:var(--hairline)]"}`}>{item === "remetente" ? "Remetente paga agora" : "Destinatário paga no destino"}</button>)}</div>{quemPaga === "remetente" ? <Field label="Forma de pagamento" className="mt-3"><select className="field" value={forma} onChange={(e) => setForma(e.target.value)}>{config.formasPagamento.filter((item) => item.ativo).map((item) => <option key={item.codigo} value={item.codigo}>{item.nome}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Exige caixa aberto do operador e lança o movimento automaticamente.</p></Field> : <p className="mt-3 text-xs text-muted-foreground">Será criado um título em Contas a Receber com o prazo publicado.</p>}</Panel>
+    </div><aside className="space-y-4 xl:sticky xl:top-20 xl:self-start"><PrecoDestaque resultado={calculated} trecho={trecho} tamanho={tamanho}/><section className="surface-card p-5"><h3 className="font-semibold">Valor cobrável</h3><label className="mt-3 block text-xs text-muted-foreground">Valor final<input className="field mt-1" type="number" min="0" step="0.01" value={valorCobrado || ""} onChange={(e) => setValorCobrado(Number(e.target.value))}/></label>{adjusted && <label className="mt-3 block text-xs text-muted-foreground">Motivo obrigatório do ajuste<textarea className="mt-1 min-h-20 w-full rounded-xl bg-[color:var(--surface-elev)] p-3 text-sm ring-1 ring-[color:var(--hairline)]" value={motivo} onChange={(e) => setMotivo(e.target.value)}/></label>}<div className="mt-4"><ResumoLinha label="Tabela">{brl(calculated?.preco ?? 0)}</ResumoLinha><ResumoLinha label="Cobrar">{brl(valorCobrado)}</ResumoLinha><ResumoLinha label="Documento">{documentoTipo}</ResumoLinha><ResumoLinha label="Pagamento">{quemPaga}</ResumoLinha><ResumoLinha label="Foto">{foto ? "anexada" : "pendente"}</ResumoLinha></div><PrimaryButton icon={CheckCircle2} disabled={!ready} onClick={save} className="mt-4 w-full">{saving ? "Criando…" : "Confirmar despacho"}</PrimaryButton>{!ready && <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Preencha as partes, selecione viagem/tabela, anexe a foto e o documento exigido. Ajustes de preço precisam de motivo.</p>}{message && <p className="mt-3 rounded-lg bg-[color:var(--muted)] p-3 text-xs text-muted-foreground">{message}</p>}</section></aside></div></div>;
 }
-
-function StepCard({
-  n, icon: Icon, title, hint, children,
-}: {
-  n: number;
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  hint: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="surface-card p-5">
-      <div className="flex items-start gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)] text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)]">
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] text-muted-foreground">{n}</span>
-            <h3 className="font-display text-base">{title}</h3>
-          </div>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>
-        </div>
-      </div>
-      <div className="mt-4">{children}</div>
-    </div>
-  );
-}
-
-function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      <label className="block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</label>
-      <div className="mt-1">{children}</div>
-    </div>
-  );
-}
+function Panel({ title, icon: Icon, children }: { title: string; icon: typeof Search; children: React.ReactNode }) { return <section className="surface-card p-5"><div className="mb-4 flex items-center gap-2"><Icon className="h-4 w-4 text-[color:var(--brand)]"/><h3 className="font-semibold">{title}</h3></div>{children}</section>; }
+function Field({ label, className="", children }: { label: string; className?: string; children: React.ReactNode }) { return <label className={`block text-xs text-muted-foreground ${className}`}>{label}<div className="mt-1">{children}</div></label>; }
+function Upload({ label, icon: Icon, accept, value, loading, onFile }: { label: string; icon: typeof Camera; accept: string; value: EncomendaEvidenceApi|null; loading: boolean; onFile:(file:File)=>void }) { return <label className="grid min-h-28 cursor-pointer place-items-center rounded-xl border border-dashed border-[color:var(--hairline-strong)] bg-[color:var(--surface-tint)] p-3 text-center"><input type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}/>{value ? <><CheckCircle2 className="h-5 w-5 text-[color:var(--success)]"/><span className="text-xs font-medium">{value.arquivo_nome}</span><StatusChip tone="success" size="xs">SHA-256 registrado</StatusChip></> : <><Icon className="h-5 w-5 text-[color:var(--brand)]"/><span className="text-xs font-medium">{loading ? "Enviando…" : label}</span><Tag tone="neutral">até 12 MB</Tag></>}</label>; }
+function includesCity(trip: ViagemEncomendaUi, city: string) { return Boolean(city) && (trip.origem === city || trip.destino === city || trip.escalas.some((item) => item.cidade === city)); }
+function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\W/g,""); }

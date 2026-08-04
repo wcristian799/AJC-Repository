@@ -1,72 +1,14 @@
-export type EncomendaTamanho = "P" | "M" | "G";
-export type EncomendaPagador = "remetente" | "destinatario";
-export type EncomendaStatus = "recebido" | "conferido" | "embarcado" | "em_viagem" | "desembarcado" | "entregue";
+import type { EncomendaApi, EncomendasConfigApi } from "@/lib/ajc-api";
 
-export type EncomendaUi = {
-  id: string;
-  apiId?: string;
-  codigo: string;
-  remetenteId: string;
-  remetente: string;
-  destinatario: string;
-  destinatarioContato: string;
-  trecho: string;
-  tamanho: EncomendaTamanho;
-  peso: number;
-  valorDeclarado: number;
-  valorCobrado: number;
-  modoPreco: "fixo" | "percentual";
-  quemPaga: EncomendaPagador;
-  dcId: string;
-  status: EncomendaStatus;
-  viagemId?: string;
-  conteudo: string;
-  criadoEm: string;
-  notificado: boolean;
-  sincronizado: boolean;
-};
-
-export type DeclaracaoConteudoUi = {
-  id: string;
-  encomendaId: string;
-  descricao: string;
-  valorDeclarado: number;
-  textoTermoVersao: string;
-  assinaturaOk: boolean;
-  aceiteEm: string;
-  dispositivo: string;
-};
-
+export type EncomendaUi = EncomendaApi;
+export type EncomendaConfigUi = EncomendasConfigApi;
 export type ViagemEncomendaUi = {
-  id: string;
-  codigo: string;
-  origem: string;
-  destino: string;
-  status: "planejada" | "em_curso" | "concluida" | "cancelada" | string;
+  id: string; codigo: string; origem: string; destino: string; status: string; embarcacaoNome: string;
   escalas: Array<{ cidade: string; horaPrevista: string; horaReal?: string }>;
-  embarcacaoNome: string;
 };
-
-export type PrecoEncomendaResultado = {
-  preco: number;
-  modo: "fixo" | "percentual";
-  limiteFixo: number;
-  percentual?: number;
-};
-
+export type ClienteEncomendaUi = { id: string; nome: string; documento: string; telefone?: string; cidade: string; codigo?: string };
 export type PrecoEncomendaTabela = {
-  trecho: string;
-  origemSigla: string;
-  destinoSigla: string;
-  p: number;
-  m: number;
-  g: number;
-  percentual: number;
+  trecho: string; origemSigla: string; destinoSigla: string;
+  valores: Record<string, number>; percentual: number; versao: number;
 };
-
-export type ClienteEncomendaUi = {
-  id: string;
-  nome: string;
-  documento: string;
-  cidade: string;
-};
+export type PrecoEncomendaResultado = { preco: number; modo: "fixo" | "percentual"; limiteFixo: number; percentual?: number; tabelaVersao: number };

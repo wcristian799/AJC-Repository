@@ -2,6 +2,14 @@
 @source "../src";
 @import "tw-animate-css";
 
+.hide-scrollbar {
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @utility field {
   height: 2.75rem;
   width: 100%;

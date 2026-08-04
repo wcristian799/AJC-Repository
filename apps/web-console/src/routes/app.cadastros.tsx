@@ -7,6 +7,7 @@ import { OperationalTmsConfig } from "@/components/ops/cadastros/OperationalTmsC
 import { OperationalTmsControlConfig } from "@/components/ops/cadastros/OperationalTmsControlConfig";
 import { OperationalUnitizacaoConfig } from "@/components/ops/cadastros/OperationalUnitizacaoConfig";
 import { OperationalPrestacaoConfig } from "@/components/ops/cadastros/OperationalPrestacaoConfig";
+import { OperationalEncomendasConfig } from "@/components/ops/cadastros/OperationalEncomendasConfig";
 import {
   SectionHeader, DataTable, FilterBar, FilterChip, PrimaryButton, GhostButton,
   StatusChip, brl,
@@ -332,7 +333,7 @@ function Cadastros() {
       </div>
       {erro && <p className="mt-3 text-xs text-[color:var(--danger)]">{erro}</p>}
 
-      {tab === "config_operacional" && <div className="mt-5 space-y-4"><OperationalTmsConfig /><OperationalUnitizacaoConfig /><OperationalTmsControlConfig /><OperationalPrestacaoConfig cidades={cidades} /><OperationalNavigationConfig cidades={cidades} /></div>}
+      {tab === "config_operacional" && <div className="mt-5 space-y-4"><OperationalTmsConfig /><OperationalUnitizacaoConfig /><OperationalTmsControlConfig /><OperationalPrestacaoConfig cidades={cidades} /><OperationalEncomendasConfig cidades={cidades} /><OperationalNavigationConfig cidades={cidades} /></div>}
 
       {tab === "usuarios" && (
         <div className="mt-5 space-y-4">

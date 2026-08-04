@@ -10,6 +10,7 @@ export interface CreateCotacaoInput {
   parametros?: Record<string, unknown>;
   valorEstimado?: number | null;
   validade?: string | null;
+  clientUuid?: string | null;
 }
 
 @Injectable()
@@ -55,6 +56,10 @@ export class CrmRepository {
       throw new BadRequestException('tipo invalido');
     }
     if (!input.clienteId) throw new BadRequestException('clienteId obrigatorio');
+    if (input.clientUuid) {
+      const existing = await this.db.one<{ id: string }>('SELECT id FROM cotacao WHERE client_uuid = $1', [input.clientUuid]);
+      if (existing) return this.findCotacao(existing.id);
+    }
     if (input.valorEstimado !== undefined && input.valorEstimado !== null && Number(input.valorEstimado) < 0) {
       throw new BadRequestException('valorEstimado invalido');
     }
@@ -62,12 +67,12 @@ export class CrmRepository {
       `
       INSERT INTO cotacao (
         tipo, cliente_id, agente_id, origem_sigla, destino_sigla,
-        parametros, valor_estimado, validade, status, criado_por
+        parametros, valor_estimado, validade, status, criado_por, client_uuid
       )
       VALUES (
         $1::tipo_cotacao, $2, $3, $4, $5, $6::jsonb, $7::numeric,
         COALESCE($8::timestamptz, now() + interval '7 days'),
-        'aberta', $9
+        'aberta', $9, $10
       )
       RETURNING id
       `,
@@ -81,6 +86,7 @@ export class CrmRepository {
         input.valorEstimado ?? null,
         input.validade ?? null,
         userId,
+        input.clientUuid ?? null,
       ],
     );
     return this.findCotacao(row.id);

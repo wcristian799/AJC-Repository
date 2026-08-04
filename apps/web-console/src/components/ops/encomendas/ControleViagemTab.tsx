@@ -1,152 +1,18 @@
-﻿import { useMemo, useState } from "react";
-import { Package, Ship, AlertTriangle, FileWarning } from "lucide-react";
-import {
-  SectionHeader, DataTable, FilterBar, FilterChip, StatusChip, ViagemStatusChip, Tag, brl,
-} from "@/components/ops/primitives";
-import type { DeclaracaoConteudoUi, EncomendaUi, ViagemEncomendaUi } from "./types";
+import { useMemo, useState } from "react";
+import { Download, FileWarning, Package, Search, Ship } from "lucide-react";
+import { DataTable, GhostButton, SectionHeader, StatusChip, Tag, brl } from "@/components/ops/primitives";
+import type { EncomendaApi } from "@/lib/ajc-api";
+import type { ViagemEncomendaUi } from "./types";
 
-type ViagemResumoEnc = {
-  id: string;
-  viagem: ViagemEncomendaUi;
-  embarcacao: string;
-  qtd: number;
-  valorDeclarado: number;
-  valorCobrado: number;
-  dcPendentes: number;
-};
-
-/** B.4 â€” Controle de encomendas por viagem (operaÃ§Ã£o/financeiro/diretoria). */
-export function ControleViagemTab({
-  encomendas = [],
-  declaracoes = [],
-  viagens = [],
-}: {
-  encomendas?: EncomendaUi[];
-  declaracoes?: DeclaracaoConteudoUi[];
-  viagens?: ViagemEncomendaUi[];
-}) {
-  const [viagemSel, setViagemSel] = useState<string | "todas">("todas");
-  const viagensBase = useMemo<ViagemEncomendaUi[]>(() => viagens, [viagens]);
-
-  const resumos = useMemo<ViagemResumoEnc[]>(() => {
-    return viagensBase.map((viagem) => {
-      const encs = encomendas.filter((e) => e.viagemId === viagem.id);
-      const dcPendentes = encs.filter((e) => {
-        const dc = declaracoes.find((d) => d.id === e.dcId);
-        return !dc || !dc.assinaturaOk;
-      }).length;
-      return {
-        id: viagem.id,
-        viagem,
-        embarcacao: viagem.embarcacaoNome,
-        qtd: encs.length,
-        valorDeclarado: encs.reduce((s, e) => s + e.valorDeclarado, 0),
-        valorCobrado: encs.reduce((s, e) => s + e.valorCobrado, 0),
-        dcPendentes,
-      };
-    }).filter((r) => r.qtd > 0);
-  }, [declaracoes, encomendas, viagensBase]);
-
-  const totalQtd = resumos.reduce((s, r) => s + r.qtd, 0);
-  const totalDeclarado = resumos.reduce((s, r) => s + r.valorDeclarado, 0);
-  const totalCobrado = resumos.reduce((s, r) => s + r.valorCobrado, 0);
-  const totalDcPendentes = resumos.reduce((s, r) => s + r.dcPendentes, 0);
-  const encomendasFiltradas = encomendas.filter((e) => viagemSel === "todas" || e.viagemId === viagemSel);
-
-  return (
-    <div className="mt-5 space-y-4">
-      <SectionHeader
-        eyebrow="OperaÃ§Ã£o Â· financeiro Â· diretoria"
-        title="Controle de encomendas por viagem"
-        description="Por viagem, em tempo real: quantidade de encomendas, valor declarado total e valor cobrado total. PendÃªncias de DeclaraÃ§Ã£o de ConteÃºdo sÃ£o sinalizadas. Alimenta o BI e o cruzamento financeiro."
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Mini label="Encomendas na operaÃ§Ã£o" value={String(totalQtd)} icon={Package} />
-        <Mini label="Valor declarado total" value={brl(totalDeclarado)} icon={Ship} />
-        <Mini label="Valor cobrado total" value={brl(totalCobrado)} tone="brand" icon={Ship} />
-        <Mini label="DC pendentes" value={String(totalDcPendentes)} tone={totalDcPendentes > 0 ? "danger" : "success"} icon={FileWarning} />
-      </div>
-
-      <DataTable<ViagemResumoEnc>
-        rows={resumos}
-        empty="Nenhuma viagem com encomendas."
-        onRowClick={(r) => setViagemSel((cur) => (cur === r.viagem.id ? "todas" : r.viagem.id))}
-        columns={[
-          { key: "codigo", header: "Viagem", render: (r) => (
-            <div>
-              <p className="font-mono text-xs">{r.viagem.codigo}</p>
-              <p className="text-[10px] text-muted-foreground">{r.viagem.origem} â†’ {r.viagem.destino}</p>
-            </div>
-          ) },
-          { key: "embarcacao", header: "EmbarcaÃ§Ã£o", render: (r) => <span className="text-xs">{r.embarcacao}</span> },
-          { key: "qtd", header: "Encomendas", align: "right", render: (r) => (
-            <span className="inline-flex items-center gap-1 font-mono text-sm"><Package className="h-3.5 w-3.5 text-muted-foreground" />{r.qtd}</span>
-          ) },
-          { key: "valorDeclarado", header: "Declarado", align: "right", render: (r) => <span className="font-mono text-xs">{brl(r.valorDeclarado)}</span> },
-          { key: "valorCobrado", header: "Cobrado", align: "right", render: (r) => <span className="font-mono text-xs text-[color:var(--brand)]">{brl(r.valorCobrado)}</span> },
-          { key: "dcPendentes", header: "DC pend.", align: "right", render: (r) => r.dcPendentes > 0
-            ? <span className="inline-flex items-center gap-1 text-[color:var(--danger)]"><AlertTriangle className="h-3.5 w-3.5" /><span className="font-mono text-xs">{r.dcPendentes}</span></span>
-            : <span className="text-muted-foreground">â€”</span> },
-          { key: "status", header: "Viagem", render: (r) => <ViagemStatusChip s={r.viagem.status} /> },
-        ]}
-      />
-
-      <FilterBar searchPlaceholder="Buscar remetente, destinatÃ¡rio, cidade, status...">
-        <FilterChip active={viagemSel === "todas"} onClick={() => setViagemSel("todas")}>Todas viagens</FilterChip>
-        {resumos.map((r) => (
-          <FilterChip key={r.id} active={viagemSel === r.id} onClick={() => setViagemSel(r.id)}>{r.viagem.codigo}</FilterChip>
-        ))}
-      </FilterBar>
-
-      <DataTable<EncomendaUi>
-        rows={encomendasFiltradas}
-        empty="Nenhuma encomenda nesta viagem."
-        columns={[
-          { key: "codigo", header: "Protocolo", render: (r) => <span className="font-mono text-[11px] text-[color:var(--brand)]">{r.codigo}</span> },
-          { key: "remetente", header: "Remetente", render: (r) => <span className="font-medium">{r.remetente}</span> },
-          { key: "destinatario", header: "DestinatÃ¡rio", render: (r) => (
-            <div>
-              <p className="text-sm">{r.destinatario}</p>
-              <p className="text-[10px] text-muted-foreground">{r.destinatarioContato}</p>
-            </div>
-          ) },
-          { key: "trecho", header: "Trecho", render: (r) => <span className="font-mono text-xs">{r.trecho}</span> },
-          { key: "tamanho", header: "Tam.", align: "center", render: (r) => <Tag tone="neutral">{r.tamanho} Â· {r.peso}kg</Tag> },
-          { key: "valorDeclarado", header: "Declarado", align: "right", render: (r) => <span className="font-mono text-xs">{brl(r.valorDeclarado)}</span> },
-          { key: "valorCobrado", header: "Cobrado", align: "right", render: (r) => (
-            <span className="inline-flex items-center gap-1 font-mono text-xs text-[color:var(--brand)]">
-              {brl(r.valorCobrado)}
-              {r.modoPreco === "percentual" && <Tag tone="warning">%</Tag>}
-            </span>
-          ) },
-          { key: "quemPaga", header: "Paga", render: (r) => <span className="text-[11px] capitalize text-muted-foreground">{r.quemPaga}</span> },
-          { key: "dc", header: "DC", align: "center", render: (r) => {
-            const dc = declaracoes.find((d) => d.id === r.dcId);
-            return dc?.assinaturaOk
-              ? <StatusChip tone="success" size="xs">assinada</StatusChip>
-              : <StatusChip tone="danger" size="xs">pendente</StatusChip>;
-          } },
-        ]}
-      />
-    </div>
-  );
+export function ControleViagemTab({ encomendas, viagens }: { encomendas: EncomendaApi[]; viagens: ViagemEncomendaUi[] }) {
+  const [tripId,setTripId]=useState(""); const [query,setQuery]=useState(""); const [status,setStatus]=useState("");
+  const rows=useMemo(()=>encomendas.filter((item)=>(!tripId||item.viagem_id===tripId)&&(!status||item.status_documental===status)&&normalize(`${item.codigo} ${item.remetente_nome} ${item.destinatario_nome} ${item.cidade_destino_sigla}`).includes(normalize(query))),[encomendas,tripId,status,query]);
+  const summary=useMemo(()=>rows.reduce((acc,item)=>({count:acc.count+1,declared:acc.declared+item.valor_declarado,charged:acc.charged+item.valor_cobrado,pending:acc.pending+(item.status_documental!=="pronta"?1:0)}),{count:0,declared:0,charged:0,pending:0}),[rows]);
+  function exportCsv(){const data=[["Protocolo","Viagem","Remetente","Destinatario","Trecho","Volumes","Declarado","Cobrado","Documento","Status"],...rows.map((item)=>[item.codigo,item.viagem_codigo,item.remetente_nome,item.destinatario_nome,`${item.cidade_origem_sigla}-${item.cidade_destino_sigla}`,item.total_volumes,item.valor_declarado,item.valor_cobrado,item.documento_tipo,item.status_documental])];const csv=data.map((line)=>line.map((value)=>`"${String(value).replaceAll('"','""')}"`).join(";")).join("\n");const url=URL.createObjectURL(new Blob(["\ufeff",csv],{type:"text/csv;charset=utf-8"}));const link=document.createElement("a");link.href=url;link.download=`encomendas-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
+  return <div className="mt-5 space-y-4"><SectionHeader eyebrow="Operação · financeiro · diretoria" title="Controle de encomendas por viagem" description="Valores e pendências vêm do domínio persistido. O filtro e a exportação usam os mesmos registros apresentados na tela." actions={<GhostButton icon={Download} disabled={!rows.length} onClick={exportCsv}>Exportar CSV</GhostButton>}/>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric icon={Package} label="Encomendas" value={String(summary.count)}/><Metric icon={Ship} label="Valor declarado" value={brl(summary.declared)}/><Metric icon={Ship} label="Valor cobrado" value={brl(summary.charged)}/><Metric icon={FileWarning} label="Documentação pendente" value={String(summary.pending)} warning={summary.pending>0}/></div>
+    <div className="surface-card flex flex-wrap gap-3 p-4"><label className="relative min-w-56 flex-1"><Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground"/><input className="field pl-9" value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Protocolo, remetente ou destinatário"/></label><select className="field w-auto min-w-52" value={tripId} onChange={(e)=>setTripId(e.target.value)}><option value="">Todas as viagens</option>{viagens.map((item)=><option key={item.id} value={item.id}>{item.codigo} · {item.embarcacaoNome}</option>)}</select><select className="field w-auto min-w-48" value={status} onChange={(e)=>setStatus(e.target.value)}><option value="">Todos os documentos</option><option value="pronta">Prontos</option><option value="aguardando_documento">Pendentes</option><option value="divergente">Divergentes</option></select></div>
+    <DataTable rows={rows} empty="Nenhuma encomenda corresponde aos filtros." columns={[{key:"codigo",header:"Protocolo",render:(item)=><div><p className="font-mono text-xs text-[color:var(--brand)]">{item.codigo}</p><p className="text-[10px] text-muted-foreground">{item.viagem_codigo} · {item.embarcacao_nome}</p></div>},{key:"partes",header:"Partes",render:(item)=><div><p className="text-sm font-medium">{item.remetente_nome}</p><p className="text-xs text-muted-foreground">→ {item.destinatario_nome}</p></div>},{key:"trecho",header:"Trecho",render:(item)=><span className="font-mono text-xs">{item.cidade_origem_sigla} → {item.cidade_destino_sigla}</span>},{key:"fisico",header:"Físico",render:(item)=><Tag tone="neutral">{item.tamanho_codigo ?? "sem classificação"} · {item.total_volumes} vol · {item.peso_total} kg</Tag>},{key:"declarado",header:"Declarado",align:"right",render:(item)=><span className="font-mono text-xs">{brl(item.valor_declarado)}</span>},{key:"cobrado",header:"Cobrado",align:"right",render:(item)=><div className="text-right"><p className="font-mono text-xs text-[color:var(--brand)]">{brl(item.valor_cobrado)}</p>{item.motivo_ajuste_valor&&<p className="text-[10px] text-[color:var(--warning)]">ajustado</p>}</div>},{key:"documento",header:"Documento",render:(item)=><div><p className="text-xs font-medium">{item.documento_tipo ? `${item.documento_tipo} ${item.documento_numero??""}` : "não registrado"}</p><StatusChip size="xs" tone={item.status_documental==="pronta"?"success":item.status_documental==="divergente"?"danger":"warning"}>{item.status_documental==="pronta"?"pronto":item.status_documental==="divergente"?"divergente":item.status_documental==="legado_incompleto"?"legado incompleto":"pendente"}</StatusChip></div>}]} /></div>;
 }
-
-function Mini({ label, value, tone = "neutral", icon: Icon }: {
-  label: string; value: string; tone?: "neutral" | "brand" | "danger" | "success";
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  const color = tone === "brand" ? "var(--brand)" : tone === "danger" ? "var(--danger)" : tone === "success" ? "var(--success)" : "var(--foreground)";
-  return (
-    <div className="surface-card flex items-center gap-3 p-4">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg ring-1 ring-[color:var(--hairline)]" style={{ color, background: `color-mix(in oklab, ${color} 10%, transparent)` }}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div className="min-w-0">
-        <p className="big-numeric truncate text-xl text-foreground">{value}</p>
-        <p className="text-[11px] text-muted-foreground">{label}</p>
-      </div>
-    </div>
-  );
-}
+function Metric({icon:Icon,label,value,warning=false}:{icon:typeof Package;label:string;value:string;warning?:boolean}){return <div className="surface-card flex items-center gap-3 p-4"><span className={`grid h-10 w-10 place-items-center rounded-lg ring-1 ring-[color:var(--hairline)] ${warning?"text-[color:var(--warning)]":"text-[color:var(--brand)]"}`}><Icon className="h-5 w-5"/></span><div><p className="big-numeric text-xl">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div></div>}
+function normalize(value:string){return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\W/g,"");}
