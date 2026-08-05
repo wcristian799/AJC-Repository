@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle, CalendarClock, Check, CheckCircle2, ChevronsUpDown, FileCheck2,
-  FileText, Plus, Radio, RefreshCw, Ship, Truck, Upload, UserCheck, UserPlus,
+  FileText, Plus, Radio, RefreshCw, Truck, Upload, UserCheck, UserPlus,
 } from "lucide-react";
 import {
   Command, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -17,17 +17,12 @@ import {
   conferirTmsDocumento,
   createTmsDocumento,
   listTmsAgendamentoDisponibilidade,
-  listTmsCargas,
   listTmsDocumentos,
-  listTmsVolumes,
   type CidadeApi,
   type ClienteApi,
-  type NavegacaoViagemApi,
   type TmsAgendamentoSlotApi,
-  type TmsCargaApi,
   type TmsDocumentoAnaliseApi,
   type TmsDocumentoApi,
-  type TmsVolumeApi,
 } from "@/lib/ajc-api";
 
 type NotaStatus = "pendente" | "conferida" | "divergente";
@@ -38,7 +33,6 @@ type NotaRow = {
   cliente: string;
   valor: number;
   carga: string;
-  viagem: string;
   pagamento: string;
   status: NotaStatus;
   volumes: number;
@@ -54,7 +48,6 @@ type LaunchForm = {
   tipo: "NFe" | "NFCe" | "DC";
   pagamento: "CIF" | "FOB";
   numero: string;
-  viagemId: string;
   cidadeDestinoSigla: string;
   valor: string;
   pesoTotal: string;
@@ -73,24 +66,15 @@ const STATUS_TONE: Record<NotaStatus, "warning" | "success" | "danger"> = {
 };
 
 export function NotasTab({
-  cargas,
   cidades,
   documentos = [],
-  viagens = [],
   clientes = [],
-  onCargasChange,
   onDocumentosChange,
-  onVolumesChange,
 }: {
-  cargas?: TmsCargaApi[];
   cidades?: CidadeApi[];
   documentos?: TmsDocumentoApi[];
-  volumes?: TmsVolumeApi[];
-  viagens?: NavegacaoViagemApi[];
   clientes?: ClienteApi[];
-  onCargasChange?: (items: TmsCargaApi[]) => void;
   onDocumentosChange?: (items: TmsDocumentoApi[]) => void;
-  onVolumesChange?: (items: TmsVolumeApi[]) => void;
 }) {
   const [filtro, setFiltro] = useState<NotaStatus | "todos">("todos");
   const [showLaunch, setShowLaunch] = useState(false);
@@ -104,14 +88,7 @@ export function NotasTab({
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [form, setForm] = useState<LaunchForm>(emptyForm());
 
-  const activeTrips = useMemo(
-    () => viagens.filter((trip) => ["planejada", "em_curso"].includes(trip.status)),
-    [viagens],
-  );
-  const selectedTrip = activeTrips.find((trip) => trip.id === form.viagemId);
-  const tripDestinations = selectedTrip
-    ? Array.from(new Set([...selectedTrip.escalas.map((stop) => stop.cidadeSigla), selectedTrip.destinoSigla].filter(Boolean) as string[]))
-    : [];
+  const destinationOptions = (cidades ?? []).filter((cidade) => cidade.ativo);
   const rows = documentos.map(mapDocumento).filter((item) => filtro === "todos" || item.status === filtro);
   const today = todayDateInput();
   const todayDocuments = documentos.filter((item) => item.agendado_para?.slice(0, 10) === today);
@@ -200,21 +177,12 @@ export function NotasTab({
     }));
   }
 
-  function selectTrip(id: string) {
-    const trip = activeTrips.find((item) => item.id === id);
-    setForm((current) => ({
-      ...current,
-      viagemId: id,
-      cidadeDestinoSigla: trip?.destinoSigla ?? trip?.escalas.at(-1)?.cidadeSigla ?? "",
-    }));
-  }
-
   async function saveDocument() {
     setError(null);
     if (!form.uploadId) return setError("Envie o arquivo da NF/DC antes de continuar.");
     if (!form.remetenteNome.trim()) return setError("Informe o nome ou razao social do remetente.");
     if (!form.numero.trim()) return setError("Informe o numero da NF/DC.");
-    if (!form.viagemId || !form.cidadeDestinoSigla) return setError("Selecione a viagem e o destino operacional.");
+    if (!form.cidadeDestinoSigla) return setError("Selecione o destino da carga.");
     if (!form.destinatarioNome.trim() || !form.destinatarioDocumento.trim() || !form.destinatarioTelefone.trim()) {
       return setError("Informe nome, CPF/CNPJ e telefone do destinatario.");
     }
@@ -223,7 +191,6 @@ export function NotasTab({
     try {
       await createTmsDocumento({
         uploadId: form.uploadId,
-        viagemId: form.viagemId,
         clienteRemetenteId: form.clienteRemetenteId || undefined,
         remetenteNome: form.remetenteNome.trim(),
         remetenteDocumento: form.remetenteDocumento.trim() || undefined,
@@ -231,7 +198,6 @@ export function NotasTab({
         tipo: form.tipo,
         pagamento: form.pagamento,
         numero: form.numero.trim(),
-        cidadeOrigemSigla: selectedTrip?.origemSigla,
         cidadeDestinoSigla: form.cidadeDestinoSigla,
         valor: parseNumber(form.valor),
         pesoTotal: parseNumber(form.pesoTotal),
@@ -242,12 +208,7 @@ export function NotasTab({
         agendadoPara: form.agendadoPara,
         clientUuid: crypto.randomUUID(),
       });
-      const [nextLoads, nextDocuments, nextVolumes] = await Promise.all([
-        listTmsCargas(), listTmsDocumentos(), listTmsVolumes(),
-      ]);
-      onCargasChange?.(nextLoads);
-      onDocumentosChange?.(nextDocuments);
-      onVolumesChange?.(nextVolumes);
+      onDocumentosChange?.(await listTmsDocumentos());
       setAnalysis(null);
       setForm(emptyForm());
       setShowLaunch(false);
@@ -284,13 +245,13 @@ export function NotasTab({
       <SectionHeader
         eyebrow="ADM Notas - back-office"
         title="Notas Fiscais & Declaracoes de Conteudo"
-        description="Um unico fluxo para enviar, interpretar e vincular cada NF/DC a cliente, carga e viagem antes do recebimento."
+        description="Lance e confira a NF/DC como documento livre. O vínculo com carga, volumes e viagem acontece depois, exclusivamente em Nova carga."
         actions={<PrimaryButton icon={Upload} onClick={() => setShowLaunch((value) => !value)}>Lancar NF/DC</PrimaryButton>}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <MiniStat label="Pendentes de conferencia" value={documentos.filter((item) => item.status === "pendente").length} tone="warning" icon={FileText} />
-        <MiniStat label="Vinculadas a carga" value={documentos.filter((item) => item.carga_id).length} tone="brand" icon={Ship} />
+        <MiniStat label="Livres para nova carga" value={documentos.filter((item) => !item.carga_id).length} tone="brand" icon={FileCheck2} />
         <MiniStat label="Conferidas hoje" value={documentos.filter((item) => item.status === "conferida" && item.atualizado_em.slice(0, 10) === today).length} tone="success" icon={CheckCircle2} />
       </div>
 
@@ -323,8 +284,7 @@ export function NotasTab({
                 <Field label="Tipo"><select value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value as LaunchForm["tipo"] })}><option value="NFe">NF-e</option><option value="NFCe">NFC-e</option><option value="DC">Declaracao de Conteudo</option></select></Field>
                 <Field label="Numero / chave"><input value={form.numero} onChange={(event) => setForm({ ...form, numero: event.target.value })} /></Field>
                 <Field label="Pagamento"><select value={form.pagamento} onChange={(event) => setForm({ ...form, pagamento: event.target.value as LaunchForm["pagamento"] })}><option value="CIF">CIF</option><option value="FOB">FOB</option></select></Field>
-                <Field label="Viagem"><select value={form.viagemId} onChange={(event) => selectTrip(event.target.value)}><option value="">Selecionar viagem</option>{activeTrips.map((trip) => <option key={trip.id} value={trip.id}>{trip.codigo} - {trip.embarcacaoNome} - {trip.origemSigla} → {trip.destinoSigla}</option>)}</select></Field>
-                <Field label="Destino da carga"><select value={form.cidadeDestinoSigla} disabled={!selectedTrip} onChange={(event) => setForm({ ...form, cidadeDestinoSigla: event.target.value })}><option value="">Selecionar destino</option>{tripDestinations.map((sigla) => <option key={sigla} value={sigla}>{cityLabel(sigla, cidades)}</option>)}</select></Field>
+                <Field label="Destino da futura carga"><select value={form.cidadeDestinoSigla} onChange={(event) => setForm({ ...form, cidadeDestinoSigla: event.target.value })}><option value="">Selecionar destino</option>{destinationOptions.map((cidade) => <option key={cidade.sigla} value={cidade.sigla}>{cidade.nome} ({cidade.sigla})</option>)}</select></Field>
                 <AgendamentoField data={form.agendamentoData} value={form.agendadoPara} slots={slots} loading={loadingSlots} onDate={(value) => setForm({ ...form, agendamentoData: value, agendadoPara: "" })} onValue={(value) => setForm({ ...form, agendadoPara: value })} />
                 <Field label="Valor declarado"><input inputMode="decimal" value={form.valor} onChange={(event) => setForm({ ...form, valor: event.target.value })} placeholder="0,00" /></Field>
                 <Field label="Peso total"><input inputMode="decimal" value={form.pesoTotal} onChange={(event) => setForm({ ...form, pesoTotal: event.target.value })} placeholder="kg" /></Field>
@@ -336,7 +296,7 @@ export function NotasTab({
               </div>
 
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--hairline)] pt-4">
-                <p className="max-w-2xl text-xs text-muted-foreground">A nota cria a carga e os volumes. A escolha MP/PD/PC e a alocacao no palete acontecem no recebimento, com a mercadoria fisicamente conferida.</p>
+                <p className="max-w-2xl text-xs text-muted-foreground">Ao salvar, nasce somente a NF/DC livre, com cliente, destino e dados fiscais. Nenhuma carga, viagem, volume ou palete é criado nesta etapa.</p>
                 <div className="flex gap-2"><GhostButton onClick={() => { setShowLaunch(false); setAnalysis(null); }}>Cancelar</GhostButton><PrimaryButton icon={FileCheck2} disabled={saving} onClick={saveDocument}>{saving ? "Lancando..." : "Lancar NF/DC"}</PrimaryButton></div>
               </div>
             </div>
@@ -345,7 +305,7 @@ export function NotasTab({
 
       {error && <p role="alert" className="rounded-md bg-[color:color-mix(in_oklab,var(--danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--danger)] ring-1 ring-[color:color-mix(in_oklab,var(--danger)_28%,transparent)]">{error}</p>}
 
-      <FilterBar searchPlaceholder="Buscar numero, cliente, carga ou viagem...">
+      <FilterBar searchPlaceholder="Buscar numero, cliente, destino ou carga...">
         {(["todos", "pendente", "conferida", "divergente"] as const).map((value) => <FilterChip key={value} active={filtro === value} onClick={() => setFiltro(value)}>{value === "todos" ? "Todos" : value === "pendente" ? "Pendentes" : value === "conferida" ? "Conferidas" : "Divergentes"}</FilterChip>)}
       </FilterBar>
       <DataTable<NotaRow>
@@ -355,8 +315,7 @@ export function NotasTab({
           { key: "tipo", header: "Tipo", render: (row) => <Tag tone={row.tipo === "DC" ? "info" : "brand"}>{row.tipo}</Tag> },
           { key: "numero", header: "Numero / chave", render: (row) => <span className="font-mono text-[11px]">{row.numero}</span> },
           { key: "cliente", header: "Cliente", render: (row) => <span className="font-medium">{row.cliente}</span> },
-          { key: "carga", header: "Carga", render: (row) => <span className="font-mono text-xs">{row.carga}</span> },
-          { key: "viagem", header: "Viagem", render: (row) => <span className="font-mono text-xs text-muted-foreground">{row.viagem}</span> },
+          { key: "carga", header: "Vinculo", render: (row) => row.carga === "-" ? <StatusChip tone="info" size="sm">livre para carga</StatusChip> : <span className="font-mono text-xs">{row.carga}</span> },
           { key: "pagamento", header: "CIF/FOB", render: (row) => <Tag tone={row.pagamento === "FOB" ? "warning" : "info"}>{row.pagamento}</Tag> },
           { key: "valor", header: "Valor", align: "right", render: (row) => <span className="font-mono text-xs">{brl(row.valor)}</span> },
           { key: "status", header: "Status", render: (row) => <StatusChip tone={STATUS_TONE[row.status]} size="sm">{row.status}</StatusChip> },
@@ -522,8 +481,8 @@ function MiniNumber({ label, value }: { label: string; value: number }) { return
 
 function Action({ title, disabled, icon: Icon, tone, onClick }: { title: string; disabled: boolean; icon: React.ComponentType<{ className?: string }>; tone: "success" | "danger"; onClick: () => void }) { const color = tone === "success" ? "var(--success)" : "var(--danger)"; return <button aria-label={title} title={title} disabled={disabled} onClick={onClick} className="grid h-8 w-8 place-items-center rounded-md ring-1 disabled:opacity-50" style={{ color, borderColor: "transparent", background: `color-mix(in oklab, ${color} 9%, transparent)` }}><Icon className="h-4 w-4" /></button>; }
 
-function mapDocumento(item: TmsDocumentoApi): NotaRow { return { id: item.id, tipo: item.tipo === "DC" ? "DC" : item.tipo === "NFCe" ? "NFC-e" : "NF-e", numero: item.numero ?? item.chave_acesso ?? "-", cliente: item.cliente_nome ?? item.remetente_nome ?? "Cliente nao informado", valor: item.valor ?? 0, carga: item.carga_codigo ?? "-", viagem: item.viagem_codigo ?? "-", pagamento: item.pagamento === "FOB" ? "FOB" : "CIF", status: item.status === "divergente" ? "divergente" : item.status === "conferida" ? "conferida" : "pendente", volumes: Number(item.total_volumes ?? 0), agendadoPara: item.agendado_para }; }
-function emptyForm(): LaunchForm { return { uploadId: "", clienteRemetenteId: "", remetenteNome: "", remetenteDocumento: "", remetenteTelefone: "", tipo: "NFe", pagamento: "CIF", numero: "", viagemId: "", cidadeDestinoSigla: "", valor: "", pesoTotal: "", totalVolumes: "1", destinatarioNome: "", destinatarioDocumento: "", destinatarioTelefone: "", agendamentoData: todayDateInput(), agendadoPara: "" }; }
+function mapDocumento(item: TmsDocumentoApi): NotaRow { return { id: item.id, tipo: item.tipo === "DC" ? "DC" : item.tipo === "NFCe" ? "NFC-e" : "NF-e", numero: item.numero ?? item.chave_acesso ?? "-", cliente: item.cliente_nome ?? item.remetente_nome ?? "Cliente nao informado", valor: item.valor ?? 0, carga: item.carga_codigo ?? "-", pagamento: item.pagamento === "FOB" ? "FOB" : "CIF", status: item.status === "divergente" ? "divergente" : item.status === "conferida" ? "conferida" : "pendente", volumes: Number(item.total_volumes ?? 0), agendadoPara: item.agendado_para }; }
+function emptyForm(): LaunchForm { return { uploadId: "", clienteRemetenteId: "", remetenteNome: "", remetenteDocumento: "", remetenteTelefone: "", tipo: "NFe", pagamento: "CIF", numero: "", cidadeDestinoSigla: "", valor: "", pesoTotal: "", totalVolumes: "1", destinatarioNome: "", destinatarioDocumento: "", destinatarioTelefone: "", agendamentoData: todayDateInput(), agendadoPara: "" }; }
 function parseNumber(value: string) { const parsed = Number(value.replace(/\./g, "").replace(",", ".").trim()); return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined; }
 function todayDateInput() { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 function formatSlot(value: string) { return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
@@ -531,4 +490,3 @@ function formatDate(value: string) { return value ? new Intl.DateTimeFormat("pt-
 function formatBytes(value: number) { return value < 1024 * 1024 ? `${Math.max(1, Math.round(value / 1024))} KB` : `${(value / 1024 / 1024).toFixed(1)} MB`; }
 function normalizeSearch(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase(); }
 function formatDocument(value: string) { const digits = value.replace(/\D/g, ""); if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4"); if (digits.length === 14) return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5"); return value; }
-function cityLabel(sigla: string, cidades: CidadeApi[] | undefined) { const city = cidades?.find((item) => item.sigla === sigla); return city ? `${city.nome} · ${sigla}` : sigla; }

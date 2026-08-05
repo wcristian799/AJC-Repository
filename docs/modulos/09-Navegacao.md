@@ -72,6 +72,10 @@ Escala (colaborador_id, viagem_id, funcao, status, notificado_em)
 ### B.4 Status de viagem
 - Janela/lista por viagem com indicador: **no prazo** (verde), **atenção** (amarelo), **atrasado** (vermelho).
 - Detalhe: previsto × real por escala.
+- A transição `planejada → em_curso` é iniciada pelo **Gerente da Embarcação** no app `/campo/gerente`.
+- A transição `em_curso → concluida` também é encerrada pelo gerente no mesmo app. Ambas gravam usuário, horário real, `client_uuid` e `audit_evento`.
+- Cancelamento continua sendo ação administrativa separada, exige motivo e permissão `navegacao.editar`.
+- O acesso operacional exige `navegacao.operar_viagem`, distribuído aos perfis em Cadastros; não é inferido pelo nome do perfil.
 
 ### B.5 Escala de colaboradores
 **Persona:** Operação.

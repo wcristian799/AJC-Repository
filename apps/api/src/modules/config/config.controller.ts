@@ -21,6 +21,7 @@ import { validateTmsUnitizacaoConfig } from "../tms/tms-unitizacao-config.valida
 import { validateTmsPrestacaoConfig } from "../tms/tms-prestacao-config.validator";
 import { validateEncomendasConfig } from "../encomendas/encomendas-config.validator";
 import { validatePdvConfig } from "../vendas/vendas-pdv.validator";
+import { validateVeiculosOrigensConfig } from "../veiculos/veiculos-config.validator";
 
 interface PublishConfigBody {
   valor?: unknown;
@@ -89,6 +90,9 @@ export class ConfigController {
     }
     if (chave.trim() === "vendas_pdv_operacao") {
       validatePdvConfig(body.valor);
+    }
+    if (chave.trim() === "veiculos_origens_cadastro") {
+      validateVeiculosOrigensConfig(body.valor);
     }
     return this.repository.publish(chave.trim(), body.valor, user.sub);
   }

@@ -46,22 +46,17 @@ export const StatusCarga = [
 export type StatusCarga = (typeof StatusCarga)[number];
 
 export const StatusVolume = [
-  'recebido',
+  'cadastrado',
   'conferido',
   'embarcado',
-  'reconferido',
-  'desembarcado',
   'entregue',
   'divergente',
 ] as const;
 export type StatusVolume = (typeof StatusVolume)[number];
 
 export const TipoEventoVolume = [
-  'recebido',
   'conferido',
   'embarcado',
-  'reconferido',
-  'desembarcado',
   'entregue',
   'divergencia',
 ] as const;

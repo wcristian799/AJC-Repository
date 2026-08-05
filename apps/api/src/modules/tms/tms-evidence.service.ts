@@ -16,9 +16,18 @@ type UploadedFile = {
 
 @Injectable()
 export class TmsEvidenceService {
-  private readonly bucket = "recebimento-fotos";
+  private readonly receivingBucket = "recebimento-fotos";
+  private readonly deliveryBucket = "entregas-comprovantes";
 
   async upload(file: UploadedFile) {
+    return this.uploadToBucket(file, this.receivingBucket, "recebimento");
+  }
+
+  async uploadDelivery(file: UploadedFile) {
+    return this.uploadToBucket(file, this.deliveryBucket, "entrega");
+  }
+
+  private async uploadToBucket(file: UploadedFile, bucket: string, context: string) {
     if (!file?.buffer?.length)
       throw new BadRequestException("Evidencia obrigatoria");
     if (file.size > 12 * 1024 * 1024)
@@ -29,21 +38,21 @@ export class TmsEvidenceService {
     const hash = createHash("sha256").update(file.buffer).digest("hex");
     const key = `${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${safeName(file.originalname)}`;
     let lastError: unknown;
-    for (const client of this.clients()) {
+    for (const client of this.clients(context)) {
       try {
-        if (!(await client.bucketExists(this.bucket)))
+        if (!(await client.bucketExists(bucket)))
           await client.makeBucket(
-            this.bucket,
+            bucket,
             process.env.OBJECT_STORAGE_REGION || "us-east-1",
           );
-        await client.putObject(this.bucket, key, file.buffer, file.size, {
+        await client.putObject(bucket, key, file.buffer, file.size, {
           "Content-Type": mime,
           "X-Amz-Meta-Sha256": hash,
         });
         return {
-          bucket: this.bucket,
+          bucket,
           objetoChave: key,
-          url: `s3://${this.bucket}/${key}`,
+          url: `s3://${bucket}/${key}`,
           hash,
           bytes: file.size,
           nome: file.originalname,
@@ -58,12 +67,12 @@ export class TmsEvidenceService {
     );
   }
 
-  private clients() {
+  private clients(context: string) {
     const endpoint = process.env.OBJECT_STORAGE_ENDPOINT;
     const credentials = resolveStorageCredentials(process.env);
     if (!endpoint || !credentials.length)
       throw new ServiceUnavailableException(
-        "Object storage nao configurado para evidencias do recebimento",
+        `Object storage nao configurado para evidencias de ${context}`,
       );
     const url = new URL(endpoint);
     return credentials.map(

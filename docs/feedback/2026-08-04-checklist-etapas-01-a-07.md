@@ -118,7 +118,7 @@
 
 - [x] Conferência física pode ser aberta e retomada por viagem, local e operador autenticado.
 - [x] AVULSA, MP, PD e PC exigem escolha explícita do conferente.
-- [x] NF/DC vinculada à viagem apresenta cliente, destino e saldo ainda não recebido.
+- [x] NF/DC vinculada à viagem apresenta cliente, destino e saldo ainda não processado na operação selecionada.
 - [x] Quantidade encontrada, falta, excesso, justificativa e volumes adicionais são persistidos.
 - [x] Evidência fotográfica é enviada ao MinIO; sem sinal, permanece na fila local até sincronizar.
 - [x] Fechamento parcial/completo obedece à versão publicada da configuração.
@@ -146,7 +146,7 @@
 - [ ] Publicar as regras operacionais aprovadas em Cadastros.
 - [ ] Homologar modelo, protocolo, tamanho e conectividade da impressora física.
 - [ ] Executar teste real de impressão, falha, confirmação e reimpressão com motivo.
-- [ ] Executar ciclo offline real: receber sem sinal, recuperar conexão e confirmar idempotência.
+- [ ] Executar ciclo offline real: bipar conferência/embarque sem sinal, recuperar conexão e confirmar idempotência.
 
 ## Etapa 05 — Aplicativos de campo e prestação de contas
 

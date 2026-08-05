@@ -33,7 +33,7 @@ Rota `/app/tms` expandida. Telas adicionadas (mapeadas ao SPEC `docs/modulos/01-
 | Entregas (desembarque + foto + assinatura) | B.9 | app de campo, prova legal |
 | Prestação de contas do gerente | B.10 | web/app gerente |
 | Controle por viagem | B.11 | visão gestão |
-| Simulador App Conferente (2º bipe) | B.4 / B.7 | preservado, app de campo |
+| Simulador App Conferente (termo histórico; hoje bipe de embarque) | B.4 / B.7 | preservado como app de campo; fluxo atualizado em 04/ago/2026 |
 Componentes em `src/components/ops/tms/` (`PhoneFrame` compartilhado).
 
 ## 6. Encomendas — CRIADO do zero

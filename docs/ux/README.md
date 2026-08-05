@@ -10,7 +10,7 @@ Especificação de UX e telas do MVP, pronta para o time de front começar. Todo
 | # | Documento | Escopo | Dispositivos |
 |---|---|---|---|
 | 00 | [Fundação](./00-Fundacao-DesignSystem-Navegacao-Acesso.md) | Design system, shell, acesso, RBAC, onboarding | Todos |
-| 01 | [TMS / Carga](./01-UX-TMS-Carga.md) | Conferência, portaria, etiqueta, 2º bipe, cross-docking, entrega | Apps de campo + 1 web |
+| 01 | [TMS / Carga](./01-UX-TMS-Carga.md) | Conferência, portaria, etiqueta, embarque, cross-docking e entrega | Apps de campo + 1 web |
 | 02 | [Vendas / Passagens](./02-UX-Vendas-Passagens.md) | Compra, PDV passagem, PDV encomenda, totem, validação, cortesia/gratuidade, relatórios, NPS | Site/app, PDV, totem, app campo |
 | 03 | [CRM](./03-UX-CRM.md) | Clientes, ficha 360º, agentes, histórico, cotações | Back-office |
 | 04 | [Cadastros](./04-UX-Cadastros.md) | Usuários/RBAC, preços (reajuste em massa), fornecedores, colaboradores, escalas | Back-office |

@@ -14,6 +14,7 @@ import {
   SavePaleteInput,
   ScanConferenciaVolumeInput,
 } from "./tms.types";
+import { canScanVolume, operationTarget } from "./tms-volume-flow";
 import {
   TmsUnitizacaoConfig,
   UnitizacaoCodigo,
@@ -232,11 +233,17 @@ export class TmsUnitizacaoRepository {
     return row;
   }
 
-  async listDocumentosDisponiveis(viagemId: string, busca?: string) {
+  async listDocumentosDisponiveis(
+    viagemId: string,
+    busca?: string,
+    modoOperacao: "conferencia" | "embarque" = "conferencia",
+  ) {
+    if (!["conferencia", "embarque"].includes(modoOperacao))
+      throw new BadRequestException("Modo operacional invalido");
     const search = normalize(busca, 120);
     const result = await this.db.query(
       `SELECT df.id, df.tipo::text, df.numero, df.status::text, df.carga_id,
-              c.codigo AS carga_codigo, c.cidade_destino_sigla, c.tipo_unitizacao,
+              c.codigo AS carga_codigo, c.cidade_destino_sigla, c.tipo_unitizacao, c.tipo_recebimento::text,
               cli.codigo AS cliente_codigo, cli.nome AS cliente_nome,
               count(vol.id)::int AS quantidade_declarada,
               COALESCE(used.quantidade_informada,0)::int AS quantidade_alocada,
@@ -248,13 +255,14 @@ export class TmsUnitizacaoRepository {
        LEFT JOIN LATERAL (
          SELECT sum(cri.quantidade_informada)::int AS quantidade_informada
          FROM conferencia_recebimento_item cri JOIN conferencia_recebimento cr ON cr.id=cri.conferencia_id
-         WHERE cri.documento_fiscal_id=df.id AND cr.status <> 'cancelada'
+         WHERE cri.documento_fiscal_id=df.id AND cr.status <> 'cancelada' AND cr.modo_operacao=$3
        ) used ON true
        WHERE c.viagem_id=$1
+         AND ($3 = 'embarque' OR c.tipo_recebimento = 'porto_balsa')
          AND ($2::text IS NULL OR unaccent(lower(COALESCE(df.numero,'')||' '||c.codigo||' '||cli.codigo||' '||cli.nome)) LIKE '%'||unaccent(lower($2))||'%')
        GROUP BY df.id,c.id,cli.id,used.quantidade_informada
        ORDER BY cli.nome, df.numero NULLS LAST LIMIT 100`,
-      [viagemId, search],
+      [viagemId, search, modoOperacao],
     );
     return result.rows;
   }
@@ -269,6 +277,9 @@ export class TmsUnitizacaoRepository {
     }
     const config = await this.config();
     const type = input.tipoUnitizacao;
+    const modoOperacao = input.modoOperacao ?? "conferencia";
+    if (!["conferencia", "embarque"].includes(modoOperacao))
+      throw new BadRequestException("Modo operacional invalido");
     if (!["AVULSA", "MP", "PD", "PC"].includes(type))
       throw new BadRequestException("Tipo de unitizacao invalido");
     if (type === "AVULSA" && !config.recebimento.permitirAvulsa)
@@ -315,7 +326,8 @@ export class TmsUnitizacaoRepository {
           throw new BadRequestException("Palete inexistente ou inativo");
         if (
           pallet.local_operacional_id &&
-          pallet.local_operacional_id !== input.localOperacionalId
+          pallet.local_operacional_id !== input.localOperacionalId &&
+          modoOperacao !== "embarque"
         )
           throw new BadRequestException(
             `${pallet.codigo} esta registrado em outro local operacional`,
@@ -353,18 +365,19 @@ export class TmsUnitizacaoRepository {
             ],
           );
         await client.query(
-          "UPDATE palete SET status='alocado', tipo_unitizacao=$2, local_operacional_id=$3 WHERE id=$1",
-          [input.paleteId, type, input.localOperacionalId],
+          "UPDATE palete SET status=CASE WHEN $4='embarque' THEN 'em_transito'::status_palete ELSE 'alocado'::status_palete END, tipo_unitizacao=$2, local_operacional_id=$3 WHERE id=$1",
+          [input.paleteId, type, input.localOperacionalId, modoOperacao],
         );
       }
       const row = await client.query(
-        `INSERT INTO conferencia_recebimento (viagem_id,palete_id,local_operacional_id,tipo_unitizacao,conferente_id,client_uuid)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        `INSERT INTO conferencia_recebimento (viagem_id,palete_id,local_operacional_id,tipo_unitizacao,modo_operacao,conferente_id,client_uuid)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
         [
           input.viagemId,
           input.paleteId ?? null,
           input.localOperacionalId,
           type,
+          modoOperacao,
           userId,
           input.clientUuid ?? null,
         ],
@@ -405,9 +418,10 @@ export class TmsUnitizacaoRepository {
           viagem_id: string;
           palete_id: string | null;
           tipo_unitizacao: string;
+          modo_operacao: "conferencia" | "embarque";
           status: string;
         }>(
-          "SELECT id,viagem_id,palete_id,tipo_unitizacao,status FROM conferencia_recebimento WHERE id=$1 FOR UPDATE",
+          "SELECT id,viagem_id,palete_id,tipo_unitizacao,modo_operacao,status FROM conferencia_recebimento WHERE id=$1 FOR UPDATE",
           [conferenciaId],
         )
       ).rows[0];
@@ -421,8 +435,9 @@ export class TmsUnitizacaoRepository {
           carga_id: string;
           viagem_id: string;
           cidade_destino_sigla: string;
+          tipo_recebimento: "porto_balsa" | "direto";
         }>(
-          `SELECT df.id,df.carga_id,c.viagem_id,c.cidade_destino_sigla FROM documento_fiscal df JOIN carga c ON c.id=df.carga_id WHERE df.id=$1 FOR UPDATE OF df,c`,
+          `SELECT df.id,df.carga_id,c.viagem_id,c.cidade_destino_sigla,c.tipo_recebimento::text FROM documento_fiscal df JOIN carga c ON c.id=df.carga_id WHERE df.id=$1 FOR UPDATE OF df,c`,
           [input.documentoFiscalId],
         )
       ).rows[0];
@@ -430,6 +445,8 @@ export class TmsUnitizacaoRepository {
         throw new BadRequestException("Documento sem carga vinculada");
       if (document.viagem_id !== conference.viagem_id)
         throw new BadRequestException("Documento pertence a outra viagem");
+      if (conference.modo_operacao === "conferencia" && document.tipo_recebimento === "direto")
+        throw new BadRequestException("Carga de cross-docking deve ser bipada diretamente no embarque");
       const declared = Number(
         (
           await client.query<{ total: number }>(
@@ -441,8 +458,8 @@ export class TmsUnitizacaoRepository {
       const allocated = Number(
         (
           await client.query<{ total: number }>(
-            `SELECT COALESCE(sum(cri.quantidade_informada),0)::int AS total FROM conferencia_recebimento_item cri JOIN conferencia_recebimento cr ON cr.id=cri.conferencia_id WHERE cri.documento_fiscal_id=$1 AND cr.status <> 'cancelada'`,
-            [document.id],
+            `SELECT COALESCE(sum(cri.quantidade_informada),0)::int AS total FROM conferencia_recebimento_item cri JOIN conferencia_recebimento cr ON cr.id=cri.conferencia_id WHERE cri.documento_fiscal_id=$1 AND cr.status <> 'cancelada' AND cr.modo_operacao=$2`,
+            [document.id, conference.modo_operacao],
           )
         ).rows[0]?.total ?? 0,
       );
@@ -503,36 +520,46 @@ export class TmsUnitizacaoRepository {
       );
       const volumes = await client.query<{ id: string }>(
         `SELECT vol.id FROM volume vol
-         WHERE vol.carga_id=$1 AND NOT EXISTS (SELECT 1 FROM conferencia_recebimento_volume crv WHERE crv.volume_id=vol.id)
+         WHERE vol.carga_id=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM conferencia_recebimento_volume crv
+             JOIN conferencia_recebimento cr ON cr.id=crv.conferencia_id
+             WHERE crv.volume_id=vol.id AND cr.modo_operacao=$3 AND cr.status <> 'cancelada'
+           )
+           AND (
+             ($3='conferencia' AND vol.status='cadastrado') OR
+             ($3='embarque' AND (($4='direto' AND vol.status='cadastrado') OR ($4='porto_balsa' AND vol.status='conferido')))
+           )
          ORDER BY vol.indice_volume LIMIT $2 FOR UPDATE OF vol`,
-        [document.carga_id, quantity],
+        [document.carga_id, quantity, conference.modo_operacao, document.tipo_recebimento],
       );
       if (volumes.rowCount !== quantity)
         throw new BadRequestException(
           "Nao ha volumes disponiveis suficientes para a conferencia",
         );
       for (const volume of volumes.rows) {
-        const received = conference.tipo_unitizacao !== "AVULSA";
+        const processed = conference.tipo_unitizacao !== "AVULSA";
+        const targetStatus = operationTarget(conference.modo_operacao);
         await client.query(
-          `INSERT INTO conferencia_recebimento_volume (conferencia_id,item_id,volume_id,status,recebido_em,recebido_por)
+          `INSERT INTO conferencia_recebimento_volume (conferencia_id,item_id,volume_id,status,conferido_em,conferido_por)
            VALUES ($1,$2,$3,$4,$5,$6)`,
           [
             conferenciaId,
             item.rows[0].id,
             volume.id,
-            received ? "recebido" : "alocado",
-            received ? new Date() : null,
-            received ? userId : null,
+            processed ? targetStatus : "alocado",
+            processed ? new Date() : null,
+            processed ? userId : null,
           ],
         );
-        if (received) {
+        if (processed) {
           await client.query(
-            "UPDATE volume SET palete_id=$2,status='recebido' WHERE id=$1",
-            [volume.id, conference.palete_id],
+            "UPDATE volume SET palete_id=$2,status=$3::status_volume WHERE id=$1",
+            [volume.id, conference.palete_id, targetStatus],
           );
           await client.query(
-            "INSERT INTO evento_volume (volume_id,tipo,usuario_id,obs) VALUES ($1,'recebido',$2,$3)",
-            [volume.id, userId, `Recebido na conferencia ${conferenciaId}`],
+            "INSERT INTO evento_volume (volume_id,tipo,usuario_id,obs) VALUES ($1,$2::tipo_evento_volume,$3,$4)",
+            [volume.id, targetStatus, userId, `${targetStatus === "embarcado" ? "Embarcado" : "Conferido"} na operacao ${conferenciaId}`],
           );
         }
       }
@@ -581,9 +608,14 @@ export class TmsUnitizacaoRepository {
           volume_id: string;
           status: string;
           tipo_unitizacao: string;
+          modo_operacao: "conferencia" | "embarque";
+          tipo_recebimento: "porto_balsa" | "direto";
+          volume_status: string;
         }>(
-          `SELECT crv.id,crv.item_id,crv.volume_id,crv.status,cr.tipo_unitizacao FROM conferencia_recebimento_volume crv JOIN conferencia_recebimento cr ON cr.id=crv.conferencia_id
-         WHERE crv.conferencia_id=$1 AND crv.volume_id=$2::uuid FOR UPDATE OF crv`,
+          `SELECT crv.id,crv.item_id,crv.volume_id,crv.status,cr.tipo_unitizacao,cr.modo_operacao,c.tipo_recebimento::text,vol.status::text AS volume_status
+           FROM conferencia_recebimento_volume crv JOIN conferencia_recebimento cr ON cr.id=crv.conferencia_id
+           JOIN volume vol ON vol.id=crv.volume_id JOIN carga c ON c.id=vol.carga_id
+         WHERE crv.conferencia_id=$1 AND crv.volume_id=$2::uuid FOR UPDATE OF crv,vol`,
           [conferenciaId, input.volumeUuid.trim()],
         )
       ).rows[0];
@@ -593,32 +625,39 @@ export class TmsUnitizacaoRepository {
         throw new BadRequestException(
           "O bipe individual desta etapa e exclusivo da mercadoria avulsa",
         );
-      if (row.status === "recebido") return;
+      const targetStatus = operationTarget(row.modo_operacao);
+      if (row.status === targetStatus) return;
+      const validSource = canScanVolume(
+        row.volume_status,
+        row.tipo_recebimento,
+        row.modo_operacao,
+      );
+      if (!validSource)
+        throw new BadRequestException(`Volume em estado ${row.volume_status} nao pode receber o bipe de ${targetStatus}`);
       const label = await client.query(
         "SELECT 1 FROM etiqueta_impressao WHERE volume_id=$1 AND tipo='impressao' AND status='concluida' LIMIT 1",
         [row.volume_id],
       );
       if (!label.rowCount)
         throw new BadRequestException(
-          "Confirme a saida legivel da etiqueta antes de receber o volume",
+          "Confirme a saida legivel da etiqueta antes de bipar o volume",
         );
       await client.query(
-        "UPDATE conferencia_recebimento_volume SET status='recebido',recebido_em=now(),recebido_por=$2,client_uuid=$3 WHERE id=$1",
-        [row.id, userId, input.clientUuid ?? null],
+        "UPDATE conferencia_recebimento_volume SET status=$2,conferido_em=now(),conferido_por=$3,client_uuid=$4 WHERE id=$1",
+        [row.id, targetStatus, userId, input.clientUuid ?? null],
       );
       await client.query(
         "UPDATE conferencia_recebimento_item SET quantidade_conferida=quantidade_conferida+1 WHERE id=$1",
         [row.item_id],
       );
-      await client.query("UPDATE volume SET status='recebido' WHERE id=$1", [
-        row.volume_id,
-      ]);
+      await client.query("UPDATE volume SET status=$2::status_volume WHERE id=$1", [row.volume_id, targetStatus]);
       await client.query(
-        "INSERT INTO evento_volume (volume_id,tipo,usuario_id,obs,client_uuid) VALUES ($1,'recebido',$2,$3,$4)",
+        "INSERT INTO evento_volume (volume_id,tipo,usuario_id,obs,client_uuid) VALUES ($1,$2::tipo_evento_volume,$3,$4,$5)",
         [
           row.volume_id,
+          targetStatus,
           userId,
-          `Recebimento avulso na conferencia ${conferenciaId}`,
+          `${targetStatus === "embarcado" ? "Embarque" : "Conferencia"} avulsa na operacao ${conferenciaId}`,
           input.clientUuid ?? null,
         ],
       );
@@ -658,9 +697,10 @@ export class TmsUnitizacaoRepository {
           id: string;
           palete_id: string | null;
           tipo_unitizacao: string;
+          modo_operacao: "conferencia" | "embarque";
           status: string;
         }>(
-          "SELECT id,palete_id,tipo_unitizacao,status FROM conferencia_recebimento WHERE id=$1 FOR UPDATE",
+          "SELECT id,palete_id,tipo_unitizacao,modo_operacao,status FROM conferencia_recebimento WHERE id=$1 FOR UPDATE",
           [id],
         )
       ).rows[0];
@@ -723,13 +763,17 @@ export class TmsUnitizacaoRepository {
       );
       if (conf.palete_id)
         await client.query(
-          "UPDATE palete SET estado_composicao=$2 WHERE id=$1",
-          [conf.palete_id, input.estadoComposicao],
+          "UPDATE palete SET estado_composicao=$2,status=CASE WHEN $3='embarque' THEN 'em_transito'::status_palete ELSE status END WHERE id=$1",
+          [conf.palete_id, input.estadoComposicao, conf.modo_operacao],
         );
       const loads = [...new Set(items.rows.map((item) => item.carga_id))];
       await client.query(
-        "UPDATE carga SET tipo_unitizacao=$2,status=CASE WHEN $3 THEN 'divergente'::status_carga ELSE 'conferida'::status_carga END WHERE id=ANY($1::uuid[])",
-        [loads, conf.tipo_unitizacao, hasDivergence],
+        `UPDATE carga SET tipo_unitizacao=$2,status=CASE
+           WHEN $3 THEN 'divergente'::status_carga
+           WHEN $4='embarque' THEN 'embarcada'::status_carga
+           ELSE 'conferida'::status_carga END
+         WHERE id=ANY($1::uuid[])`,
+        [loads, conf.tipo_unitizacao, hasDivergence, conf.modo_operacao],
       );
       await client.query(
         "UPDATE documento_fiscal SET status=CASE WHEN $2 THEN 'divergente'::status_documento_fiscal ELSE 'conferida'::status_documento_fiscal END WHERE carga_id=ANY($1::uuid[])",
@@ -742,6 +786,7 @@ export class TmsUnitizacaoRepository {
           userId,
           JSON.stringify({
             status: hasDivergence ? "divergente" : "fechada",
+            modoOperacao: conf.modo_operacao,
             estadoComposicao: input.estadoComposicao,
             evidencias: evidences.length,
           }),
@@ -813,12 +858,12 @@ export class TmsUnitizacaoRepository {
       if (pallet.status === "livre")
         throw new BadRequestException(`${pallet.codigo} ja esta livre`);
       const pending = await client.query(
-        `SELECT vol.id FROM volume vol WHERE vol.palete_id=$1 AND vol.status NOT IN ('desembarcado','entregue') LIMIT 1`,
+        `SELECT vol.id FROM volume vol WHERE vol.palete_id=$1 AND vol.status <> 'entregue' LIMIT 1`,
         [id],
       );
       if (pending.rowCount)
         throw new BadRequestException(
-          "O palete ainda possui volume sem desembarque ou entrega registrada",
+          "O palete ainda possui volume sem entrega registrada",
         );
       await client.query(
         "UPDATE palete_viagem SET status='encerrada',encerrado_em=now(),encerrado_por=$2,motivo_encerramento=$3 WHERE palete_id=$1 AND status='ativa'",

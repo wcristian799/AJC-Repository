@@ -14,7 +14,7 @@
 | **Fundação / Acesso** | Login, recuperação de senha, RBAC, setup inicial (empresa, admin, embarcações, usuários, preços) | Esqueleto onde tudo se pendura |
 | **Navegação-core** | Embarcações + viagens/cronograma + status de viagem | Tudo é vinculado a uma viagem; dependência-raiz de TMS e Vendas |
 | **Cadastros** | Usuários/perfis, clientes, agentes, preços (passagem/carga) | Dados-mestre de todo o sistema |
-| **TMS / Carga** | Portaria, conferência bipada, etiqueta/UUID, paletes, 2º bipe, cross-docking, entrega com prova | 60% do faturamento e a maior brecha de controle |
+| **TMS / Carga** | Portaria, bipe de conferido, etiqueta/UUID, paletes, bipe de embarcado, cross-docking e entrega com prova | 60% do faturamento e a maior brecha de controle |
 | **Veículos / Máquinas** | Envio por PDV/Comercial/Gerente do Porto, vistoria/checklist com fotos, etiqueta, bipe de subida/descida e checklist de entrega | Pedido explícito da validação do cliente; evita deixar fora um fluxo operacional que passa pelo porto e pela balsa |
 | **Vendas / Passagens** | Venda com QR, validação por pulseira, cortesia/gratuidade/contrato, relatório de passageiros, NPS básico | Receita de passageiros + conformidade regulatória (MP) |
 | **CRM** | Base de clientes, alocação a agentes, histórico, cotações | Sustenta a operação comercial e a futura comissão |

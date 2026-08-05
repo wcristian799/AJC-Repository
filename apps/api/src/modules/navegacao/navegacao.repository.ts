@@ -21,6 +21,10 @@ export interface ViagemDto {
   configVersao: number | null;
   cicloUuid: string | null;
   motivoCancelamento: string | null;
+  iniciadaEm: string | null;
+  iniciadaPor: string | null;
+  encerradaEm: string | null;
+  encerradaPor: string | null;
   escalas: {
     id: string;
     cidadeSigla: string;
@@ -96,13 +100,18 @@ export class NavegacaoRepository {
       config_versao: number | null;
       ciclo_uuid: string | null;
       motivo_cancelamento: string | null;
+      iniciada_em: Date | null;
+      iniciada_por: string | null;
+      encerrada_em: Date | null;
+      encerrada_por: string | null;
     }>(
       `
       SELECT v.id, v.codigo, v.embarcacao_id, e.nome AS embarcacao_nome, e.foto_url AS embarcacao_foto_url,
              v.origem_sigla, v.destino_sigla, v.data_hora_saida, v.data_hora_retorno,
              v.status::text, v.situacao::text, v.capacidade_pax_disponivel, v.observacoes,
              v.rota_template_id, v.config_versao_id, cv.versao AS config_versao,
-             v.ciclo_uuid, v.motivo_cancelamento
+             v.ciclo_uuid, v.motivo_cancelamento,
+             v.iniciada_em, v.iniciada_por, v.encerrada_em, v.encerrada_por
       FROM viagem v
       JOIN embarcacao e ON e.id = v.embarcacao_id
       LEFT JOIN config_versao cv ON cv.id = v.config_versao_id
@@ -149,6 +158,10 @@ export class NavegacaoRepository {
       configVersao: row.config_versao,
       cicloUuid: row.ciclo_uuid,
       motivoCancelamento: row.motivo_cancelamento,
+      iniciadaEm: row.iniciada_em?.toISOString() ?? null,
+      iniciadaPor: row.iniciada_por,
+      encerradaEm: row.encerrada_em?.toISOString() ?? null,
+      encerradaPor: row.encerrada_por,
       escalas: escalas.rows.map((escala) => ({
         id: escala.id,
         cidadeSigla: escala.cidade_sigla,
@@ -523,9 +536,13 @@ export class NavegacaoRepository {
             SET status = $2::status_viagem,
                 situacao = CASE WHEN $2 = 'em_curso' THEN 'no_prazo'::situacao_viagem ELSE situacao END,
                 motivo_cancelamento = CASE WHEN $2 = 'cancelada' THEN $3 ELSE motivo_cancelamento END,
+                iniciada_em = CASE WHEN $2 = 'em_curso' THEN now() ELSE iniciada_em END,
+                iniciada_por = CASE WHEN $2 = 'em_curso' THEN $4 ELSE iniciada_por END,
+                encerrada_em = CASE WHEN $2 = 'concluida' THEN now() ELSE encerrada_em END,
+                encerrada_por = CASE WHEN $2 = 'concluida' THEN $4 ELSE encerrada_por END,
                 atualizado_em = now()
           WHERE id = $1::uuid`,
-        [id, nextStatus, emptyToNull(input.motivo)],
+        [id, nextStatus, emptyToNull(input.motivo), userId],
       );
       await client.query(
         `INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_antes, dados_depois, client_uuid)

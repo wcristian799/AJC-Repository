@@ -48,7 +48,7 @@ Viagem 1───* RegistroPortaria (entrada/saída no porto)
 Viagem 1───1 PrestacaoContas ──cruza──► Financeiro (Contas a Receber)
 Cliente *───1 Agente (comissão)
 Carga 1───1 DeclaracaoConteudo / NotaFiscalDC
-Volume 1───* EventoVolume (recebido→...→entregue)  ← trilha de auditoria
+Volume 1───* EventoVolume (cadastrado→conferido→embarcado→entregue)  ← trilha de auditoria
 ```
 
 ## 4. Perfis de acesso (RBAC)

@@ -41,7 +41,7 @@ preço = (valor_declarado <= 1000)
 
 ### A.3 Relação com outros módulos
 - **PDV (Vendas B.9):** ponto de venda do despacho com balança.
-- **TMS:** gera volumes, etiqueta (UUID/QR), conferência, 2º bipe, entrega.
+- **TMS:** gera volumes, etiqueta (UUID/QR), bipe de conferido, bipe de embarcado e entrega.
 - **CRM:** histórico de envios e preços do cliente.
 - **Financeiro:** valor cobrado entra no caixa de encomendas; controle por viagem.
 
@@ -105,7 +105,7 @@ DeclaracaoConteudo (id, encomenda_id, descricao, valor_declarado, texto_termo_ve
 - Exportável; alimenta o BI e o cruzamento financeiro.
 
 ### B.5 Rastreamento da encomenda (cliente / atendimento)
-- Linha do tempo do(s) volume(s): recebido → conferido → embarcado → em viagem → desembarcado → entregue.
+- Linha do tempo do(s) volume(s): cadastrado → conferido → embarcado → entregue. No cross-docking: cadastrado → embarcado → entregue.
 - Reaproveita os eventos do TMS e o protocolo de entrega (2 fotos + assinatura).
 - Notificações automáticas via WhatsApp/SMS em recebimento e entrega.
 

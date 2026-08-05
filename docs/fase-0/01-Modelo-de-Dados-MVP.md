@@ -58,8 +58,8 @@ CREATE TYPE status_escala          AS ENUM ('planejada','notificada','confirmada
 -- TMS / Carga
 CREATE TYPE tipo_recebimento_carga AS ENUM ('porto_balsa','direto');           -- (b) = cross-docking
 CREATE TYPE status_carga           AS ENUM ('aberta','conferida','embarcada','entregue','divergente','cancelada');
-CREATE TYPE status_volume          AS ENUM ('recebido','conferido','embarcado','reconferido','desembarcado','entregue','divergente');
-CREATE TYPE tipo_evento_volume     AS ENUM ('recebido','conferido','embarcado','reconferido','desembarcado','entregue','divergencia');
+CREATE TYPE status_volume          AS ENUM ('cadastrado','conferido','embarcado','entregue','divergente');
+CREATE TYPE tipo_evento_volume     AS ENUM ('conferido','embarcado','entregue','divergencia');
 CREATE TYPE proprietario_palete    AS ENUM ('AJC','terceiro');
 CREATE TYPE status_palete          AS ENUM ('livre','alocado','em_transito');
 CREATE TYPE tipo_documento_fiscal  AS ENUM ('NFe','NFCe','DC');               -- DC = Declaração de Conteúdo
@@ -420,7 +420,7 @@ Três tipos de tabela: **passagem** (classe/subtipo/trecho), **carga** (tier = %
 | `indice_volume` | smallint | não | — | ex.: 1 de "1/2" |
 | `total_volumes` | smallint | não | — | ex.: 2 de "1/2" |
 | `peso` | numeric(10,3) | sim | — | kg |
-| `status` | status_volume | não | `'recebido'` | máquina de estados §8.x |
+| `status` | status_volume | não | `'cadastrado'` | máquina de estados §8.x |
 | `recebimento_id` | uuid | sim | — | FK `carga_recebimento(id)` — lote do cross-docking |
 | `client_uuid` | uuid | sim | — | **sync** |
 | `criado_em` / `atualizado_em` | timestamptz | | | |
@@ -431,8 +431,8 @@ Três tipos de tabela: **passagem** (classe/subtipo/trecho), **carga** (tier = %
 **Máquina de estados do volume** (cada transição = um `evento_volume`):
 ```
                   ┌─────── divergente (em qualquer ponto) ───────┐
-recebido → conferido → embarcado → reconferido → desembarcado → entregue
-Cross-docking: recebido+embarcado ───────────────► desembarcado → entregue
+cadastrado → conferido → embarcado → entregue
+Cross-docking: cadastrado → embarcado → entregue
 ```
 
 ### 8.3 `evento_volume`  *(módulo: tms)* — **append-only**, trilha física por volume
@@ -440,7 +440,7 @@ Cross-docking: recebido+embarcado ───────────────�
 |---|---|---|---|---|
 | `id` | uuid PK | não | | |
 | `volume_id` | uuid | não | — | FK `volume(id)` |
-| `tipo` | tipo_evento_volume | não | — | recebido/conferido/embarcado/reconferido/desembarcado/entregue/divergencia |
+| `tipo` | tipo_evento_volume | não | — | conferido/embarcado/entregue/divergencia |
 | `usuario_id` | uuid | não | — | FK `usuario(id)` — quem efetivou (perfil porto/balsa registrado) |
 | `gps` | geography(Point,4326) | sim | — | georreferência do evento (quando houver) |
 | `foto_url` | text | sim | — | referência ao storage (não o binário) — §9 |

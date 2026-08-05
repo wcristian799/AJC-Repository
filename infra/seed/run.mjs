@@ -775,7 +775,7 @@ async function seedCarga(data) {
     await client.query(
       `
       INSERT INTO volume (carga_id, indice_volume, total_volumes, peso, status)
-      VALUES ($1, $2, $3, $4, 'recebido')
+      VALUES ($1, $2, $3, $4, 'conferido')
       `,
       [cargaId, i, data.totalVolumes, data.pesoTotal / data.totalVolumes],
     );

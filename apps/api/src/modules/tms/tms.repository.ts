@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { DatabaseService } from '../../database/database.service';
 import { AllocatePaleteInput, ConferirDocumentoInput, ConferirPrestacaoContasInput, CreateCargaInput, CreateDocumentoInput, EntregaInput, PrestacaoContasItem, PrintEtiquetaInput, RegistroPortariaInput, SaveDeclaracaoConteudoInput, SavePrestacaoContasInput } from './tms.types';
 import { UploadedDocument } from './tms-document.service';
+import { CURRENT_VOLUME_EVENTS, canApplyVolumeEvent, type VolumeEventType } from './tms-volume-flow';
 
 @Injectable()
 export class TmsRepository {
@@ -202,15 +203,6 @@ export class TmsRepository {
       if (!stored || stored.criado_por !== userId) throw new BadRequestException('Upload nao encontrado ou expirado');
       if (stored.consumido_em) throw new BadRequestException('Upload ja utilizado em outro lancamento');
 
-      const trip = await client.query<{ id: string; origem_sigla: string; destino_sigla: string | null }>(
-        'SELECT id, origem_sigla, destino_sigla FROM viagem WHERE id = $1', [input.viagemId],
-      );
-      if (!trip.rows[0]) throw new BadRequestException('Viagem nao encontrada');
-      if (trip.rows[0].destino_sigla !== cidadeDestinoSigla) {
-        const stop = await client.query('SELECT 1 FROM viagem_escala WHERE viagem_id = $1 AND cidade_sigla = $2 LIMIT 1', [input.viagemId, cidadeDestinoSigla]);
-        if (!stop.rowCount) throw new BadRequestException('Destino nao pertence a viagem selecionada');
-      }
-
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`documento-agenda:${agendadoPara}`]);
       const agenda = await client.query<{ ocupadas: string }>(
         `SELECT count(*)::text AS ocupadas FROM documento_fiscal
@@ -246,20 +238,6 @@ export class TmsRepository {
         );
       }
 
-      const codigo = await this.nextCodigoTx(client, 'CG');
-      const clienteCodigo = await client.query<{ codigo: string }>('SELECT codigo FROM cliente WHERE id = $1', [clienteId]);
-      const numeroPedido = `${clienteCodigo.rows[0].codigo}-${input.tipo}-${input.numero.trim()}`;
-      const carga = await client.query<{ id: string }>(
-        `INSERT INTO carga (
-           codigo, numero_pedido, categoria, viagem_id, cliente_remetente_id, destinatario_nome,
-           cidade_origem_sigla, cidade_destino_sigla, tipo_recebimento, status, valor_declarado,
-           peso_total, tipo_unitizacao, agendado_para, client_uuid, criado_por, atualizado_por
-         ) VALUES ($1,$2,'carga',$3,$4,$5,$6,$7,'porto_balsa','aberta',$8,$9,$10,$11,$12,$13,$13)
-         RETURNING id`,
-        [codigo, numeroPedido, input.viagemId, clienteId, input.destinatarioNome?.trim() || null,
-          cidadeOrigemSigla || trip.rows[0].origem_sigla, cidadeDestinoSigla, input.valor ?? null,
-          input.pesoTotal ?? null, input.tipoUnitizacao ?? 'AVULSA', agendadoPara, input.clientUuid ?? null, userId],
-      );
       const extracted = stored.dados_extraidos as Record<string, unknown> | null;
       const document = await client.query<{ id: string }>(
         `INSERT INTO documento_fiscal (
@@ -269,27 +247,21 @@ export class TmsRepository {
            destinatario_nome, destinatario_documento, destinatario_telefone,
            arquivo_url, arquivo_hash, arquivo_nome, arquivo_mime, chave_acesso,
            dados_extraidos, pagamento, agendado_para
-         ) VALUES ($1,$2,$3,$4,$5,$6,'operacao',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24,$25)
+         ) VALUES ($1,$2,$3,$4,NULL,NULL,'operacao',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23)
          RETURNING id`,
-        [input.tipo, input.numero.trim(), input.valor ?? null, clienteId, carga.rows[0].id, input.viagemId, userId,
-          cidadeOrigemSigla || trip.rows[0].origem_sigla, cidadeDestinoSigla, input.pesoTotal ?? null, totalVolumes,
+        [input.tipo, input.numero.trim(), input.valor ?? null, clienteId, userId,
+          cidadeOrigemSigla, cidadeDestinoSigla, input.pesoTotal ?? null, totalVolumes,
           input.remetenteNome.trim(), documentoLimpo || null, input.remetenteTelefone?.trim() || null,
           input.destinatarioNome?.trim() || null, digits(input.destinatarioDocumento) || null, input.destinatarioTelefone?.trim() || null,
           `s3://${stored.bucket}/${stored.objeto_chave}`, stored.arquivo_hash, stored.arquivo_nome, stored.arquivo_mime,
           typeof extracted?.chaveAcesso === 'string' ? extracted.chaveAcesso : null, JSON.stringify(extracted ?? {}),
           input.pagamento ?? 'CIF', agendadoPara],
       );
-      const pesoPorVolume = input.pesoTotal ? input.pesoTotal / totalVolumes : null;
-      await client.query(
-        `INSERT INTO volume (carga_id, indice_volume, total_volumes, peso, status)
-         SELECT $1, n, $2, $3, 'cadastrado' FROM generate_series(1, $2) n`,
-        [carga.rows[0].id, totalVolumes, pesoPorVolume],
-      );
       await client.query('UPDATE documento_upload SET consumido_em = now() WHERE id = $1', [input.uploadId]);
       await client.query(
         `INSERT INTO audit_evento (entidade, entidade_id, acao, usuario_id, dados_depois, client_uuid)
          VALUES ('documento_fiscal', $1, 'criar', $2, $3::jsonb, $4)`,
-        [document.rows[0].id, userId, JSON.stringify({ cargaId: carga.rows[0].id, viagemId: input.viagemId, clienteId, uploadId: input.uploadId, tipoUnitizacao: input.tipoUnitizacao ?? 'AVULSA' }), input.clientUuid ?? null],
+        [document.rows[0].id, userId, JSON.stringify({ cargaId: null, viagemId: null, clienteId, uploadId: input.uploadId, cidadeDestinoSigla }), input.clientUuid ?? null],
       );
       return document.rows[0].id;
     });
@@ -497,8 +469,6 @@ export class TmsRepository {
   }
 
   async createCarga(input: CreateCargaInput, userId: string) {
-    const totalVolumes = input.totalVolumes ?? 1;
-    if (totalVolumes < 1) throw new BadRequestException('totalVolumes deve ser maior que zero');
     if (input.clientUuid) {
       const existing = await this.db.one<{ id: string }>('SELECT id FROM carga WHERE client_uuid = $1 LIMIT 1', [input.clientUuid]);
       if (existing) return this.findCarga(existing.id);
@@ -507,6 +477,35 @@ export class TmsRepository {
     const codigo = await this.nextCodigo(categoria === 'encomenda' ? 'ENC' : 'CG');
     const documentosSelecionados = await this.findDocumentosSelecionados(input.documentoIds, input.clienteRemetenteId);
     const primeiroDocumento = documentosSelecionados[0];
+    const destinos = [...new Set(documentosSelecionados.map((documento) => documento.cidadeDestinoSigla).filter(Boolean))];
+    if (categoria === 'carga' && destinos.length !== 1) throw new BadRequestException('As NF/DC selecionadas precisam ter o mesmo destino');
+    if (destinos.length > 1) throw new BadRequestException('Selecione somente NF/DC com o mesmo destino');
+    const destinoDocumento = destinos[0];
+    const destinoInformado = input.cidadeDestinoSigla.trim().toUpperCase();
+    if (destinoDocumento && destinoInformado !== destinoDocumento) {
+      throw new BadRequestException('O destino da carga deve ser o mesmo informado nas NF/DC selecionadas');
+    }
+    const totalVolumesDocumentos = documentosSelecionados.reduce((sum, documento) => sum + (documento.totalVolumes ?? 0), 0);
+    const totalVolumes = totalVolumesDocumentos || input.totalVolumes || 1;
+    if (totalVolumes < 1) throw new BadRequestException('totalVolumes deve ser maior que zero');
+    const pesoDocumentos = documentosSelecionados.reduce((sum, documento) => sum + (documento.pesoTotal ?? 0), 0);
+    const valorDocumentos = documentosSelecionados.reduce((sum, documento) => sum + (documento.valor ?? 0), 0);
+    const cidadeOrigemSigla = primeiroDocumento?.cidadeOrigemSigla ?? input.cidadeOrigemSigla ?? null;
+    const cidadeDestinoSigla = destinoDocumento ?? destinoInformado;
+    const viagemCompativel = await this.db.one<{ id: string }>(
+      `SELECT v.id
+       FROM viagem v
+       WHERE v.id = $1::uuid
+         AND v.status IN ('planejada', 'em_curso')
+         AND ($2 = v.origem_sigla OR $2 = v.destino_sigla OR EXISTS (
+           SELECT 1 FROM viagem_escala ve WHERE ve.viagem_id = v.id AND ve.cidade_sigla = $2
+         ))
+       LIMIT 1`,
+      [input.viagemId, cidadeDestinoSigla],
+    );
+    if (!viagemCompativel) throw new BadRequestException('A viagem selecionada nao atende o destino das NF/DC ou nao esta operacional');
+    const pesoTotal = pesoDocumentos || input.pesoTotal || null;
+    const valorDeclarado = valorDocumentos || input.valorDeclarado || null;
     const numeroPedido = input.numeroPedido ?? (await this.buildPedido(
       input.clienteRemetenteId,
       primeiroDocumento?.numero ?? input.documento?.numero ?? input.numeroDocumento,
@@ -534,12 +533,12 @@ export class TmsRepository {
           input.clienteRemetenteId,
           input.destinatarioId ?? null,
           input.destinatarioNome ?? null,
-          input.cidadeOrigemSigla ?? null,
-          input.cidadeDestinoSigla,
+          cidadeOrigemSigla,
+          cidadeDestinoSigla,
           input.tipoRecebimento ?? 'porto_balsa',
-          input.valorDeclarado ?? null,
+          valorDeclarado,
           input.valorCobrado ?? null,
-          input.pesoTotal ?? null,
+          pesoTotal,
           input.clientUuid ?? null,
           userId,
           input.observacoes ?? null,
@@ -570,17 +569,22 @@ export class TmsRepository {
         );
       }
       if (documentosSelecionados.length) {
-        await client.query(
+        const linked = await client.query(
           `
           UPDATE documento_fiscal
           SET carga_id = $2,
               atualizado_em = now()
           WHERE id = ANY($1::uuid[])
+            AND carga_id IS NULL
+          RETURNING id
           `,
           [documentosSelecionados.map((documento) => documento.id), id],
         );
+        if (linked.rowCount !== documentosSelecionados.length) {
+          throw new BadRequestException('Uma das NF/DC foi vinculada por outra operacao; atualize a lista');
+        }
       }
-      const pesoPorVolume = input.pesoTotal ? input.pesoTotal / totalVolumes : null;
+      const pesoPorVolume = pesoTotal ? pesoTotal / totalVolumes : null;
       for (let i = 1; i <= totalVolumes; i++) {
         await client.query(
           `
@@ -605,8 +609,8 @@ export class TmsRepository {
             categoria,
             viagemId: input.viagemId,
             clienteRemetenteId: input.clienteRemetenteId,
-            cidadeOrigemSigla: input.cidadeOrigemSigla ?? null,
-            cidadeDestinoSigla: input.cidadeDestinoSigla,
+            cidadeOrigemSigla,
+            cidadeDestinoSigla,
             totalVolumes,
             documentoIds: documentosSelecionados.map((documento) => documento.id),
             documento: primeiroDocumento
@@ -983,17 +987,39 @@ export class TmsRepository {
   }
 
   async addVolumeEvent(volumeId: string, tipo: string, userId: string, obs?: string, clientUuid?: string) {
-    const row = await this.db.one(
-      `
-      INSERT INTO evento_volume (volume_id, tipo, usuario_id, obs, client_uuid)
-      VALUES ($1, $2::tipo_evento_volume, $3, $4, $5)
-      RETURNING *
-      `,
-      [volumeId, tipo, userId, obs ?? null, clientUuid ?? null],
-    );
-    const status = tipo === 'divergencia' ? 'divergente' : tipo;
-    await this.db.query('UPDATE volume SET status = $2::status_volume WHERE id = $1', [volumeId, status]);
-    return row;
+    if (!CURRENT_VOLUME_EVENTS.includes(tipo as VolumeEventType))
+      throw new BadRequestException('Evento invalido. Use conferido, embarcado, entregue ou divergencia');
+    if (clientUuid) {
+      const existing = await this.db.one('SELECT * FROM evento_volume WHERE client_uuid=$1', [clientUuid]);
+      if (existing) return existing;
+    }
+    return this.db.tx(async (client) => {
+      const volume = (await client.query<{
+        status: string;
+        tipo_recebimento: 'porto_balsa' | 'direto';
+      }>(
+        `SELECT vol.status::text,c.tipo_recebimento::text
+         FROM volume vol JOIN carga c ON c.id=vol.carga_id
+         WHERE vol.id=$1 FOR UPDATE OF vol`,
+        [volumeId],
+      )).rows[0];
+      if (!volume) throw new NotFoundException('Volume nao encontrado');
+      const valid = canApplyVolumeEvent(
+        volume.status,
+        volume.tipo_recebimento,
+        tipo as VolumeEventType,
+      );
+      if (!valid)
+        throw new BadRequestException(`Transicao invalida: ${volume.status} -> ${tipo}`);
+      const inserted = await client.query(
+        `INSERT INTO evento_volume (volume_id,tipo,usuario_id,obs,client_uuid)
+         VALUES ($1,$2::tipo_evento_volume,$3,$4,$5) RETURNING *`,
+        [volumeId, tipo, userId, obs ?? null, clientUuid ?? null],
+      );
+      const status = tipo === 'divergencia' ? 'divergente' : tipo;
+      await client.query('UPDATE volume SET status=$2::status_volume WHERE id=$1', [volumeId, status]);
+      return inserted.rows[0];
+    });
   }
 
   async listPortaria() {
@@ -1027,9 +1053,25 @@ export class TmsRepository {
 
   async createEntrega(input: EntregaInput, userId: string) {
     if (!input.volumeIds?.length) throw new BadRequestException('volumeIds obrigatorio');
+    const uniqueVolumeIds = [...new Set(input.volumeIds)];
+    if (uniqueVolumeIds.length !== input.volumeIds.length)
+      throw new BadRequestException('volumeIds nao pode conter volumes duplicados');
     validateLegalProof(input);
+    if (input.clientUuid) {
+      const existing = await this.db.one('SELECT * FROM entrega_comprovante WHERE client_uuid=$1', [input.clientUuid]);
+      if (existing) return existing;
+    }
     const protocolo = await this.nextCodigo('ENT');
     const entregaId = await this.db.tx(async (client) => {
+      const locked = await client.query<{ id: string; status: string }>(
+        'SELECT id,status::text FROM volume WHERE id=ANY($1::uuid[]) FOR UPDATE',
+        [uniqueVolumeIds],
+      );
+      if (locked.rowCount !== uniqueVolumeIds.length)
+        throw new BadRequestException('Um ou mais volumes nao foram encontrados');
+      const invalid = locked.rows.find((volume) => volume.status !== 'embarcado');
+      if (invalid)
+        throw new BadRequestException(`Volume ${invalid.id} precisa estar embarcado antes da entrega`);
       const inserted = await client.query<{ id: string }>(
         `
         INSERT INTO entrega_comprovante (
@@ -1058,9 +1100,14 @@ export class TmsRepository {
           input.clientUuid ?? null,
         ],
       );
-      for (const volumeId of input.volumeIds) {
+      for (const volumeId of uniqueVolumeIds) {
         await client.query('INSERT INTO entrega_volume (entrega_id, volume_id) VALUES ($1, $2)', [inserted.rows[0].id, volumeId]);
         await client.query('UPDATE volume SET status = $2::status_volume WHERE id = $1', [volumeId, 'entregue']);
+        await client.query(
+          `INSERT INTO evento_volume (volume_id,tipo,usuario_id,obs)
+           VALUES ($1,'entregue',$2,$3)`,
+          [volumeId, userId, `Entrega concluida pelo protocolo ${protocolo}`],
+        );
       }
       return inserted.rows[0].id;
     });
@@ -1117,7 +1164,8 @@ export class TmsRepository {
   async listViagensPrestacao() {
     const result = await this.db.query(`
       SELECT v.id, v.codigo, v.data_hora_saida, v.data_hora_retorno, v.origem_sigla,
-             v.destino_sigla, v.status::text, e.nome AS embarcacao_nome
+             v.destino_sigla, v.status::text, e.nome AS embarcacao_nome,
+             v.iniciada_em, v.iniciada_por, v.encerrada_em, v.encerrada_por
       FROM viagem v JOIN embarcacao e ON e.id = v.embarcacao_id
       WHERE v.status <> 'cancelada'
       ORDER BY v.data_hora_saida DESC LIMIT 100
@@ -1282,10 +1330,20 @@ export class TmsRepository {
 
   private async findDocumentosSelecionados(documentoIds: string[] | undefined, clienteId: string) {
     const ids = [...new Set((documentoIds ?? []).filter(Boolean))];
-    if (!ids.length) return [] as Array<{ id: string; tipo: string; numero: string | null; origem: string | null }>;
-    const result = await this.db.query<{ id: string; tipo: string; numero: string | null; cliente_id: string | null; carga_id: string | null; origem: string | null }>(
+    if (!ids.length) return [] as Array<{
+      id: string; tipo: string; numero: string | null; origem: string | null;
+      cidadeOrigemSigla: string | null; cidadeDestinoSigla: string | null;
+      pesoTotal: number | null; totalVolumes: number | null; valor: number | null;
+    }>;
+    const result = await this.db.query<{
+      id: string; tipo: string; numero: string | null; cliente_id: string | null;
+      carga_id: string | null; origem: string | null; cidade_origem_sigla: string | null;
+      cidade_destino_sigla: string | null; peso_total: string | null;
+      total_volumes: number | null; valor: string | null;
+    }>(
       `
-      SELECT id, tipo::text, numero, cliente_id, carga_id, origem::text
+      SELECT id, tipo::text, numero, cliente_id, carga_id, origem::text,
+             cidade_origem_sigla, cidade_destino_sigla, peso_total, total_volumes, valor
       FROM documento_fiscal
       WHERE id = ANY($1::uuid[])
       ORDER BY criado_em, id
@@ -1308,6 +1366,11 @@ export class TmsRepository {
       tipo: documento.tipo,
       numero: documento.numero,
       origem: documento.origem,
+      cidadeOrigemSigla: documento.cidade_origem_sigla,
+      cidadeDestinoSigla: documento.cidade_destino_sigla,
+      pesoTotal: documento.peso_total === null ? null : Number(documento.peso_total),
+      totalVolumes: documento.total_volumes === null ? null : Number(documento.total_volumes),
+      valor: documento.valor === null ? null : Number(documento.valor),
     }));
   }
 

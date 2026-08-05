@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -42,7 +42,7 @@ export class NavegacaoController {
   }
 
   @Post('viagens/:id/transicoes')
-  @RequirePermissions('navegacao.editar')
+  @RequirePermissions()
   transicionarViagem(
     @Param('id') id: string,
     @Body() body: TransicionarViagemInput,
@@ -53,6 +53,12 @@ export class NavegacaoController {
     }
     if (body.acao === 'cancelar' && (!body.motivo || body.motivo.trim().length < 5)) {
       throw new BadRequestException('motivo do cancelamento obrigatorio');
+    }
+    if (['iniciar', 'concluir'].includes(body.acao) && !user.permissions.includes('navegacao.operar_viagem')) {
+      throw new ForbiddenException('Somente o gerente da embarcacao pode iniciar ou encerrar a viagem');
+    }
+    if (body.acao === 'cancelar' && !user.permissions.includes('navegacao.editar')) {
+      throw new ForbiddenException('Permissao insuficiente para cancelar a viagem');
     }
     return this.repository.transicionarViagem(id, body, user.sub);
   }

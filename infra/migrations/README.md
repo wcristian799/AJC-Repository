@@ -107,6 +107,10 @@ O contrato permite multipagamento e conciliação transacional sem mover preços
 comerciais para o front. BP-e e impressão física só devem ser ativados na configuração quando
 os respectivos adapters e equipamentos estiverem homologados.
 
+## Revisão operacional de 05/ago/2026
+
+`0036_documento_independente_viagem_gerente_origens_veiculos.sql` separa o lançamento fiscal da criação da carga, registra responsável/horário real do início e encerramento da viagem e transforma `envio_veiculo.origem_cadastro` em código configurável. A migration publica `veiculos_origens_cadastro` com os valores históricos apenas como carga inicial editável e cria a permissão `navegacao.operar_viagem`. Ela não apaga cargas antigas nem atribui automaticamente a nova permissão a perfis operacionais; essa distribuição deve ser feita em Cadastros conforme a função real de cada usuário.
+
 ## Auditoria imutável (produção)
 
 `audit_evento` é append-only. Em produção, revogar `UPDATE`/`DELETE` da role da aplicação

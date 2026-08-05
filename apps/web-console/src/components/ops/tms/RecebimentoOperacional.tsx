@@ -44,7 +44,8 @@ import {
   queueReceivingOperation,
 } from "@/lib/tms-receiving-offline";
 
-const ACTIVE_KEY = "ajc.tms.conferencia.ativa.v1";
+const CONFERENCE_ACTIVE_KEY = "ajc.tms.conferencia.ativa.v2";
+const BOARDING_ACTIVE_KEY = "ajc.tms.embarque.ativo.v2";
 type UnitType = "AVULSA" | "MP" | "PD" | "PC";
 type Config = {
   unitizacoes: Array<{
@@ -65,6 +66,7 @@ type Config = {
 };
 
 export function RecebimentoOperacional({ direct = false }: { direct?: boolean }) {
+  const activeKey = direct ? BOARDING_ACTIVE_KEY : CONFERENCE_ACTIVE_KEY;
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
   const [trips, setTrips] = useState<NavegacaoViagemApi[]>([]);
@@ -112,12 +114,12 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
       setLocations(localRows);
       setPallets(palletResponse.items);
       setConfig(configValue.valor as Config);
-      const saved = typeof window !== "undefined" ? localStorage.getItem(ACTIVE_KEY) : null;
+      const saved = typeof window !== "undefined" ? localStorage.getItem(activeKey) : null;
       if (saved) {
         try {
           setConference(await getTmsConferencia(saved));
         } catch {
-          localStorage.removeItem(ACTIVE_KEY);
+          localStorage.removeItem(activeKey);
         }
       }
     } catch (cause) {
@@ -125,7 +127,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeKey]);
   useEffect(() => {
     const update = () => {
       setOnline(navigator.onLine);
@@ -154,7 +156,11 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
   }, [online, pending, conference]);
   useEffect(() => {
     if (!conference) return;
-    listTmsConferenciaDocumentos(conference.viagem_id, documentSearch || undefined)
+    listTmsConferenciaDocumentos(
+      conference.viagem_id,
+      documentSearch || undefined,
+      conference.modo_operacao,
+    )
       .then(setDocuments)
       .catch((cause) =>
         setError(cause instanceof Error ? cause.message : "Falha ao buscar NF/DC."),
@@ -175,9 +181,12 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
   const availablePallets = pallets.filter(
     (row) =>
       row.ativo &&
-      row.local_operacional_id === locationId &&
-      (row.status === "livre" ||
-        (row.viagem_id === tripId && row.cidade_destino_sigla === destination)),
+      (direct
+        ? (row.status === "livre" && row.local_operacional_id === locationId) ||
+          (row.viagem_id === tripId && row.cidade_destino_sigla === destination)
+        : row.local_operacional_id === locationId &&
+          (row.status === "livre" ||
+            (row.viagem_id === tripId && row.cidade_destino_sigla === destination))),
   );
 
   async function start() {
@@ -197,11 +206,12 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
         localOperacionalId: locationId,
         cidadeDestinoSigla: destination,
         tipoUnitizacao: type,
+        modoOperacao: direct ? "embarque" : "conferencia",
         paleteId: type === "AVULSA" ? undefined : palletId,
         clientUuid: crypto.randomUUID(),
       });
       setConference(created);
-      localStorage.setItem(ACTIVE_KEY, created.id);
+      localStorage.setItem(activeKey, created.id);
       setMessage(`Conferência ${created.palete_codigo ?? "avulsa"} aberta.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível abrir a conferência.");
@@ -382,7 +392,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
         setPending(listReceivingQueue().length);
         setMessage("Fechamento, fotos e auditoria foram guardados no aparelho.");
       }
-      localStorage.removeItem(ACTIVE_KEY);
+      localStorage.removeItem(activeKey);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível fechar a conferência.");
     } finally {
@@ -391,7 +401,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
   }
   function reset() {
     setConference(null);
-    localStorage.removeItem(ACTIVE_KEY);
+    localStorage.removeItem(activeKey);
     setEvidenceFiles([]);
     setLabelJob(null);
     setMessage(null);
@@ -402,7 +412,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
     return (
       <div className="space-y-4">
         <FieldHeader
-          title={direct ? "Recebimento direto" : "Nova conferência"}
+          title={direct ? "Embarque / cross-docking" : "Nova conferência"}
           online={online}
           pending={pending}
         />
@@ -431,7 +441,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
               </select>
             </label>
             <label>
-              <FieldLabel>Local do recebimento</FieldLabel>
+              <FieldLabel>Local da operação</FieldLabel>
               <select
                 value={locationId}
                 onChange={(e) => {
@@ -533,7 +543,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
               (type !== "AVULSA" && !palletId)
             }
           >
-            {loading ? "Validando…" : "Abrir conferência"}
+            {loading ? "Validando…" : direct ? "Abrir embarque" : "Abrir conferência"}
           </PrimaryButton>
         </section>
       </div>
@@ -542,10 +552,10 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
   if (conference.fechada_em || conference.status === "fechada" || conference.status === "cancelada")
     return (
       <div className="space-y-4">
-        <FieldHeader title="Conferência encerrada" online={online} pending={pending} />
+        <FieldHeader title={direct ? "Embarque encerrado" : "Conferência encerrada"} online={online} pending={pending} />
         <div className="surface-card p-6 text-center">
           <CheckCircle2 className="mx-auto h-12 w-12 text-[color:var(--success)]" />
-          <h3 className="mt-3 font-display text-2xl">Recebimento registrado</h3>
+          <h3 className="mt-3 font-display text-2xl">{direct ? "Embarque registrado" : "Conferência registrada"}</h3>
           <p className="mt-2 text-sm text-muted-foreground">
             {conference.itens.length} NF/DC ·{" "}
             {conference.itens.reduce((sum, item) => sum + item.quantidadeConferida, 0)} volumes ·{" "}
@@ -557,7 +567,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
             </p>
           )}
           <div className="mt-5">
-            <PrimaryButton onClick={reset}>Nova conferência</PrimaryButton>
+            <PrimaryButton onClick={reset}>{direct ? "Novo embarque" : "Nova conferência"}</PrimaryButton>
           </div>
         </div>
       </div>
@@ -722,7 +732,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
         <section className="surface-card p-4">
           <h3 className="text-sm font-semibold">Etiquetar e bipar cada volume</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            A API só recebe o volume depois que existe etiqueta original e o UUID é lido.
+            O volume só muda de estado depois que existe etiqueta original e o UUID é bipado.
           </p>
           <div className="mt-3 space-y-2">
             {allVolumes.map((volume) => {
@@ -751,7 +761,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
                   </span>
                   <div className="flex items-center gap-2">
                     <StatusChip
-                      tone={volume.status === "recebido" ? "success" : "warning"}
+                      tone={volume.status === (conference.modo_operacao === "embarque" ? "embarcado" : "conferido") ? "success" : "warning"}
                       size="sm"
                     >
                       {volume.status}
@@ -801,7 +811,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
         <div className="flex items-start gap-3">
           <Camera className="mt-0.5 h-5 w-5 text-[color:var(--brand)]" />
           <div>
-            <h3 className="text-sm font-semibold">Evidências do recebimento</h3>
+            <h3 className="text-sm font-semibold">Evidências da operação</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Fotos reais são salvas no MinIO com SHA-256. Offline, ficam cifradas pelo
               armazenamento do navegador até sincronizar.
@@ -876,7 +886,7 @@ function FieldHeader({
   return (
     <header className="flex items-start justify-between gap-3">
       <div>
-        <p className="text-xs font-medium text-[color:var(--brand)]">Recebimento físico</p>
+        <p className="text-xs font-medium text-[color:var(--brand)]">Operação física auditável</p>
         <h1 className="mt-1 font-display text-2xl">{title}</h1>
       </div>
       <div className="text-right">

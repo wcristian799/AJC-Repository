@@ -137,7 +137,7 @@ O TanStack Start usa **file-based routing**: o nome do arquivo vira a URL (`app.
 | `VeiculosTab.tsx` | RF-5 | Cadastro de envio de veículos/máquinas. *(lista inicial de exemplo hardcoded local.)* |
 | `PrestacaoTab.tsx` | B.10 | Prestação de contas do gerente (leitura da API). |
 | `PortariaTab.tsx` | B.1 (campo) | Registro de entrada no pátio. |
-| `ColetorTab.tsx` | B.4/B.7 (campo) | Conferência / 2º bipe / entrega. |
+| `ColetorTab.tsx` | B.4/B.7 (campo) | Bipe de conferido / bipe de embarcado / entrega. |
 | `CrossDockingTab.tsx` | B.8 (campo) | Recebimento direto na balsa. |
 | `EntregasTab.tsx` | B.9 (campo) | Comprovante de entrega com prova legal (2 fotos + assinatura). |
 
@@ -377,13 +377,14 @@ SQL puro, idempotente. Convenções: PK `uuid`, `criado_em`/`atualizado_em`, sof
 | 0025 | `tms_lancamento_nf_unificado.sql` | Fluxo unificado de lançamento/upload NF/DC. |
 | 0026 | `documento_fiscal_origem_operacao.sql` | Amplia a origem válida do documento fiscal para `operacao`. |
 | 0027 | `tms_controle_viagem_config.sql` | Chave versionada `tms_controle_viagem` e suporte `unaccent` às buscas. |
-| 0028 | `tms_volume_cadastrado_status.sql` | Status inicial real do volume recebido. |
+| 0028 | `tms_volume_cadastrado_status.sql` | Status inicial `cadastrado`, antes de qualquer bipe fisico. |
 | 0029 | `tms_paletizacao_etiquetas.sql` | Paletização, etiquetas, evidências e configuração operacional. |
 | 0030 | `corrige_nome_local_porto.sql` | Saneamento dos nomes de locais operacionais. |
 | 0031 | `campo_rbac_prestacao_contas.sql` | Apps de campo, permissões e prestação de contas auditável. |
 | 0032 | `encomendas_operacionais.sql` | Domínio operacional de encomendas. |
 | 0033 | `passagens_pdv_operacional.sql` | Venda presencial, PDV e multipagamento reais. |
 | 0034 | `cidades_cadastro_operacional.sql` | UUID auditável e criação/edição de cidades sem alterar a sigla operacional. |
+| 0035 | `tms_fluxo_volume_simplificado.sql` | Fluxo oficial `cadastrado -> conferido -> embarcado -> entregue`, com cross-docking direto e estados legados apenas no historico. |
 
 **Principais tabelas (colunas-chave):**
 - **Acesso:** `usuario`(login uk, senha_hash, perfil_id), `perfil`, `permissao`(uk `modulo,acao`), `perfil_permissao` (N:N), `sessao`(refresh_hash), `colaborador`.
@@ -432,7 +433,14 @@ Credenciais de dev: db `ajc` / role `ajc` / senha `ajc_dev` / `DATABASE_URL=post
 - **Docker Desktop** não funciona nesta máquina (bug do Inference manager) — usar WSL nativo.
 - **Login** (`index.tsx`) e **tokens do design system** (`styles.css`) são intocáveis sem pedido explícito.
 - **Portal e Health são públicos** — cuidado ao assumir que todo endpoint exige auth.
-- **`src/mocks/data.ts` está órfão** (~63 KB de dead code). Resíduos de mock inline ainda vivem em `pos.tsx`, `VeiculosTab.tsx` e fallbacks de `app.navegacao.tsx`.
+- **`src/mocks/data.ts` está órfão** (~63 KB de dead code). O fallback demonstrativo de `VeiculosTab.tsx` foi removido em 05/ago/2026; resíduos de mock inline ainda precisam ser auditados em `pos.tsx` e nos fallbacks de `app.navegacao.tsx`.
+
+### 5.1. Revisão operacional de 05/ago/2026
+
+- `infra/migrations/0036_documento_independente_viagem_gerente_origens_veiculos.sql`: NF/DC independente, timestamps/responsáveis do ciclo da viagem, permissão operacional e origem configurável de Veículos.
+- `apps/web-console/src/components/ops/cadastros/OperationalVeiculosConfig.tsx`: editor versionado de origens, ativação e padrão.
+- `apps/web-console/src/routes/campo.gerente.tsx`: início/encerramento real da viagem pelo gerente.
+- `apps/web-console/src/components/ops/tms/NotasTab.tsx` + `routes/app.tms.tsx`: documento livre no lançamento e criação posterior da carga por seleção de NF/DC.
 
 ---
 

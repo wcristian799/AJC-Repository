@@ -131,7 +131,7 @@ Todo conteúdo dinâmico tem 5+1 estados padronizados (sempre desenhados):
 | App | Persona | Função única |
 |---|---|---|
 | **Console** (web) | Back-office | Gestão completa por módulo (RBAC) |
-| **App Conferente** | Conferente porto/balsa | Receber, conferir, etiquetar, 2º bipe, cross-docking, entrega |
+| **App Conferente** | Conferente porto/embarcação | Conferir, etiquetar, bipar embarque, operar cross-docking e entregar |
 | **App Validação** | Bilheteiro | Ler QR e indicar pulseira no embarque |
 | **App Portaria** | Porteiro | Entrada/saída de veículos no porto |
 | **App Agente** | Agente da cidade | Captação, cotação, receber carga na cidade |

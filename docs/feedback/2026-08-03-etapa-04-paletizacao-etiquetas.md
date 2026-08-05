@@ -1,17 +1,19 @@
-# Etapa 04 - Recebimento, paletizacao e etiquetas
+# Etapa 04 - Conferencia, embarque, paletizacao e etiquetas
 
 **Data:** 03/ago/2026
 **Fonte vigente:** Etapa 04 de `2026-07-09-validacao-core-todas-telas-diagramado.docx`, complementada pelas decisoes da Etapa 03 e pelo ADR 03.
 
 ## Resultado entregue
 
-A etapa deixou de ser uma visualizacao demonstrativa. Recebimento, composicao de paletes e etiquetas agora possuem persistencia PostgreSQL, regras de dominio, RBAC, idempotencia, trilha de auditoria e fluxo de campo offline-first.
+A etapa deixou de ser uma visualizacao demonstrativa. Conferencia, embarque, composicao de paletes e etiquetas agora possuem persistencia PostgreSQL, regras de dominio, RBAC, idempotencia, trilha de auditoria e fluxo de campo offline-first.
+
+> Atualizacao de 04/ago/2026: a maquina de estados foi simplificada para `cadastrado -> conferido -> embarcado -> entregue`; no cross-docking, `cadastrado -> embarcado`. `Recebido`, `reconferido` e `desembarcado` nao sao estados operacionais.
 
 ### Recebimento fisico
 
 - Abertura e retomada de conferencia real por viagem, local e operador autenticado.
 - Classificacao explicita AVULSA, MP, PD ou PC; nenhuma inferencia por peso ou quantidade.
-- Busca de NF/DC real vinculada a viagem e exibicao de cliente, destino e saldo ainda nao recebido.
+- Busca de NF/DC real vinculada a viagem e exibicao de cliente, destino e saldo ainda nao processado naquela operacao.
 - Registro de quantidade encontrada, falta/excesso, justificativa e volumes adicionais identificados.
 - Evidencia fotografica no MinIO; quando sem sinal, o arquivo fica localmente no aparelho ate sincronizar.
 - Fechamento parcial/completo sujeito as regras publicadas em Cadastros.
@@ -45,7 +47,7 @@ A etapa deixou de ser uma visualizacao demonstrativa. Recebimento, composicao de
 - `POST /api/tms/paletes/:id/liberar`
 - `GET/POST /api/tms/conferencias`
 - `POST /api/tms/conferencias/:id/itens`
-- `POST /api/tms/conferencias/:id/volumes/receber`
+- `POST /api/tms/conferencias/:id/volumes/bipar`
 - `POST /api/tms/conferencias/evidencias`
 - `POST /api/tms/conferencias/:id/fechar`
 - `GET /api/tms/etiquetas-alvos`
@@ -55,7 +57,7 @@ A etapa deixou de ser uma visualizacao demonstrativa. Recebimento, composicao de
 ## Deploy
 
 1. Publicar backend e front do mesmo commit.
-2. Executar `node infra/migrations/run.mjs` no ambiente da API; devem entrar as migrations 0028, 0029 e 0030.
+2. Executar `node infra/migrations/run.mjs` no ambiente da API; alem das migrations 0028, 0029 e 0030, a migration 0035 normaliza o fluxo simplificado.
 3. Manter as credenciais MinIO validas e garantir o bucket privado `recebimento-fotos`.
 4. Em Cadastros, revisar/publicar as regras operacionais e cadastrar o perfil da impressora somente com dados do equipamento real.
 

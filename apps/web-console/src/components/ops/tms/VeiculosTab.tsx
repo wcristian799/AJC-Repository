@@ -1,16 +1,18 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building2, Camera, Car, Check, ClipboardCheck, ScanLine, Tag as TagIcon, UserRound, X } from "lucide-react";
 import { SectionHeader, PrimaryButton, StatusChip, Tag, brl } from "@/components/ops/primitives";
 import {
   createVeiculoEnvio,
+  getVeiculosOrigensConfig,
   type NavegacaoViagemApi,
+  type VeiculosOrigensConfigApi,
   type VeiculoEnvioApi,
 } from "@/lib/ajc-api";
 
 type VeiculoFormState = {
   tipo: "veiculo" | "maquina";
   viagemId: string;
-  origemCadastro: "pdv" | "comercial" | "gerente_porto";
+  origemCadastro: string;
   placa: string;
   modelo: string;
   remetenteNome: string;
@@ -27,7 +29,7 @@ type VeiculoFormState = {
 const initialForm: VeiculoFormState = {
   tipo: "veiculo",
   viagemId: "",
-  origemCadastro: "gerente_porto",
+  origemCadastro: "",
   placa: "",
   modelo: "",
   remetenteNome: "",
@@ -40,42 +42,6 @@ const initialForm: VeiculoFormState = {
   cidadeDestinoSigla: "",
   valorFrete: "",
 };
-
-const envios = [
-  {
-    id: "VEI-001",
-    tipo: "Veiculo",
-    placa: "QEV-4H21",
-    modelo: "Hilux SW4",
-    origem: "PDV Porto",
-    remetente: "Marcos Vieira - 123.456.789-00 - (91) 98888-1010",
-    destinatario: "Ana Ribeiro - 987.654.321-00 - (93) 97777-2020",
-    status: "vistoria",
-    frete: 1850,
-  },
-  {
-    id: "VEI-002",
-    tipo: "Maquina",
-    placa: "-",
-    modelo: "Retroescavadeira",
-    origem: "Comercial",
-    remetente: "Norte Obras LTDA - 12.345.678/0001-90 - (91) 93333-1212",
-    destinatario: "Porto de Moz Mineracao - 23.456.789/0001-10 - (93) 94444-3434",
-    status: "embarque",
-    frete: 4200,
-  },
-  {
-    id: "VEI-003",
-    tipo: "Veiculo",
-    placa: "RXA-7B43",
-    modelo: "Fiat Strada",
-    origem: "Gerente do Porto",
-    remetente: "Comercial Tapajos - 45.123.899/0001-10 - (93) 95555-8888",
-    destinatario: "Joao Pantoja - 222.333.444-55 - (91) 96666-7777",
-    status: "entrega",
-    frete: 980,
-  },
-];
 
 const checklist = [
   "Fotos obrigatorias: frente, traseira, laterais, teto/interior ou pontos criticos",
@@ -99,8 +65,20 @@ export function VeiculosTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<VeiculoFormState>(initialForm);
+  const [origensConfig, setOrigensConfig] = useState<VeiculosOrigensConfigApi | null>(null);
+  const [origensError, setOrigensError] = useState<string | null>(null);
 
-  const rows = enviosApi !== undefined ? enviosApi.map(mapEnvio) : envios;
+  useEffect(() => {
+    getVeiculosOrigensConfig()
+      .then((config) => {
+        setOrigensConfig(config);
+        setForm((current) => ({ ...current, origemCadastro: current.origemCadastro || config.valor.origemPadrao }));
+      })
+      .catch((cause) => setOrigensError(cause instanceof Error ? cause.message : "Nao foi possivel carregar as origens de cadastro."));
+  }, []);
+
+  const origemLabels = useMemo(() => new Map(origensConfig?.valor.origens.map((origem) => [origem.codigo, origem.nome]) ?? []), [origensConfig]);
+  const rows = (enviosApi ?? []).map((envio) => mapEnvio(envio, origemLabels));
   const viagemOptions = useMemo(
     () => viagens.map((v) => ({ id: v.id, label: `${v.codigo ?? "sem codigo"} - ${v.origemSigla} -> ${v.destinoSigla ?? "destino"}` })),
     [viagens],
@@ -115,6 +93,10 @@ export function VeiculosTab({
     }
     if (form.tipo === "veiculo" && !form.placa.trim()) {
       setError("Placa obrigatoria para veiculo.");
+      return;
+    }
+    if (!origensConfig || !form.origemCadastro) {
+      setError("Configure e publique ao menos uma origem de cadastro em Cadastros.");
       return;
     }
 
@@ -138,7 +120,7 @@ export function VeiculosTab({
         clientUuid: crypto.randomUUID(),
       });
       onEnviosChange?.([created, ...(enviosApi ?? [])]);
-      setForm(initialForm);
+      setForm({ ...initialForm, origemCadastro: origensConfig.valor.origemPadrao });
       setShowForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nao foi possivel cadastrar o envio.");
@@ -152,15 +134,17 @@ export function VeiculosTab({
       <SectionHeader
         eyebrow="MVP - veiculos e maquinas"
         title="Envio de veiculos/maquinas"
-        description="Fluxo pedido na validacao: cadastro por PDV, Comercial ou Gerente do Porto, vistoria com fotos, etiqueta, bipe de subida/descida e checklist de entrega."
+        description="Cadastro operacional com origem configurável, vistoria com fotos, etiqueta, bipes de movimentação e checklist de entrega."
         actions={
-          <PrimaryButton icon={showForm ? X : Car} onClick={() => setShowForm((value) => !value)}>
+          <PrimaryButton icon={showForm ? X : Car} disabled={!origensConfig} onClick={() => setShowForm((value) => !value)}>
             {showForm ? "Fechar cadastro" : "Novo envio veiculo/maquina"}
           </PrimaryButton>
         }
       />
 
-      {showForm && (
+      {origensError && <p role="alert" className="rounded-lg bg-[color:color-mix(in_oklab,var(--danger)_12%,transparent)] px-4 py-3 text-sm text-[color:var(--danger)] ring-1 ring-[color:color-mix(in_oklab,var(--danger)_28%,transparent)]">{origensError} Publique a configuração em Cadastros › Configurações operacionais.</p>}
+
+      {showForm && origensConfig && (
         <form onSubmit={submit} className="surface-card brand-rail brand-rail-left p-5">
           <div className="flex flex-wrap items-center gap-2">
             <Car className="h-4 w-4 text-[color:var(--brand)]" />
@@ -175,10 +159,9 @@ export function VeiculosTab({
               <option value="veiculo">Veiculo</option>
               <option value="maquina">Maquina</option>
             </FormSelect>
-            <FormSelect label="Origem cadastro" value={form.origemCadastro} onChange={(origemCadastro) => setForm((prev) => ({ ...prev, origemCadastro: origemCadastro as VeiculoFormState["origemCadastro"] }))}>
-              <option value="gerente_porto">Gerente do Porto</option>
-              <option value="pdv">PDV Porto</option>
-              <option value="comercial">Comercial</option>
+            <FormSelect label="Origem cadastro" value={form.origemCadastro} onChange={(origemCadastro) => setForm((prev) => ({ ...prev, origemCadastro }))}>
+              <option value="">Selecionar origem</option>
+              {origensConfig.valor.origens.filter((origem) => origem.ativo).map((origem) => <option key={origem.codigo} value={origem.codigo}>{origem.nome}</option>)}
             </FormSelect>
             <FormSelect label="Viagem" value={form.viagemId} onChange={(viagemId) => setForm((prev) => ({ ...prev, viagemId }))}>
               <option value="">Selecionar depois</option>
@@ -285,27 +268,18 @@ export function VeiculosTab({
   );
 }
 
-function mapEnvio(envio: VeiculoEnvioApi) {
+function mapEnvio(envio: VeiculoEnvioApi, origemLabels: Map<string, string>) {
   return {
     id: envio.codigo ?? envio.id,
     tipo: envio.tipo === "maquina" ? "Maquina" : "Veiculo",
     placa: envio.placa ?? "-",
     modelo: envio.modelo,
-    origem: labelOrigem(envio.origem_cadastro),
+    origem: origemLabels.get(envio.origem_cadastro) ?? envio.origem_cadastro,
     remetente: [envio.remetente_nome, envio.remetente_documento, envio.remetente_telefone].filter(Boolean).join(" - ") || "Remetente nao informado",
     destinatario: [envio.destinatario_nome, envio.destinatario_documento, envio.destinatario_telefone].filter(Boolean).join(" - ") || "Destinatario nao informado",
     status: envio.status,
     frete: Number(envio.valor_frete ?? 0),
   };
-}
-
-function labelOrigem(origem: string) {
-  const map: Record<string, string> = {
-    pdv: "PDV Porto",
-    comercial: "Comercial",
-    gerente_porto: "Gerente do Porto",
-  };
-  return map[origem] ?? origem;
 }
 
 function FormInput({

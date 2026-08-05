@@ -34,6 +34,12 @@ TermoAceiteVeiculo (id, veiculo_id, versao_termo, aceito_em, dispositivo)
 - **Portaria (TMS):** registro de entrada/saída do veículo no porto.
 - **Navegação:** vínculo com a viagem/embarcação.
 - **Financeiro:** valor do frete do veículo (tabela pronta) entra no faturamento/caixa.
+- **Cadastros:** as origens possíveis do cadastro são mantidas na configuração versionada `veiculos_origens_cadastro`; o backend aceita somente códigos ativos e aplica a origem padrão publicada quando necessário.
+
+### A.5 Origem do cadastro
+- Não existe enum comercial fixo no código. Nome, disponibilidade e origem padrão são publicados em **Cadastros › Configurações operacionais › Origens de Veículos e Máquinas**.
+- Códigos já publicados ficam imutáveis para preservar o histórico; seus nomes podem ser corrigidos e a opção pode ser desativada, exceto quando for a origem padrão.
+- Novas origens podem ser cadastradas sem migration. O histórico continua exibindo o nome da configuração vigente ou, se removido indevidamente, o código persistido.
 
 ---
 

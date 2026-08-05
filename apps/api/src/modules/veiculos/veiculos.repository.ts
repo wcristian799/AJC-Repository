@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
+import { validateVeiculosOrigensConfig } from './veiculos-config.validator';
 
 export interface CreateVeiculoInput {
   tipo: 'veiculo' | 'maquina';
   viagemId?: string;
-  origemCadastro?: 'pdv' | 'comercial' | 'gerente_porto';
+  origemCadastro?: string;
   placa?: string;
   modelo: string;
   remetenteClienteId?: string;
@@ -50,6 +51,11 @@ export class VeiculosRepository {
   }
 
   async create(input: CreateVeiculoInput, userId: string) {
+    const originsConfig = await this.getOriginsConfig();
+    const origemCadastro = input.origemCadastro?.trim().toLowerCase() || originsConfig.valor.origemPadrao;
+    if (!originsConfig.valor.origens.some((item) => item.ativo && item.codigo === origemCadastro)) {
+      throw new BadRequestException('Origem do cadastro nao esta ativa na configuracao de Veiculos');
+    }
     const codigo = await this.nextCodigo();
     return this.db.tx(async (client) => {
       const inserted = await client.query(
@@ -62,7 +68,7 @@ export class VeiculosRepository {
           client_uuid, criado_por, atualizado_por
         )
         VALUES (
-          $1, $2::tipo_envio_veiculo, $3, $4::origem_cadastro_envio, 'vistoria',
+          $1, $2::tipo_envio_veiculo, $3, $4, 'vistoria',
           $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $20
         )
         ON CONFLICT (client_uuid) WHERE client_uuid IS NOT NULL DO NOTHING
@@ -72,7 +78,7 @@ export class VeiculosRepository {
           codigo,
           input.tipo,
           input.viagemId ?? null,
-          input.origemCadastro ?? 'gerente_porto',
+          origemCadastro,
           input.placa ?? null,
           input.modelo.trim(),
           input.remetenteClienteId ?? null,
@@ -171,5 +177,17 @@ export class VeiculosRepository {
     const year = new Date().getFullYear();
     const row = await this.db.one<{ total: string }>('SELECT count(*)::text AS total FROM envio_veiculo WHERE codigo LIKE $1', [`VEI-${year}-%`]);
     return `VEI-${year}-${String(Number(row?.total ?? 0) + 1).padStart(4, '0')}`;
+  }
+
+  async getOriginsConfig() {
+    const row = await this.db.one<{ chave: string; versao: number; valor: unknown }>(
+      `SELECT cc.chave, cv.versao, cv.valor
+       FROM config_chave cc
+       JOIN config_versao cv ON cv.chave_id = cc.id AND cv.ativo = true
+       WHERE cc.chave = 'veiculos_origens_cadastro'
+       LIMIT 1`,
+    );
+    if (!row) throw new BadRequestException('Configure as origens de Veiculos em Cadastros');
+    return { chave: row.chave, versao: row.versao, valor: validateVeiculosOrigensConfig(row.valor) };
   }
 }

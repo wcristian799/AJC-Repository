@@ -70,7 +70,7 @@ export class TmsControlRepository {
     const pagina = positiveInteger(query.pagina, 1, 'pagina');
     const porPagina = boundedInteger(query.porPagina, configValue.config.itensPorPagina, 5, configValue.config.maximoPorPagina, 'porPagina');
     const status = query.status?.trim() || null;
-    if (status && !['cadastrado', 'recebido', 'conferido', 'embarcado', 'reconferido', 'desembarcado', 'entregue', 'divergente'].includes(status)) {
+    if (status && !['cadastrado', 'conferido', 'embarcado', 'entregue', 'divergente'].includes(status)) {
       throw new BadRequestException('status de volume invalido');
     }
     const busca = normalizeOptional(query.busca, 120);
@@ -208,7 +208,7 @@ export class TmsControlRepository {
   }
 
   private emptyTotals() {
-    return { viagens: 0, volumes: 0, recebidos: 0, embarcados: 0, entregues: 0, divergentes: 0, valorDeclarado: null, valorCobrado: null, cargasSemValorDeclarado: 0, cargasSemValorCobrado: 0 };
+    return { viagens: 0, volumes: 0, conferidos: 0, embarcados: 0, entregues: 0, divergentes: 0, valorDeclarado: null, valorCobrado: null, cargasSemValorDeclarado: 0, cargasSemValorCobrado: 0 };
   }
 
   private controlQuerySql() {
@@ -244,7 +244,9 @@ export class TmsControlRepository {
       ),
       volume_flags AS (
         SELECT vol.id, c.viagem_id, vol.status::text,
-               (vol.status::text IN ('embarcado','reconferido','desembarcado','entregue') OR
+               (vol.status::text IN ('conferido','embarcado','entregue') OR
+                coalesce(bool_or(ev.tipo::text IN ('recebido','conferido','embarcado','reconferido','desembarcado','entregue')), false)) AS passou_conferencia,
+               (vol.status::text IN ('embarcado','entregue') OR
                 coalesce(bool_or(ev.tipo::text IN ('embarcado','reconferido','desembarcado','entregue')), false)) AS passou_embarque,
                (vol.status::text = 'entregue' OR coalesce(bool_or(ev.tipo::text = 'entregue'), false)) AS passou_entrega
         FROM volume vol
@@ -254,7 +256,8 @@ export class TmsControlRepository {
         GROUP BY vol.id, c.viagem_id, vol.status
       ),
       volume_agg AS (
-        SELECT viagem_id, count(*)::int AS volumes, count(*)::int AS recebidos,
+        SELECT viagem_id, count(*)::int AS volumes,
+               count(*) FILTER (WHERE passou_conferencia)::int AS conferidos,
                count(*) FILTER (WHERE passou_embarque)::int AS embarcados,
                count(*) FILTER (WHERE passou_entrega)::int AS entregues,
                count(*) FILTER (WHERE status = 'divergente')::int AS divergentes
@@ -273,7 +276,7 @@ export class TmsControlRepository {
       ),
       base AS (
         SELECT ft.*, coalesce(ca.cargas, 0) AS cargas,
-               coalesce(va.volumes, 0) AS volumes, coalesce(va.recebidos, 0) AS recebidos,
+               coalesce(va.volumes, 0) AS volumes, coalesce(va.conferidos, 0) AS conferidos,
                coalesce(va.embarcados, 0) AS embarcados, coalesce(va.entregues, 0) AS entregues,
                coalesce(va.divergentes, 0) AS divergentes,
                ca.valor_declarado, ca.valor_cobrado,
@@ -300,7 +303,7 @@ export class TmsControlRepository {
         'totals', jsonb_build_object(
           'viagens', (SELECT count(*) FROM base),
           'volumes', coalesce((SELECT sum(volumes) FROM base), 0),
-          'recebidos', coalesce((SELECT sum(recebidos) FROM base), 0),
+          'conferidos', coalesce((SELECT sum(conferidos) FROM base), 0),
           'embarcados', coalesce((SELECT sum(embarcados) FROM base), 0),
           'entregues', coalesce((SELECT sum(entregues) FROM base), 0),
           'divergentes', coalesce((SELECT sum(divergentes) FROM base), 0),

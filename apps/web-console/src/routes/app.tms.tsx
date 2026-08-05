@@ -167,13 +167,13 @@ function TMS() {
   }, [data.viagens, data.clientes, data.cidades]);
 
   const total = data.volumes.length;
-  const processados = data.volumes.filter((v) => v.status !== "recebido").length;
+  const processados = data.volumes.filter((v) => v.status !== "cadastrado").length;
   const divergentes = data.volumes.filter((v) => v.status === "divergente").length;
   const entregues = data.volumes.filter((v) => v.status === "entregue").length;
   const clienteSelecionado = data.clientes.find((cliente) => cliente.id === novaCargaForm.clienteRemetenteId) ?? null;
   const clientesFiltrados = useMemo(() => filterClientes(data.clientes, clienteBusca), [data.clientes, clienteBusca]);
   const documentosDoCliente = useMemo(
-    () => data.documentos.filter((documento) => documento.cliente_id === novaCargaForm.clienteRemetenteId),
+    () => data.documentos.filter((documento) => documento.cliente_id === novaCargaForm.clienteRemetenteId && !documento.carga_id),
     [data.documentos, novaCargaForm.clienteRemetenteId],
   );
   const documentosSelecionados = useMemo(
@@ -199,7 +199,16 @@ function TMS() {
       return;
     }
     if (novaCargaForm.documentoIds.length === 0) {
-      setNovaCargaError("Selecione ao menos uma NF/DC vinculada ao cliente.");
+      setNovaCargaError("Selecione ao menos uma NF/DC livre do cliente.");
+      return;
+    }
+    const destinos = [...new Set(documentosSelecionados.map((documento) => documento.cidade_destino_sigla?.trim().toUpperCase()).filter(Boolean))];
+    if (destinos.length !== 1) {
+      setNovaCargaError("As NF/DC selecionadas precisam possuir o mesmo destino.");
+      return;
+    }
+    if (destinos[0] !== novaCargaForm.cidadeDestinoSigla.trim().toUpperCase()) {
+      setNovaCargaError("O destino da carga deve ser o mesmo destino informado nas NF/DC.");
       return;
     }
     if (!novaCargaForm.cidadeDestinoSigla.trim()) {
@@ -210,7 +219,7 @@ function TMS() {
     try {
       const valorDeclarado = soma(documentosSelecionados.map((documento) => documento.valor));
       const pesoTotal = soma(documentosSelecionados.map((documento) => documento.peso_total));
-      const totalVolumes = Math.max(documentosSelecionados.length, 1);
+      const totalVolumes = Math.max(soma(documentosSelecionados.map((documento) => documento.total_volumes)) ?? 0, 1);
       await createTmsCarga({
         categoria: "carga",
         viagemId: novaCargaForm.viagemId,
@@ -252,11 +261,20 @@ function TMS() {
       ...prev,
       clienteRemetenteId: cliente.id,
       documentoIds: [],
+      cidadeDestinoSigla: "",
     }));
   }
 
   function toggleDocumento(documento: TmsDocumentoApi) {
     if (documento.carga_id) return;
+    const removendo = novaCargaForm.documentoIds.includes(documento.id);
+    const destinoNovo = documento.cidade_destino_sigla?.trim().toUpperCase();
+    const destinoAtual = documentosSelecionados[0]?.cidade_destino_sigla?.trim().toUpperCase();
+    if (!removendo && destinoAtual && destinoNovo !== destinoAtual) {
+      setNovaCargaError(`Esta NF/DC tem destino ${destinoNovo ?? "nao informado"}; selecione somente documentos com destino ${destinoAtual}.`);
+      return;
+    }
+    setNovaCargaError(null);
     setNovaCargaForm((prev) => {
       const exists = prev.documentoIds.includes(documento.id);
       const documentoIds = exists ? prev.documentoIds.filter((id) => id !== documento.id) : [...prev.documentoIds, documento.id];
@@ -265,7 +283,7 @@ function TMS() {
         .filter((item): item is TmsDocumentoApi => Boolean(item));
       const primeiro = selecionados[0];
       const origemDocumento = normalizeAllowedSigla(primeiro?.cidade_origem_sigla, paradasViagem);
-      const destinoDocumento = normalizeAllowedSigla(primeiro?.cidade_destino_sigla, paradasViagem);
+      const destinoDocumento = primeiro?.cidade_destino_sigla?.trim().toUpperCase() || null;
       return {
         ...prev,
         documentoIds,
@@ -280,7 +298,7 @@ function TMS() {
       <SectionHeader
         eyebrow="Coração antifraude"
         title="TMS · Volumes, conferência e entrega"
-        description="Cada volume nasce com UUID, é bipado, etiquetado, fotografado, conferido duas vezes e entregue com prova."
+        description="Cada volume nasce com UUID, é conferido no porto, embarcado na embarcação e entregue com prova. No cross-docking, o primeiro bipe já registra o embarque."
         actions={
           <>
             <Link
@@ -314,7 +332,7 @@ function TMS() {
             <Plus className="h-4 w-4 text-[color:var(--brand)]" />
             <h3 className="font-display text-lg">Nova carga</h3>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">Pedido = COD CLIENTE + NF/DC. UUID/QR e codigo de carga sao gerados pelo sistema. Cliente, peso e valor podem vir da NF/DC ou preenchimento manual.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Selecione o cliente, as NF/DC livres e uma viagem compatível. Só ao salvar serão criados a carga, seus volumes, UUID/QR e o vínculo com a viagem.</p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <CargaField label="Numero do pedido / venda" value={novaCargaPreview.pedido} hint="COD CLIENTE + NF/DC" />
@@ -357,7 +375,7 @@ function TMS() {
                   ...prev,
                   viagemId,
                   cidadeOrigemSigla: paradas[0]?.sigla ?? viagem?.origemSigla ?? prev.cidadeOrigemSigla,
-                  cidadeDestinoSigla: paradas[paradas.length - 1]?.sigla ?? viagem?.destinoSigla ?? prev.cidadeDestinoSigla,
+                  cidadeDestinoSigla: prev.documentoIds.length > 0 ? prev.cidadeDestinoSigla : (paradas[paradas.length - 1]?.sigla ?? viagem?.destinoSigla ?? prev.cidadeDestinoSigla),
                 }));
               }}
             >
@@ -375,13 +393,7 @@ function TMS() {
               fallbackCidades={data.cidades}
               onChange={(cidadeOrigemSigla) => setNovaCargaForm((prev) => ({ ...prev, cidadeOrigemSigla }))}
             />
-            <CidadeParadaSelect
-              label="Destino"
-              value={novaCargaForm.cidadeDestinoSigla}
-              paradas={paradasViagem}
-              fallbackCidades={data.cidades}
-              onChange={(cidadeDestinoSigla) => setNovaCargaForm((prev) => ({ ...prev, cidadeDestinoSigla }))}
-            />
+            <CargaField label="Destino da carga" value={novaCargaForm.cidadeDestinoSigla || "selecione a NF/DC"} hint="definido pela NF/DC" mono />
           </div>
 
           <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -455,15 +467,10 @@ function TMS() {
       {tab === "ctrl" && <ControleTab embarcacoes={data.embarcacoes} cidades={data.cidades} />}
       {tab === "notas" && (
         <NotasTab
-          cargas={data.cargas}
           cidades={data.cidades}
           documentos={data.documentos}
-          volumes={data.volumes}
-          viagens={data.viagens}
           clientes={data.clientes}
-          onCargasChange={(cargas) => setData((prev) => ({ ...prev, cargas }))}
           onDocumentosChange={(documentos) => setData((prev) => ({ ...prev, documentos }))}
-          onVolumesChange={(volumes) => setData((prev) => ({ ...prev, volumes }))}
         />
       )}
       {tab === "paletes" && <PaletesTab />}

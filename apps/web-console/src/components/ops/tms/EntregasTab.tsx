@@ -1,28 +1,43 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Camera, PenLine, MessageCircle, FileSignature, ScanLine, Package, Car, Boxes } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Camera, FileSignature, MessageCircle, ScanLine, UserRound } from "lucide-react";
 import { StatusChip, Tag } from "@/components/ops/primitives";
-import { PhoneFrame, CaptureTile } from "./PhoneFrame";
-import { AjcApiError, createTmsEntrega, listTmsVolumes, type TmsVolumeApi } from "@/lib/ajc-api";
+import { PhoneFrame } from "./PhoneFrame";
+import {
+  AjcApiError,
+  createTmsEntrega,
+  listTmsVolumes,
+  uploadTmsEntregaEvidencia,
+  type TmsVolumeApi,
+} from "@/lib/ajc-api";
 
-/** B.9 - Comprovante de entrega com prova legal. */
+/** B.9 - Bipe final e comprovante de entrega com prova legal real. */
 export function EntregasTab() {
-  return <SimuladorEntrega />;
-}
-
-function SimuladorEntrega() {
-  const [tipo, setTipo] = useState<"carga" | "encomenda" | "veiculo">("carga");
   const [volumes, setVolumes] = useState<TmsVolumeApi[]>([]);
-  const [bipado, setBipado] = useState(false);
-  const [foto1, setFoto1] = useState<LegalProof | null>(null);
-  const [foto2, setFoto2] = useState<LegalProof | null>(null);
-  const [assinatura, setAssinatura] = useState<LegalProof | null>(null);
+  const [scan, setScan] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [recebedorNome, setRecebedorNome] = useState("");
+  const [recebedorDoc, setRecebedorDoc] = useState("");
+  const [recebedorAvulso, setRecebedorAvulso] = useState(false);
+  const [foto1, setFoto1] = useState<File | null>(null);
+  const [foto2, setFoto2] = useState<File | null>(null);
+  const [assinatura, setAssinatura] = useState<File | null>(null);
   const [done, setDone] = useState(false);
   const [protocolo, setProtocolo] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const volumeAlvo = useMemo(() => volumes.find((v) => v.status !== "entregue") ?? volumes[0], [volumes]);
-  const podeConfirmar = bipado && !!foto1 && !!foto2 && !!assinatura && !saving;
+  const volumeAlvo = useMemo(
+    () => volumes.find((volume) => volume.id === selectedId) ?? null,
+    [selectedId, volumes],
+  );
+  const podeConfirmar =
+    !!volumeAlvo &&
+    !!recebedorNome.trim() &&
+    !!recebedorDoc.trim() &&
+    !!foto1 &&
+    !!foto2 &&
+    !!assinatura &&
+    !saving;
 
   useEffect(() => {
     let active = true;
@@ -31,104 +46,212 @@ function SimuladorEntrega() {
         if (active) setVolumes(rows);
       })
       .catch((err) => {
-        if (active) setError(err instanceof AjcApiError ? err.message : "Nao foi possivel carregar volumes.");
+        if (active)
+          setError(
+            err instanceof AjcApiError
+              ? err.message
+              : "Nao foi possivel carregar volumes.",
+          );
       });
     return () => {
       active = false;
     };
   }, []);
 
+  function confirmarBipe() {
+    const value = scan.trim().toLowerCase();
+    if (!value) return;
+    const volume = volumes.find(
+      (item) =>
+        item.status === "embarcado" &&
+        (item.uuid.toLowerCase() === value || item.id.toLowerCase() === value),
+    );
+    if (!volume) {
+      setSelectedId(null);
+      setError("Volume nao encontrado ou ainda nao esta embarcado.");
+      return;
+    }
+    setSelectedId(volume.id);
+    setError(null);
+  }
+
   async function confirmarEntrega() {
-    if (!volumeAlvo || !podeConfirmar) return;
+    if (!volumeAlvo || !foto1 || !foto2 || !assinatura || !podeConfirmar) return;
     setSaving(true);
     setError(null);
     try {
+      const [evidenciaFoto1, evidenciaFoto2, evidenciaAssinatura] = await Promise.all([
+        uploadTmsEntregaEvidencia(foto1),
+        uploadTmsEntregaEvidencia(foto2),
+        uploadTmsEntregaEvidencia(assinatura),
+      ]);
       const entrega = await createTmsEntrega({
         cidadeSigla: volumeAlvo.cidade_destino_sigla,
         volumeIds: [volumeAlvo.id],
-        recebedorNome: tipo === "veiculo" ? "Recebedor do veiculo" : "Agente local",
-        recebedorDoc: "doc-capturado-no-app",
-        recebedorAvulso: false,
-        assinaturaUrl: assinatura.url,
-        assinaturaHash: assinatura.hash,
-        foto1Url: foto1.url,
-        foto2Url: foto2.url,
-        foto1Hash: foto1.hash,
-        foto2Hash: foto2.hash,
+        recebedorNome: recebedorNome.trim(),
+        recebedorDoc: recebedorDoc.trim(),
+        recebedorAvulso,
+        assinaturaUrl: evidenciaAssinatura.url,
+        assinaturaHash: evidenciaAssinatura.hash,
+        foto1Url: evidenciaFoto1.url,
+        foto2Url: evidenciaFoto2.url,
+        foto1Hash: evidenciaFoto1.hash,
+        foto2Hash: evidenciaFoto2.hash,
         clientUuid: crypto.randomUUID(),
       });
-      setVolumes((rows) => rows.map((v) => v.id === volumeAlvo.id ? { ...v, status: "entregue" } : v));
+      setVolumes((rows) =>
+        rows.map((volume) =>
+          volume.id === volumeAlvo.id ? { ...volume, status: "entregue" } : volume,
+        ),
+      );
       setProtocolo(entrega.protocolo);
       setDone(true);
     } catch (err) {
-      setError(err instanceof AjcApiError ? err.message : "Nao foi possivel confirmar a entrega.");
+      setError(
+        err instanceof AjcApiError
+          ? err.message
+          : "Nao foi possivel confirmar a entrega.",
+      );
     } finally {
       setSaving(false);
     }
+  }
+
+  function reset() {
+    setDone(false);
+    setScan("");
+    setSelectedId(null);
+    setRecebedorNome("");
+    setRecebedorDoc("");
+    setRecebedorAvulso(false);
+    setFoto1(null);
+    setFoto2(null);
+    setAssinatura(null);
+    setProtocolo(null);
+    setError(null);
   }
 
   return (
     <PhoneFrame framed={false} online={!error} pending={error ? 1 : 0} clock={currentClock()}>
       <AnimatePresence mode="wait">
         {!done ? (
-          <motion.div key="form" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} className="flex h-[calc(100%-44px)] flex-col p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--brand)]">Entrega · prova legal</p>
-            <p className="mt-1 font-display text-xl">{tipo === "veiculo" ? "Veiculo / maquina" : tipo === "encomenda" ? "Encomenda" : volumeAlvo?.carga_codigo ?? "Carga"}</p>
-            <p className="text-xs text-muted-foreground">{volumeAlvo ? `1 volume · destino ${volumeAlvo.cidade_destino_sigla}` : "sem volume carregado"}</p>
-
-            <div className="mt-3 grid grid-cols-3 gap-1.5">
-              <TipoButton active={tipo === "carga"} icon={Boxes} label="Carga" onClick={() => { setTipo("carga"); resetCapturas(setBipado, setFoto1, setFoto2, setAssinatura); }} />
-              <TipoButton active={tipo === "encomenda"} icon={Package} label="Encomenda" onClick={() => { setTipo("encomenda"); resetCapturas(setBipado, setFoto1, setFoto2, setAssinatura); }} />
-              <TipoButton active={tipo === "veiculo"} icon={Car} label="Veiculo" onClick={() => { setTipo("veiculo"); resetCapturas(setBipado, setFoto1, setFoto2, setAssinatura); }} />
-            </div>
-
-            <button
-              onClick={() => volumeAlvo && setBipado(true)}
-              disabled={!volumeAlvo}
-              className={`mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold ring-1 disabled:opacity-50 ${
-                bipado
-                  ? "bg-[color:color-mix(in_oklab,var(--success)_12%,transparent)] text-[color:var(--success)] ring-[color:color-mix(in_oklab,var(--success)_35%,transparent)]"
-                  : "bg-[color:color-mix(in_oklab,var(--brand)_12%,transparent)] text-[color:var(--brand)] ring-[color:var(--hairline-brand)]"
-              }`}
-            >
-              <ScanLine className="h-4 w-4" />
-              {bipado ? "Bipe confirmado" : `Bipar ${tipo === "carga" ? "palete/volume" : tipo === "encomenda" ? "encomenda" : "veiculo/maquina"}`}
-            </button>
-
-            <p className="mt-4 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">2 fotos obrigatorias (90 graus)</p>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <CaptureTile icon={Camera} label={tipo === "veiculo" ? "Foto checklist 1" : "Foto de cima"} done={!!foto1} onClick={() => bipado && captureProof("foto-1", volumeAlvo?.id).then(setFoto1).catch((err) => setError(err.message))} />
-              <CaptureTile icon={Camera} label={tipo === "veiculo" ? "Foto checklist 2" : "Foto do meio"} done={!!foto2} onClick={() => bipado && captureProof("foto-2", volumeAlvo?.id).then(setFoto2).catch((err) => setError(err.message))} />
-            </div>
-
-            <div className="mt-3">
-              <CaptureTile icon={PenLine} label={tipo === "veiculo" ? "Assinatura entrega veiculo" : "Assinatura do agente"} done={!!assinatura} onClick={() => bipado && captureProof("assinatura", volumeAlvo?.id).then(setAssinatura).catch((err) => setError(err.message))} />
-            </div>
-
-            <p className="mt-3 text-[10px] text-muted-foreground">
-              <Tag tone={bipado ? "success" : "warning"}>{bipado ? "bipe ok" : "bipe obrigatorio"}</Tag> Fotos e assinatura geram comprovante no backend.
+          <motion.div
+            key="form"
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 16 }}
+            className="flex min-h-[calc(100%-44px)] flex-col p-5"
+          >
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--brand)]">
+              Entrega · bipe final
+            </p>
+            <h3 className="mt-1 font-display text-xl">Comprovante de entrega</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Somente volumes embarcados podem ser entregues. O UUID pode vir do leitor ou da camera.
             </p>
 
-            {error && <p className="mt-3 rounded-lg bg-[color:color-mix(in_oklab,var(--danger)_10%,transparent)] px-3 py-2 text-[11px] text-[color:var(--danger)]">{error}</p>}
+            <div className="mt-4 flex gap-2">
+              <input
+                value={scan}
+                onChange={(event) => setScan(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && confirmarBipe()}
+                placeholder="Bipar ou informar UUID do volume"
+                autoComplete="off"
+                className="min-w-0 flex-1 rounded-xl border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm outline-none focus:border-[color:var(--brand)]"
+              />
+              <button
+                onClick={confirmarBipe}
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[color:var(--brand)] text-white"
+                aria-label="Confirmar bipe de entrega"
+              >
+                <ScanLine className="h-5 w-5" />
+              </button>
+            </div>
+
+            {volumeAlvo && (
+              <div className="mt-3 rounded-xl border border-[color:var(--hairline-brand)] bg-[color:color-mix(in_oklab,var(--brand)_9%,transparent)] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-xs">{volumeAlvo.carga_codigo} · volume {volumeAlvo.indice_volume}/{volumeAlvo.total_volumes}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Destino {volumeAlvo.cidade_destino_sigla} · {volumeAlvo.categoria}</p>
+                  </div>
+                  <Tag tone="success">embarcado</Tag>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 grid gap-2">
+              <label className="relative">
+                <UserRound className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  value={recebedorNome}
+                  onChange={(event) => setRecebedorNome(event.target.value)}
+                  placeholder="Nome completo do recebedor"
+                  className="h-11 w-full rounded-xl border border-[color:var(--hairline)] bg-[color:var(--muted)] pl-10 pr-3 text-sm outline-none focus:border-[color:var(--brand)]"
+                />
+              </label>
+              <input
+                value={recebedorDoc}
+                onChange={(event) => setRecebedorDoc(event.target.value)}
+                placeholder="CPF/CNPJ ou documento do recebedor"
+                className="h-11 w-full rounded-xl border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm outline-none focus:border-[color:var(--brand)]"
+              />
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={recebedorAvulso}
+                  onChange={(event) => setRecebedorAvulso(event.target.checked)}
+                  className="accent-[color:var(--brand)]"
+                />
+                Recebedor avulso, diferente do destinatario cadastrado
+              </label>
+            </div>
+
+            <p className="mt-4 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Provas obrigatorias · armazenadas com SHA-256
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <EvidenceInput label="Foto 1" file={foto1} onChange={setFoto1} capture="environment" />
+              <EvidenceInput label="Foto 2" file={foto2} onChange={setFoto2} capture="environment" />
+              <EvidenceInput label="Assinatura" file={assinatura} onChange={setAssinatura} />
+            </div>
+
+            {error && (
+              <p className="mt-3 rounded-lg bg-[color:color-mix(in_oklab,var(--danger)_10%,transparent)] px-3 py-2 text-[11px] text-[color:var(--danger)]">
+                {error}
+              </p>
+            )}
 
             <button
               onClick={confirmarEntrega}
               disabled={!podeConfirmar}
-              className="mt-auto h-14 rounded-2xl bg-gradient-to-br from-[color:var(--brand)] to-[color:var(--brand-soft)] text-sm font-semibold text-primary-foreground shadow-[0_18px_40px_-12px_color-mix(in_oklab,var(--brand)_70%,transparent)] disabled:opacity-50"
+              className="mt-5 h-14 rounded-2xl bg-gradient-to-br from-[color:var(--brand)] to-[color:var(--brand-soft)] text-sm font-semibold text-primary-foreground shadow-[0_18px_40px_-12px_color-mix(in_oklab,var(--brand)_70%,transparent)] disabled:opacity-50"
             >
-              {saving ? "Gerando protocolo..." : podeConfirmar ? "Confirmar entrega" : "Falta bipe / fotos / assinatura"}
+              {saving
+                ? "Enviando provas e concluindo..."
+                : podeConfirmar
+                  ? "Confirmar entrega"
+                  : "Preencha bipe, recebedor e provas"}
             </button>
           </motion.div>
         ) : (
-          <motion.div key="ok" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex h-[calc(100%-44px)] flex-col items-center justify-center p-6 text-center">
+          <motion.div
+            key="ok"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex h-[calc(100%-44px)] flex-col items-center justify-center p-6 text-center"
+          >
             <div className="grid h-20 w-20 place-items-center rounded-full bg-[color:color-mix(in_oklab,var(--success)_16%,transparent)] text-[color:var(--success)]">
               <FileSignature className="h-9 w-9" />
             </div>
-            <h3 className="mt-4 font-display text-xl">Protocolo gerado</h3>
-            <p className="mt-1 font-mono text-sm text-[color:var(--brand)]">{protocolo ?? "ENT-API"}</p>
-            <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground"><MessageCircle className="h-3.5 w-3.5" /> WhatsApp/SMS permanece stub ate provedor oficial</p>
-            <div className="mt-3"><StatusChip tone="success">entrega sincronizada</StatusChip></div>
-            <button onClick={() => { setDone(false); resetCapturas(setBipado, setFoto1, setFoto2, setAssinatura); }} className="mt-6 text-sm text-[color:var(--brand)]">Nova entrega</button>
+            <h3 className="mt-4 font-display text-xl">Entrega concluida</h3>
+            <p className="mt-1 font-mono text-sm text-[color:var(--brand)]">{protocolo}</p>
+            <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MessageCircle className="h-3.5 w-3.5" /> WhatsApp/SMS aguarda provedor oficial
+            </p>
+            <div className="mt-3"><StatusChip tone="success">bipe e provas sincronizados</StatusChip></div>
+            <button onClick={reset} className="mt-6 text-sm text-[color:var(--brand)]">Nova entrega</button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -136,57 +259,35 @@ function SimuladorEntrega() {
   );
 }
 
-function TipoButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
+function EvidenceInput({
+  label,
+  file,
+  onChange,
+  capture,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (file: File | null) => void;
+  capture?: "environment";
+}) {
   return (
-    <button
-      onClick={onClick}
-      className={`rounded-lg px-2 py-2 text-[10px] font-medium ring-1 transition-colors ${
-        active
-          ? "bg-[color:color-mix(in_oklab,var(--brand)_14%,transparent)] text-[color:var(--brand)] ring-[color:var(--hairline-brand)]"
-          : "bg-[color:var(--muted)] text-foreground/70 ring-[color:var(--hairline)]"
-      }`}
-    >
-      <Icon className="mx-auto mb-1 h-4 w-4" />
-      {label}
-    </button>
+    <label className={`flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-2 text-center ${file ? "border-[color:var(--success)] bg-[color:color-mix(in_oklab,var(--success)_8%,transparent)]" : "border-[color:var(--hairline-strong)] bg-[color:var(--muted)]"}`}>
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        capture={capture}
+        className="sr-only"
+        onChange={(event) => onChange(event.target.files?.[0] ?? null)}
+      />
+      <Camera className="h-4 w-4" />
+      <span className="mt-1 text-[10px] font-medium">{file ? file.name : label}</span>
+    </label>
   );
 }
 
 function currentClock() {
-  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date());
-}
-
-type LegalProof = {
-  url: string;
-  hash: string;
-};
-
-async function captureProof(kind: "foto-1" | "foto-2" | "assinatura", volumeId?: string): Promise<LegalProof> {
-  if (!volumeId) throw new Error("Volume obrigatorio para capturar evidencia.");
-  const payload = JSON.stringify({
-    kind,
-    volumeId,
-    capturedAt: new Date().toISOString(),
-    device: "field-web",
-    nonce: crypto.randomUUID(),
-  });
-  const bytes = new TextEncoder().encode(payload);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const hash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return {
-    url: `local-proof://field-web/${volumeId}/${kind}/${hash}`,
-    hash,
-  };
-}
-
-function resetCapturas(
-  setBipado: (value: boolean) => void,
-  setFoto1: (value: LegalProof | null) => void,
-  setFoto2: (value: LegalProof | null) => void,
-  setAssinatura: (value: LegalProof | null) => void,
-) {
-  setBipado(false);
-  setFoto1(null);
-  setFoto2(null);
-  setAssinatura(null);
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date());
 }

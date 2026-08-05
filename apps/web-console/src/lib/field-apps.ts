@@ -12,9 +12,9 @@ export type FieldAppDefinition = {
 
 export const FIELD_APPS: FieldAppDefinition[] = [
   { permission:"campo.porteiro", name:"Porteiro", description:"Entrada e saida do patio", spec:"B.1", to:"/campo/portaria", icon:DoorOpen, available:true },
-  { permission:"campo.conferente_porto", name:"Conferente do Porto", description:"Conferencia fisica e recebimento", spec:"B.4/B.7", to:"/campo/conferencia", icon:Smartphone, available:true },
-  { permission:"campo.conferente_navegacao", name:"Conferente da Navegacao", description:"Cross-docking e conferencia na embarcacao", spec:"B.8", to:"/campo/recebimento", icon:PackagePlus, available:true },
-  { permission:"campo.entregas", name:"Entregas", description:"Desembarque, foto e assinatura", spec:"B.9", to:"/campo/entregas", icon:FileSignature, available:true },
+  { permission:"campo.conferente_porto", name:"Conferente do Porto", description:"Primeiro bipe e conferencia fisica", spec:"B.4", to:"/campo/conferencia", icon:Smartphone, available:true },
+  { permission:"campo.conferente_navegacao", name:"Conferente da Embarcacao", description:"Bipe de embarque e cross-docking", spec:"B.7/B.8", to:"/campo/recebimento", icon:PackagePlus, available:true },
+  { permission:"campo.entregas", name:"Entregas", description:"Bipe final, fotos e assinatura", spec:"B.9", to:"/campo/entregas", icon:FileSignature, available:true },
   { permission:"campo.gerente_embarcacao", name:"Gerente da Embarcacao", description:"Prestacao de contas da viagem", spec:"Etapa 05", to:"/campo/gerente", icon:ShipWheel, available:true },
   { permission:"campo.bilheteiro", name:"Bilheteiro", description:"Validacao de QR no embarque", spec:"Vendas", to:"/embarque", icon:Ticket, available:true },
   { permission:"campo.pdv", name:"PDV do porto", description:"Venda de passagens no balcao", spec:"Vendas", to:"/pos", icon:Store, available:true },

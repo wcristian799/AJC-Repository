@@ -93,7 +93,7 @@ export function PaletesTab() {
       <SectionHeader
         eyebrow="Operação · inventário físico"
         title="Paletes"
-        description="Cadastro, localização, composição e ciclo operacional. Um palete ativo não é realocado; a liberação exige retorno ao porto e volumes desembarcados ou entregues."
+        description="Cadastro, localização, composição e ciclo operacional. Um palete ativo não é realocado; a liberação exige retorno ao porto e todos os volumes entregues."
         actions={
           <>
             <GhostButton icon={RefreshCw} onClick={() => void load()} disabled={loading}>
@@ -638,7 +638,7 @@ function PaleteDetail({
             {release && (
               <div className="mt-3 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  A API só concluirá se todos os volumes estiverem desembarcados ou entregues.
+                  A API só concluirá se todos os volumes estiverem entregues.
                 </p>
                 <label>
                   <FieldLabel>Porto onde o palete está</FieldLabel>

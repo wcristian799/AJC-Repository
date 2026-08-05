@@ -47,7 +47,7 @@ O objetivo não é só digitalizar: é **fechar as brechas de receita e blindar 
 | Operador de caixa (encomenda/passagem) | Vender e despachar com balança ao lado | PDV (web/totem) |
 | Porteiro | Registrar entrada/saída de veículos e pessoas no porto | App mobile |
 | Conferente (porto) | Receber NF/DC no coletor, conferir por volume/palete, etiquetar, foto | App/coletor |
-| Conferente da balsa (2º bipe) | Reconferência no embarque | App/coletor |
+| Conferente da embarcação | Bipe de embarque e cross-docking | App/coletor |
 | Gerente da embarcação | Prestação de contas da viagem | Web / App |
 | Financeiro / Tesouraria | AP/AR, caixas em tempo real, conciliação, faturamento | Web |
 | Comprador | Solicitação, aprovação, status de compras | Web |
@@ -109,7 +109,7 @@ O objetivo não é só digitalizar: é **fechar as brechas de receita e blindar 
 - **Etiquetagem por volume** e **por palete**; geração de etiqueta com **QR/UUID**.
 - **Modelo de etiqueta**: CIDADE (siglas) · PALETE (código) · VOLUME (ex. 1/2, 2/2 ou 1/3…).
 - **Dois modelos de recebimento**: (a) Porto + Balsa; (b) Carregamento direto (múltiplos recebimentos) — **foto obrigatória**.
-- **Segundo bipe** (conferente da balsa) para reconferência.
+- **Bipe de embarque** pelo conferente da embarcação; no cross-docking, esse é o primeiro bipe físico e leva direto de `cadastrado` para `embarcado`.
 - **Comprovante de entrega**: 2 fotos obrigatórias + assinatura do recebedor; protocolo digital em tela.
 - **Notificação de entrega** via WhatsApp/SMS a destinatário e remetente.
 - **Prestação de contas** da viagem para o gerente da embarcação (modelo real recebido em 2026-06-29; digitalizar/melhorar).
@@ -189,7 +189,8 @@ O objetivo não é só digitalizar: é **fechar as brechas de receita e blindar 
 ### Termos
 - **NF/DC** — Nota Fiscal / Declaração de Conteúdo.
 - **DC (Declaração de Conteúdo)** — documento com valor declarado e cláusula de exclusão de responsabilidade; assinado pelo cliente.
-- **2º bipe** — reconferência feita pelo conferente da balsa no embarque.
+- **Bipe de conferido** — primeiro bipe físico no porto; muda `cadastrado` para `conferido`.
+- **Bipe de embarcado** — bipe feito pelo conferente da embarcação; muda `conferido` para `embarcado`, ou `cadastrado` para `embarcado` no cross-docking.
 - **Palete de terceiro** — palete que não é da AJC, cadastrado e alocado para conferência/transporte.
 - **Passagem contrato** — consumida na viagem, faturada no fim do mês (clientes corporativos/órgãos).
 - **Cortesia** — passagem concedida (influência/relacionamento), com código gerado e controle por viagem.

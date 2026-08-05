@@ -100,6 +100,7 @@ export interface OpenConferenciaInput {
   localOperacionalId: string;
   cidadeDestinoSigla: string;
   tipoUnitizacao: "AVULSA" | "MP" | "PD" | "PC";
+  modoOperacao?: "conferencia" | "embarque";
   clientUuid?: string;
 }
 
@@ -149,7 +150,6 @@ export interface ConferirDocumentoInput {
 
 export interface CreateDocumentoInput {
   uploadId: string;
-  viagemId: string;
   clienteRemetenteId?: string;
   remetenteNome: string;
   remetenteDocumento?: string;
@@ -166,7 +166,6 @@ export interface CreateDocumentoInput {
   destinatarioDocumento?: string;
   destinatarioTelefone?: string;
   agendadoPara?: string;
-  tipoUnitizacao?: "AVULSA" | "MP" | "PD" | "PC";
   clientUuid?: string;
 }
 

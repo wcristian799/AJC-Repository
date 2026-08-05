@@ -27,7 +27,7 @@
 | `TMS-CONF` | Conferência no coletor (receber+conferir+etiquetar) | Coletor | B.4 |
 | `TMS-ETIQ` | Impressão de etiqueta (cidade/palete/volume + QR) | Coletor + impressora | B.5 |
 | `TMS-PAL` | Cadastro / alocação de paletes | Web + coletor | B.6 |
-| `TMS-BIPE2` | 2º bipe / reconferência na balsa | Coletor | B.7 |
+| `TMS-EMB` | Bipe de embarque na embarcação | Coletor | B.7 |
 | `TMS-XDOCK` | Carregamento direto / cross-docking | Coletor | B.8 |
 | `TMS-ENT` | Comprovante de entrega balsa→terra | Coletor | B.9 |
 | `TMS-NF` | Lançamento / upload de NF-DC | Web (+ app) | B.2 / B.3 |
@@ -43,12 +43,12 @@ A cor do `StatusChip`/`ScanResultFullScreen` segue sempre este mapa. Toda tela m
                 ┌─────────────── divergente (em qualquer ponto) ───────────────┐
                 │  (volume a mais/menos, avaria — notifica gerente, bloqueia)    │
                 ▼                                                                 ▼
- recebido ──► conferido ──► embarcado ──► reconferido ──► desembarcado ──► entregue
- TMS-CONF     TMS-CONF      (sobe balsa)   TMS-BIPE2      (desce balsa)    TMS-ENT
- (porto)      +TMS-ETIQ                    2º bipe                         (agente assina)
+ cadastrado ──► conferido ──► embarcado ──► entregue
+ lançamento     TMS-CONF       TMS-EMB         TMS-ENT
+ NF/DC          bipe porto     bipe embarcação prova legal
 
- Cross-docking (TMS-XDOCK): recebido+embarcado no MESMO ato ──► desembarcado ──► entregue
-                            (bipe do porto OU da balsa, foto obrigatória; sem 2º bipe)
+ Cross-docking (TMS-XDOCK): cadastrado ──► embarcado ──► entregue
+                                         (primeiro bipe na embarcação)
 ```
 
 ---
@@ -61,7 +61,7 @@ APP CONFERENTE (coletor) — mesmo app, perfil porto OU balsa, mono-função:
       ├── [Conferir carga (porto)] ───────► TMS-CONF ──► TMS-ETIQ (imprime por volume)
       │                                         └─ aloca palete ─► TMS-PAL (alocação rápida)
       ├── [Carregamento direto] ──────────► TMS-XDOCK ─► TMS-ETIQ
-      ├── [2º bipe (balsa)] ──────────────► TMS-BIPE2
+      ├── [Bipe de embarque] ─────────────► TMS-EMB
       ├── [Entregar (balsa→terra)] ───────► TMS-ENT (assinatura do agente)
       └── [Fila de sincronização] ────────► SyncIndicator (Fundação §3.3)
 
@@ -81,7 +81,7 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 ## 2. TMS-HOME — Home do App Conferente
 
 - **Persona:** Conferente do porto **ou** da balsa (mesmo app, perfil define quais ações aparecem). **Dispositivo:** coletor/Palm com câmera e leitor. **Online/Offline:** offline-first; abre e opera sem rede.
-- **Objetivo:** escolher a viagem ativa e disparar a ação certa (conferir, cross-docking, 2º bipe, entregar) em um toque grande.
+- **Objetivo:** escolher a viagem ativa e disparar a ação certa (conferir, embarcar/cross-docking ou entregar) em um toque grande.
 
 ### Wireframe
 ```
@@ -145,7 +145,7 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 
 ### Navegação
 - **Vem de:** login / seleção de contexto (Fundação §5.3).
-- **Vai para:** TMS-CONF, TMS-XDOCK, TMS-BIPE2, TMS-ENT, e a fila (SyncIndicator).
+- **Vai para:** TMS-CONF, TMS-EMB/TMS-XDOCK, TMS-ENT e a fila (SyncIndicator).
 
 ---
 
@@ -267,7 +267,7 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 │ ┌─────────────┐ ┌─────────────┐  │
 │ │ ● PORTO+    │ │ ○ CARREG.   │  │  ← BigSelectList (2 chips grandes)
 │ │   BALSA     │ │   DIRETO    │  │
-│ │ tem 2º bipe │ │ vai p/ B.8  │  │
+│ │ bipe porto  │ │ embarca dir. │  │
 │ └─────────────┘ └─────────────┘  │
 ├─────────────────────────────────┤
 │ CARGAS PREVISTAS P/ EMBARCAR     │
@@ -540,10 +540,10 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 
 ---
 
-## 7. TMS-BIPE2 — 2º bipe / reconferência na balsa (B.7)
+## 7. TMS-EMB — Bipe de embarque na embarcação (B.7)
 
 - **Persona:** Conferente da balsa. **Dispositivo:** coletor/Palm. **Online/Offline:** offline-first.
-- **Objetivo:** reconferir no embarque tudo que foi conferido no porto — **segunda barreira antifraude** — comparando cada volume bipado contra a carga prevista da viagem.
+- **Objetivo:** registrar a entrada física da carga na viagem. Carga já conferida no porto muda de `conferido` para `embarcado`; cross-docking muda de `cadastrado` diretamente para `embarcado`.
 
 ### Wireframe — Reconferência ativa
 ```
@@ -608,30 +608,30 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 ### Composição
 - **`CounterBadge` GIGANTE** "Embarcados X / Y" — Y = total previsto/conferido da viagem.
 - **`ScanButton`** para cada volume que sobe.
-- **`ScanResultFullScreen`** com 3 desfechos: **match** (verde, vira `reconferido/embarcado`), **não previsto** (vermelho — "volume não consta"), **duplicado** (âmbar — já reconferido).
+- **`ScanResultFullScreen`** com 3 desfechos: **match** (verde, vira `embarcado`), **não previsto** (vermelho — "volume não consta"), **duplicado** (âmbar — já embarcado).
 - **Lista de faltantes** (`BigSelectList`) no fechamento: volumes esperados que não subiram.
 
 ### Fluxo passo a passo
-1. Seleciona a viagem (já é a ativa) → entra no 2º bipe.
+1. Seleciona a viagem ativa → entra no bipe de embarque.
 2. Bipa cada volume que sobe à balsa → sistema compara com o conferido no porto.
-3. **Match** → `reconferido`. **Não consta** → exceção/justificativa. **Duplicado** → ignora.
+3. **Match** → `embarcado`. **Não consta** → exceção/justificativa. **Duplicado** → ignora.
 4. **Fechar**: mostra resumo; se há faltantes, exige justificativa (notifica gerente).
 
 ### Estados específicos
 - **Match:** verde, mostra quando/quem conferiu no porto (cruza as duas barreiras).
 - **Não previsto:** vermelho bloqueante — volume sem origem no porto. Justificar+exceção ou cancelar.
 - **Faltante ao fechar:** lista vermelha dos esperados não bipados → "ficaram em terra?" → justificar e notificar gerente (A.6 divergência bloqueia).
-- **Offline:** reconferência segue; sincroniza depois; a comparação usa o cache do que veio do porto.
-- **Sucesso:** "124/124 embarcados — 2º bipe concluído, 0 divergências."
+- **Offline:** o embarque segue; sincroniza depois; a comparação usa o cache da viagem.
+- **Sucesso:** "124/124 embarcados — operação concluída, 0 divergências."
 
 ### Regras e validações
-- Só vira `embarcado/reconferido` o volume que **deu match** com a conferência do porto.
+- Carga de fluxo normal só vira `embarcado` quando estava `conferido` e deu match. No cross-docking, `cadastrado` pode virar `embarcado` diretamente.
 - Volume bipado **sem origem** no porto = `divergente`, exige tratamento.
 - Faltantes bloqueiam o fechamento até justificativa do gerente.
-- Cross-docking **não** passa por aqui (embarca direto em TMS-XDOCK, sem 2º bipe — A.3).
+- O mesmo app atende o cross-docking em modo explícito; não existe estado intermediário `recebido`.
 
 ### Navegação
-- **Vem de:** TMS-HOME › 2º bipe.
+- **Vem de:** TMS-HOME › Embarque / cross-docking.
 - **Vai para:** exceção → gerente; fecha → volumes em `embarcado`, prontos para TMS-ENT no destino.
 
 ---
@@ -639,7 +639,7 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 ## 8. TMS-XDOCK — Carregamento direto / cross-docking (B.8)
 
 - **Persona:** Conferente do porto **OU** da balsa (ambos podem efetivar — A.4). **Dispositivo:** coletor. **Online/Offline:** offline-first.
-- **Objetivo:** receber carga que embarca **direto na balsa**, em vários lotes/horários, sem passar pelo pátio — recebimento e embarque no **mesmo ato** (sem 2º bipe separado).
+- **Objetivo:** embarcar carga **direto na embarcação**, em vários lotes/horários, sem passar pelo pátio; o primeiro bipe físico registra `embarcado`.
 
 ### Wireframe — Lista de recebimentos da viagem
 ```
@@ -675,7 +675,7 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 ├─────────────────────────────────┤
 │         BIPADOS NESTE LOTE       │
 │        ┌───────────┐             │
-│        │     5     │             │  ← CounterBadge (cross-dock = recebido+embarcado)
+│        │     5     │             │  ← CounterBadge (cross-dock = embarcado)
 │        └───────────┘             │
 │ ┌─────────────────────────────┐ │
 │ │     ┌───────────────┐       │ │
@@ -693,13 +693,13 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 - **Mesma base do TMS-CONF**, mas organizada em **lista de recebimentos** (Recebimento 1, 2, 3…), cada um com seus volumes e **sua foto obrigatória** (B.8).
 - **Cabeçalho "Efetivado por"**: mostra perfil/usuário que registra (porto ou balsa) — gravado para auditoria (A.4).
 - **Total consolidado** por viagem (soma dos lotes).
-- **`ScanButton` + `PhotoCaptureGuided` + TMS-ETIQ**: recebido+embarcado no mesmo ato; etiqueta com UUID emitida na hora.
+- **`ScanButton` + `PhotoCaptureGuided` + TMS-ETIQ**: primeiro bipe registra `embarcado`; etiqueta com UUID emitida na hora.
 
 ### Fluxo passo a passo
 1. Disponível a partir da TMS-HOME para porto **e** balsa (A.4).
 2. **+ Novo recebimento** → abre um lote → bipa volumes (cada um etiquetado) → tira a foto do lote → **Fechar lote**.
 3. Repete para quantos lotes a viagem tiver (múltiplos horários).
-4. Total consolidado acompanha o avanço; não há etapa de pátio nem 2º bipe para estes volumes.
+4. Total consolidado acompanha o avanço; não há etapa de pátio nem estado `conferido` para estes volumes.
 
 ### Estados específicos
 - **Foto pendente:** lote não fecha; badge âmbar "foto pendente" (A.6 — foto obrigatória em cada lote).
@@ -710,7 +710,7 @@ Regra de shell de campo (Fundação §4.2): sem sidebar; topo fino (nome do app 
 ### Regras e validações
 - **Foto de recebimento obrigatória em cada lote** (A.6); bloqueia fechamento.
 - Cada recebimento grava **qual conferente** o efetivou (A.4, auditoria).
-- Volume de cross-docking entra em `recebido+embarcado` direto (sem `reconferido`).
+- Volume de cross-docking passa de `cadastrado` diretamente para `embarcado`.
 - Etiqueta/UUID e foto ocorrem no ato (A.6 vale também para cross-docking).
 
 ### Navegação
@@ -910,7 +910,7 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 ## 11. TMS-CTRL — Controle de carga por viagem (B.11, back-office web)
 
 - **Persona:** Operação, gerência, diretoria. **Dispositivo:** **back-office web** (desktop). **Online/Offline:** online.
-- **Objetivo:** visão em tempo real do que está em cada viagem (recebidos/embarcados/entregues, valores, divergências) — base do BI de rentabilidade.
+- **Objetivo:** visão em tempo real do que está em cada viagem (conferidos/embarcados/entregues, valores e divergências) — base do BI de rentabilidade.
 
 ### Wireframe
 ```
@@ -937,26 +937,26 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 │          ├─────────────────────────────────────────────────┤
 │          │ Divergências abertas (da viagem):                │
 │          │ • vol +1 #4471 — "volume a mais" (gerente)       │
-│          │ • 2 faltantes no 2º bipe #4480                   │
+│          │ • 2 faltantes no embarque #4480                  │
 │          └─────────────────────────────────────────────────┘
 └──────────┴─────────────────────────────────────────────────┘
 ```
 
 ### Composição
-- **`KPIStat` (×4+):** recebidos · embarcados · entregues · divergências abertas; valor declarado vs. cobrado. KPIs clicáveis filtram a tabela.
+- **`KPIStat` (×4+):** conferidos · embarcados · entregues · divergências abertas; valor declarado vs. cobrado. KPIs clicáveis filtram a tabela.
 - **`FilterBar`:** embarcação, cidade destino, período (Fundação §3.2).
 - **`DataTable`:** por viagem — contagem por estado do volume, valores, divergências (`StatusChip`), status da viagem. Exportar CSV/PDF.
 - **Painel de divergências abertas** com link para o evento/AuditTrail.
 
 ### Fluxo / Estados / Regras
-- **Fluxo:** operação filtra viagem → vê o funil recebido→embarcado→entregue e as divergências → drill-down no volume (AuditTrail: quem/quando/onde/foto).
+- **Fluxo:** operação filtra viagem → vê o funil conferido→embarcado→entregue e as divergências → drill-down no volume (AuditTrail: quem/quando/onde/foto).
 - **Estados:** vazio (sem viagens no período) · carregando (skeleton) · erro · filtro vazio.
 - **Regras:** números refletem a máquina de estados do volume; **divergências abertas bloqueiam** o fechamento da carga (A.6) e aparecem em vermelho até resolução do gerente. É a base do BI por viagem/embarcação/cidade (B.11, PRD RF-9/Diretoria).
 - **Navegação:** Sidebar TMS › Controle por viagem; drill-down → ficha do volume / AuditTrail.
 
 ### Implementação funcional (02/ago/2026)
 - A tela consulta o agregado paginado `GET /api/tms/controle-viagens`; não monta totais juntando listas limitadas no navegador e não contém estimativas de peso, frete ou valor declarado.
-- O funil é **cumulativo e auditável**: todo volume físico conta como recebido; embarcado/entregue considera o estado atual ou a passagem registrada em `evento_volume`; divergência representa o estado aberto atual.
+- O funil é **cumulativo e auditável**: conferido/embarcado/entregue considera o estado atual ou a passagem registrada em `evento_volume`; no cross-docking, embarcado não pressupõe conferido; divergência representa o estado aberto atual.
 - Busca por viagem/embarcação/cidade, filtros por embarcação/cidade/status/período, atualização manual e automática, CSV e impressão/PDF consultam o servidor com o mesmo recorte.
 - Selecionar uma viagem abre volumes paginados; busca por UUID/QR/carga/pedido/cliente, filtros de destino/estado, painel de divergências e modal de AuditTrail usam endpoints próprios. Valores ausentes aparecem como **“Não informado”**.
 - Skeleton, erro preservando o último resultado, vazio, paginação e limite de exportação são estados explícitos. O layout não produz rolagem horizontal na viewport móvel, embora a superfície-alvo continue sendo o back-office desktop.
@@ -967,6 +967,15 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 
 ## 12. Padrões transversais do módulo (valem em todas as telas de campo)
 
+### Decisão operacional de 05/ago/2026 — documento antes da carga
+
+- **Lançar NF/DC** mantém o formulário completo e o upload que autopreenche campos, mas não pede viagem e não cria carga/volumes. O operador informa o destino da futura carga e salva o documento livre.
+- A fila usa o rótulo **Livre para carga** para documentos sem `carga_id`; não apresenta uma viagem fictícia ou vazia como se fosse parte do lançamento.
+- **Nova carga** segue uma sequência orientada: cliente → NF/DC livres → viagem compatível → confirmação. O modal não lista documentos já vinculados.
+- A seleção bloqueia mistura de destinos antes do envio; o destino vira informação derivada das NF/DC e não um campo livre sujeito a divergência.
+- A quantidade de volumes, peso e valor exibidos/enviados são somados dos documentos. O servidor recalcula e continua sendo a autoridade.
+- Estados obrigatórios: nenhum documento livre para o cliente, destinos incompatíveis, viagem incompatível, documento vinculado por outra sessão e sucesso com atualização imediata das filas.
+
 ### 12.1 Offline-first (princípio 2 + A.1)
 - Toda ação de campo grava **local** com `client_uuid` (idempotência: reenvio não duplica volume/evento/entrega).
 - `OfflineBanner` persistente; `SyncIndicator` com contador no topo de cada app.
@@ -976,10 +985,10 @@ Duas faces do mesmo fluxo: **B.2** upload pelo cliente/agente (app/web simples) 
 ### 12.2 Divergência — linguagem visual única
 | Situação | Cor | Onde | Ação |
 |---|---|---|---|
-| Volume a **menos** (faltam) | âmbar→vermelho ao fechar | TMS-CONF, TMS-BIPE2 | continuar bipando ou justificar (gerente) |
-| Volume a **mais** / não consta | vermelho bloqueante | TMS-CONF, TMS-BIPE2 | justificar+exceção ou cancelar bipe |
+| Volume a **menos** (faltam) | âmbar→vermelho ao fechar | TMS-CONF, TMS-EMB | continuar bipando ou justificar (gerente) |
+| Volume a **mais** / não consta | vermelho bloqueante | TMS-CONF, TMS-EMB | justificar+exceção ou cancelar bipe |
 | Avaria | vermelho | TMS-CONF, TMS-ENT | foto + marca `divergente` |
-| Faltante no 2º bipe | vermelho (lista) | TMS-BIPE2 fechar | justificar "ficou em terra" (gerente) |
+| Faltante no embarque | vermelho (lista) | TMS-EMB fechar | justificar "ficou em terra" (gerente) |
 - Divergência **sempre** abre exceção com quem/quando/foto e **notifica o gerente** (A.6); **bloqueia o fechamento** da carga até resolução.
 
 ### 12.3 Prova legal (princípio 6 + A.1)

@@ -14,7 +14,7 @@ O PostgreSQL passa a ser a fonte do agregado B.11 por meio de `TmsControlReposit
 
 O funil é cumulativo:
 
-- recebido: todo volume físico cadastrado na carga ativa;
+- conferido: estado atual conferido/posterior ou evidencia historica do primeiro bipe fisico no porto;
 - embarcado: estado atual embarcado/posterior ou evidência histórica de evento embarcado/posterior;
 - entregue: estado atual entregue ou evento entregue;
 - divergente: estado atual aberto `divergente`.

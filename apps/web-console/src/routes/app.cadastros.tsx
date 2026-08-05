@@ -9,6 +9,7 @@ import { OperationalUnitizacaoConfig } from "@/components/ops/cadastros/Operatio
 import { OperationalPrestacaoConfig } from "@/components/ops/cadastros/OperationalPrestacaoConfig";
 import { OperationalEncomendasConfig } from "@/components/ops/cadastros/OperationalEncomendasConfig";
 import { OperationalPdvConfig } from "@/components/ops/cadastros/OperationalPdvConfig";
+import { OperationalVeiculosConfig } from "@/components/ops/cadastros/OperationalVeiculosConfig";
 import { CitiesRegistry } from "@/components/ops/cadastros/CitiesRegistry";
 import {
   SectionHeader,
@@ -420,6 +421,7 @@ function Cadastros() {
           <OperationalPrestacaoConfig cidades={cidades} />
           <OperationalEncomendasConfig cidades={cidades} />
           <OperationalPdvConfig />
+          <OperationalVeiculosConfig />
           <OperationalNavigationConfig cidades={cidades} />
         </div>
       )}

@@ -157,8 +157,7 @@ export const CLIENTES: Cliente[] = [
 ];
 
 export type VolumeStatus =
-  | "recebido" | "conferido" | "embarcado" | "reconferido"
-  | "desembarcado" | "entregue" | "divergente";
+  | "cadastrado" | "conferido" | "embarcado" | "entregue" | "divergente";
 
 export type Volume = {
   id: string;
@@ -179,8 +178,8 @@ export const VOLUMES: Volume[] = [
   { id: "V-004", uuid: "c8d9-…-9121", cargaId: "C-2202", cliente: "Atacadão Santarém",   cidadeDestino: "STM", peso: 34, status: "embarcado",   viagemId: "VIA-2026-0418", paleteId: "PAL-021" },
   { id: "V-005", uuid: "e2f3-…-3380", cargaId: "C-2203", cliente: "Ferragens Amazônia",  cidadeDestino: "MTA", peso: 28, status: "conferido",   viagemId: "VIA-2026-0420" },
   { id: "V-006", uuid: "e2f3-…-3381", cargaId: "C-2203", cliente: "Ferragens Amazônia",  cidadeDestino: "MTA", peso: 30, status: "divergente",  viagemId: "VIA-2026-0420" },
-  { id: "V-007", uuid: "g4h5-…-5588", cargaId: "C-2204", cliente: "Distribuidora Marajó", cidadeDestino: "BRV", peso: 12, status: "recebido",    viagemId: "VIA-2026-0419" },
-  { id: "V-008", uuid: "g4h5-…-5589", cargaId: "C-2204", cliente: "Distribuidora Marajó", cidadeDestino: "BRV", peso: 14, status: "recebido",    viagemId: "VIA-2026-0419" },
+  { id: "V-007", uuid: "g4h5-…-5588", cargaId: "C-2204", cliente: "Distribuidora Marajó", cidadeDestino: "BRV", peso: 12, status: "cadastrado", viagemId: "VIA-2026-0419" },
+  { id: "V-008", uuid: "g4h5-…-5589", cargaId: "C-2204", cliente: "Distribuidora Marajó", cidadeDestino: "BRV", peso: 14, status: "cadastrado", viagemId: "VIA-2026-0419" },
 ];
 
 export type Passagem = {
@@ -942,10 +941,10 @@ export function sugerirTamanhoPorPeso(peso: number): EncomendaTamanho {
 
 /** Máquina de estados do volume da encomenda (B.5) — reaproveita o fluxo TMS. */
 export type EncomendaStatus =
-  | "recebido" | "conferido" | "embarcado" | "em_viagem" | "desembarcado" | "entregue";
+  | "cadastrado" | "conferido" | "embarcado" | "entregue" | "divergente";
 
 export const ENCOMENDA_FLUXO: EncomendaStatus[] = [
-  "recebido", "conferido", "embarcado", "em_viagem", "desembarcado", "entregue",
+  "cadastrado", "conferido", "embarcado", "entregue", "divergente",
 ];
 
 export type EncomendaPagador = "remetente" | "destinatario";
@@ -977,10 +976,10 @@ export const ENCOMENDAS: Encomenda[] = [
   { id: "ENC-8001", codigo: "AJC-ENC-8001", remetenteId: "CL-1001", remetente: "Comercial Ribeira", destinatario: "Mercado São José", destinatarioContato: "(93) 98111-2233", trecho: "BEL → STM", tamanho: "M", peso: 17, valorDeclarado: 640, valorCobrado: 55,  modoPreco: "fixo",       quemPaga: "remetente",   dcId: "DC-9001", status: "em_viagem",    viagemId: "VIA-2026-0418", conteudo: "Peças de vestuário",       criadoEm: "21/06 09:40", notificado: true,  sincronizado: true },
   { id: "ENC-8002", codigo: "AJC-ENC-8002", remetenteId: "CL-1006", remetente: "Atacadão Santarém", destinatario: "Loja Center BR", destinatarioContato: "(93) 98222-7788", trecho: "BEL → STM", tamanho: "P", peso: 6,  valorDeclarado: 4_200, valorCobrado: 252, modoPreco: "percentual", quemPaga: "destinatario", dcId: "DC-9002", status: "embarcado",    viagemId: "VIA-2026-0418", conteudo: "Eletrônicos (declarado)",  criadoEm: "21/06 10:12", notificado: true,  sincronizado: true },
   { id: "ENC-8003", codigo: "AJC-ENC-8003", remetenteId: "CL-1003", remetente: "José Carvalho",     destinatario: "Maria Carvalho", destinatarioContato: "(91) 98333-1100", trecho: "BEL → GUR", tamanho: "P", peso: 4,  valorDeclarado: 180,   valorCobrado: 22,  modoPreco: "fixo",       quemPaga: "remetente",   dcId: "DC-9003", status: "conferido",    viagemId: "VIA-2026-0419", conteudo: "Documentos e remédios",   criadoEm: "22/06 07:55", notificado: false, sincronizado: true },
-  { id: "ENC-8004", codigo: "AJC-ENC-8004", remetenteId: "CL-1004", remetente: "Ferragens Amazônia", destinatario: "Construrápido MTA", destinatarioContato: "(93) 98444-5566", trecho: "BEL → MTA", tamanho: "G", peso: 28, valorDeclarado: 920,   valorCobrado: 72,  modoPreco: "fixo",       quemPaga: "remetente",   dcId: "DC-9004", status: "recebido",     viagemId: "VIA-2026-0420", conteudo: "Ferramentas manuais",     criadoEm: "22/06 08:30", notificado: false, sincronizado: false },
-  { id: "ENC-8005", codigo: "AJC-ENC-8005", remetenteId: "CL-1002", remetente: "Distribuidora Marajó", destinatario: "Empório Breves", destinatarioContato: "(91) 98555-9900", trecho: "BEL → BRV", tamanho: "M", peso: 15, valorDeclarado: 2_800, valorCobrado: 126, modoPreco: "percentual", quemPaga: "destinatario", dcId: "DC-9005", status: "recebido",     viagemId: "VIA-2026-0419", conteudo: "Cosméticos (declarado)",  criadoEm: "22/06 08:48", notificado: false, sincronizado: true },
+  { id: "ENC-8004", codigo: "AJC-ENC-8004", remetenteId: "CL-1004", remetente: "Ferragens Amazônia", destinatario: "Construrápido MTA", destinatarioContato: "(93) 98444-5566", trecho: "BEL → MTA", tamanho: "G", peso: 28, valorDeclarado: 920,   valorCobrado: 72,  modoPreco: "fixo",       quemPaga: "remetente",   dcId: "DC-9004", status: "conferido",    viagemId: "VIA-2026-0420", conteudo: "Ferramentas manuais",     criadoEm: "22/06 08:30", notificado: false, sincronizado: false },
+  { id: "ENC-8005", codigo: "AJC-ENC-8005", remetenteId: "CL-1002", remetente: "Distribuidora Marajó", destinatario: "Empório Breves", destinatarioContato: "(91) 98555-9900", trecho: "BEL → BRV", tamanho: "M", peso: 15, valorDeclarado: 2_800, valorCobrado: 126, modoPreco: "percentual", quemPaga: "destinatario", dcId: "DC-9005", status: "conferido",    viagemId: "VIA-2026-0419", conteudo: "Cosméticos (declarado)",  criadoEm: "22/06 08:48", notificado: false, sincronizado: true },
   { id: "ENC-8006", codigo: "AJC-ENC-8006", remetenteId: "CL-1001", remetente: "Comercial Ribeira", destinatario: "Túlio Barbosa",  destinatarioContato: "(93) 98666-3344", trecho: "BEL → STM", tamanho: "G", peso: 26, valorDeclarado: 750,   valorCobrado: 80,  modoPreco: "fixo",       quemPaga: "remetente",   dcId: "DC-9006", status: "entregue",     viagemId: "VIA-2026-0417", conteudo: "Utensílios domésticos",   criadoEm: "20/06 14:05", notificado: true,  sincronizado: true },
-  { id: "ENC-8007", codigo: "AJC-ENC-8007", remetenteId: "CL-1007", remetente: "Granel Tapajós",    destinatario: "Posto Central PMZ", destinatarioContato: "(93) 98777-1212", trecho: "BEL → PMZ", tamanho: "M", peso: 19, valorDeclarado: 1_650, valorCobrado: 79,  modoPreco: "percentual", quemPaga: "remetente",   dcId: "DC-9007", status: "desembarcado", viagemId: "VIA-2026-0418", conteudo: "Peças automotivas",       criadoEm: "21/06 11:20", notificado: true,  sincronizado: true },
+  { id: "ENC-8007", codigo: "AJC-ENC-8007", remetenteId: "CL-1007", remetente: "Granel Tapajós",    destinatario: "Posto Central PMZ", destinatarioContato: "(93) 98777-1212", trecho: "BEL → PMZ", tamanho: "M", peso: 19, valorDeclarado: 1_650, valorCobrado: 79,  modoPreco: "percentual", quemPaga: "remetente",   dcId: "DC-9007", status: "embarcado",    viagemId: "VIA-2026-0418", conteudo: "Peças automotivas",       criadoEm: "21/06 11:20", notificado: true,  sincronizado: true },
   { id: "ENC-8008", codigo: "AJC-ENC-8008", remetenteId: "CL-1008", remetente: "Roberto Mendes",    destinatario: "Cleide Mendes",  destinatarioContato: "(93) 98888-4545", trecho: "BEL → PRA", tamanho: "P", peso: 8,  valorDeclarado: 320,   valorCobrado: 28,  modoPreco: "fixo",       quemPaga: "destinatario", dcId: "DC-9008", status: "conferido",    viagemId: "VIA-2026-0421", conteudo: "Roupas e calçados",       criadoEm: "22/06 09:05", notificado: false, sincronizado: true },
 ];
 

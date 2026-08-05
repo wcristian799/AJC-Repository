@@ -721,14 +721,14 @@ Todo veículo de carga presente no pátio aparece em tempo real ou como evento p
 
 ### Critério de aceite
 
-Cada volume/palete possui identidade física legível e histórico de quem recebeu, conferiu, imprimiu ou reimprimiu.
+Cada volume/palete possui identidade física legível e histórico de quem conferiu, embarcou, imprimiu ou reimprimiu.
 
-## 8.9 Conferência na balsa — segundo bipe
+## 8.9 Bipe de embarque na embarcação
 
 ### Levantar
 
 - conferentes por embarcação/viagem;
-- ponto físico da reconferência;
+- ponto físico do embarque;
 - tratamento de volume não esperado, duplicado ou divergente;
 - responsável por autorizar exceção.
 
@@ -1072,7 +1072,7 @@ Executar pelo menos os cenários abaixo na viagem-piloto:
 - [ ] Criar carga com documentos selecionados.
 - [ ] Registrar entrada do veículo no porto.
 - [ ] Conferir e etiquetar volumes/paletes.
-- [ ] Executar segundo bipe na balsa.
+- [ ] Executar o bipe de embarque na embarcação.
 - [ ] Registrar entrega com fotos e assinatura.
 - [ ] Consultar controle por viagem e auditoria.
 

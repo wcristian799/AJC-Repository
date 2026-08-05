@@ -880,3 +880,16 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - Dependencias para producao: configurar MinIO, publicar precos reais e termo juridico aprovado, renovar login/RBAC e abrir caixa para pagamento no remetente. Documento: `docs/feedback/2026-08-03-etapa-06-encomendas.md`.
 - Proximo passo: Etapa 07 do documento vigente; a Etapa 06 permanece sem commit/push ate revisao do dono.
 - Inspecao visual concluida em desktop e 390x844 para Encomendas e Cadastros: sem overflow horizontal de pagina, sem erro de console e com navegacao movel refinada.
+
+## Trabalho 2026-08-05 - NF independente, ciclo pelo gerente e origens de Veiculos
+
+- A regra anterior da Etapa 03 foi substituida por decisao expressa do cliente: `POST /api/tms/documentos` agora persiste somente cliente/documento fiscal, com destino obrigatorio e `carga_id`/`viagem_id` nulos. Nao cria carga, volumes ou palete.
+- TMS > Notas mantem upload real e formulario editavel, remove viagem do lancamento e mostra documentos livres para nova carga. A copia deixa explicito o que nao nasce nessa etapa.
+- TMS > Nova carga lista apenas NF/DC livres do cliente, bloqueia mistura de destinos, deriva o destino das notas e soma peso, valor e `total_volumes`. O backend recalcula tudo, valida viagem planejada/em curso compativel e protege o vinculo contra concorrencia.
+- `/campo/gerente` ganhou o ciclo operacional real: gerente inicia viagem `planejada`, encerra viagem `em_curso` e ve horarios reais. A API exige `navegacao.operar_viagem`, registra responsavel/timestamp e mantem cancelamento na permissao administrativa.
+- Veiculos/Maquinas nao usa mais enum ou opcoes fixas de origem. A chave versionada `veiculos_origens_cadastro` e validada no backend, editada em Cadastros e consumida pela tela operacional; o fallback com tres envios demonstrativos foi removido.
+- Migration `0036_documento_independente_viagem_gerente_origens_veiculos.sql` aplicada no PostgreSQL local. Verificado: schema registrado, coluna `origem_cadastro` em `varchar`, configuracao ativa com origem padrao e permissao criada.
+- QA: 11 suites/41 testes Jest verdes, backend Nest build verde, frontend TanStack/Vite/Nitro/Vercel build verde e migration verificada diretamente no PostgreSQL. A inspecao visual automatizada ficou bloqueada por falta de espaco em disco ao inicializar o navegador; o artefato recriavel `.vercel` foi removido depois do build para liberar espaco, sem apagar codigo ou dados.
+- Legado: cargas antigas criadas automaticamente nao foram apagadas. Elas podem ter movimentacao fisica e devem ser auditadas antes de saneamento assistido.
+- Producao: aplicar a migration 0036, publicar API/front juntos, conceder `navegacao.operar_viagem` ao perfil Gerente da Embarcacao em Cadastros e renovar o login/token dos usuarios afetados.
+- Inspecao visual: o navegador voltou a conectar depois da limpeza, mas o servidor web aberto em `:8081` redirecionou para login e a API local respondeu `Nao foi possivel entrar agora`; `:8080` era uma superficie vazia do host. Sem autenticar, nao foi possivel validar visualmente as tres telas nesta execucao. Nao foi criado dado de teste nem simulada sessao.

@@ -171,6 +171,10 @@ export type NavegacaoViagemApi = {
   configVersao: number | null;
   cicloUuid: string | null;
   motivoCancelamento: string | null;
+  iniciadaEm: string | null;
+  iniciadaPor: string | null;
+  encerradaEm: string | null;
+  encerradaPor: string | null;
   escalas: NavegacaoEscalaApi[];
 };
 
@@ -904,7 +908,7 @@ export type TmsControleViagemApi = {
   situacao: string | null;
   cargas: number;
   volumes: number;
-  recebidos: number;
+  conferidos: number;
   embarcados: number;
   entregues: number;
   divergentes: number;
@@ -925,7 +929,7 @@ export type TmsControleViagemApi = {
 export type TmsControleTotaisApi = {
   viagens: number;
   volumes: number;
-  recebidos: number;
+  conferidos: number;
   embarcados: number;
   entregues: number;
   divergentes: number;
@@ -1065,7 +1069,6 @@ export type TmsDocumentoAnaliseApi = {
 
 export type CreateTmsDocumentoInput = {
   uploadId: string;
-  viagemId: string;
   clienteRemetenteId?: string;
   remetenteNome: string;
   remetenteDocumento?: string;
@@ -1082,7 +1085,6 @@ export type CreateTmsDocumentoInput = {
   destinatarioDocumento?: string;
   destinatarioTelefone?: string;
   agendadoPara?: string;
-  tipoUnitizacao?: "AVULSA" | "MP" | "PD" | "PC";
   clientUuid?: string;
 };
 
@@ -1242,6 +1244,7 @@ export type TmsConferenciaDocumentoApi = {
   carga_codigo: string;
   cidade_destino_sigla: string;
   tipo_unitizacao: string;
+  tipo_recebimento: "porto_balsa" | "direto";
   cliente_codigo: string;
   cliente_nome: string;
   quantidade_declarada: number;
@@ -1250,7 +1253,7 @@ export type TmsConferenciaDocumentoApi = {
 };
 export type TmsConferenciaVolumeApi = {
   uuid: string;
-  status: "alocado" | "recebido";
+  status: "alocado" | "conferido" | "embarcado";
   indice: number;
   total: number;
 };
@@ -1279,6 +1282,7 @@ export type TmsConferenciaApi = {
   local_operacional_id: string;
   local_nome: string;
   tipo_unitizacao: "AVULSA" | "MP" | "PD" | "PC";
+  modo_operacao: "conferencia" | "embarque";
   status: "aberta" | "fechada" | "divergente" | "cancelada";
   estado_composicao: "parcial" | "completo" | null;
   conferente_nome: string;
@@ -1386,6 +1390,10 @@ export type PrestacaoViagemApi = {
   destino_sigla: string | null;
   status: string;
   embarcacao_nome: string;
+  iniciada_em: string | null;
+  iniciada_por: string | null;
+  encerrada_em: string | null;
+  encerrada_por: string | null;
 };
 
 export type PrestacaoContasApi = {
@@ -1467,7 +1475,7 @@ export type VeiculoEnvioApi = {
 export type CreateVeiculoEnvioInput = {
   tipo: "veiculo" | "maquina";
   viagemId?: string;
-  origemCadastro?: "pdv" | "comercial" | "gerente_porto";
+  origemCadastro?: string;
   placa?: string;
   modelo: string;
   remetenteNome?: string;
@@ -1481,6 +1489,20 @@ export type CreateVeiculoEnvioInput = {
   valorFrete?: number;
   clientUuid?: string;
 };
+
+export type VeiculosOrigensConfigApi = {
+  chave: string;
+  versao: number;
+  valor: {
+    schemaVersion: 1;
+    origens: Array<{ codigo: string; nome: string; ativo: boolean }>;
+    origemPadrao: string;
+  };
+};
+
+export function getVeiculosOrigensConfig() {
+  return request<VeiculosOrigensConfigApi>("/veiculos/configuracao-origens", { auth: true });
+}
 
 export function listTmsCargas(params?: { categoria?: "carga" | "encomenda" }) {
   const search = new URLSearchParams();
@@ -1782,9 +1804,13 @@ export function releaseTmsPalete(
   });
 }
 
-export function listTmsConferenciaDocumentos(viagemId: string, busca?: string) {
+export function listTmsConferenciaDocumentos(
+  viagemId: string,
+  busca?: string,
+  modoOperacao: "conferencia" | "embarque" = "conferencia",
+) {
   return request<TmsConferenciaDocumentoApi[]>(
-    `/tms/conferencias/documentos-disponiveis?viagemId=${encodeURIComponent(viagemId)}${busca ? `&busca=${encodeURIComponent(busca)}` : ""}`,
+    `/tms/conferencias/documentos-disponiveis?viagemId=${encodeURIComponent(viagemId)}&modoOperacao=${modoOperacao}${busca ? `&busca=${encodeURIComponent(busca)}` : ""}`,
     { auth: true },
   );
 }
@@ -1808,6 +1834,7 @@ export function openTmsConferencia(input: {
   localOperacionalId: string;
   cidadeDestinoSigla: string;
   tipoUnitizacao: "AVULSA" | "MP" | "PD" | "PC";
+  modoOperacao: "conferencia" | "embarque";
   clientUuid?: string;
 }) {
   return request<TmsConferenciaApi>("/tms/conferencias", {
@@ -1835,7 +1862,7 @@ export function scanTmsConferenciaVolume(
   id: string,
   input: { volumeUuid: string; clientUuid?: string },
 ) {
-  return request<TmsConferenciaApi>(`/tms/conferencias/${id}/volumes/receber`, {
+  return request<TmsConferenciaApi>(`/tms/conferencias/${id}/volumes/bipar`, {
     method: "POST",
     auth: true,
     body: JSON.stringify(input),
@@ -1946,6 +1973,15 @@ export function createTmsEntrega(input: CreateTmsEntregaInput) {
     auth: true,
     body: JSON.stringify(input),
   });
+}
+
+export async function uploadTmsEntregaEvidencia(file: File) {
+  const body = new FormData();
+  body.append("arquivo", file);
+  return request<{ url: string; hash: string; nome: string; mime: string; bytes: number }>(
+    "/tms/entregas/evidencias",
+    { method: "POST", auth: true, body },
+  );
 }
 
 export function listVeiculosEnvios() {

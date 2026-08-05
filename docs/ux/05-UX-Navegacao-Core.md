@@ -411,6 +411,13 @@ Cadastra embarcação ──▶ Abre viagem (cronograma) ──▶ Viagem fica d
 - **Persona:** Operação, Gerente da embarcação, Diretoria. **Dispositivo:** back-office web.
 - **Objetivo:** ser o **hub da viagem** — resumo de passageiros/carga/encomendas/veículos e situação, com atalhos para os módulos que dependem da viagem.
 
+### Ação operacional exclusiva do gerente (05/ago/2026)
+
+- Planejamento e edição continuam no back-office; a partida e o encerramento real ficam no app **Gerente da Embarcação** (`/campo/gerente`).
+- Em viagem `planejada`, o gerente vê **Iniciar viagem**; em `em_curso`, vê **Encerrar viagem**; em `concluida`, vê horários reais e orientação para finalizar a prestação.
+- A interface exibe início e encerramento reais, bloqueia duplo clique durante a mutação e apresenta o erro do servidor sem simular sucesso.
+- O backend exige `navegacao.operar_viagem`; perfis e usuários recebem essa permissão em Cadastros. O cancelamento não aparece nesse fluxo operacional.
+
 ### Wireframe
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -506,7 +513,7 @@ Navegação-Core é a **dependência-raiz**: TMS e Vendas só operam dentro de u
    🎫 Vendas/PDV           📦 TMS/Carga                   📦 Encomendas / 🚚 Veículos
    - vende passagem         - registra entrada veículo     - despacha na viagem
      na viagem (classe       - confere/etiqueta carga       - controle por viagem
-     + capacidade)           - 2º bipe, entrega             (qtd/valor decl./cobrado)
+     + capacidade)           - bipe de embarque, entrega    (qtd/valor decl./cobrado)
    - relatório de pax        - prestação de contas          
      por viagem              por viagem
 ```

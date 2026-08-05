@@ -9,7 +9,7 @@
 ### A.1 Princípios de arquitetura
 - **Offline-first** nos apps de campo (porteiro, conferente porto, conferente balsa, entrega). Internet do porto/balsa/cidades é instável. Tudo é gravado localmente e sincronizado via fila; cada registro carrega `client_uuid` para idempotência (evita duplicar no reenvio).
 - **Identidade física do volume = UUID.** O QR impresso na etiqueta codifica o UUID do volume. Todo bip lê esse UUID. O UUID nasce no recebimento e acompanha o volume até a entrega.
-- **Trilha de auditoria imutável.** Todo evento (recebido, conferido, embarcado, 2º bipe, desembarcado, entregue) grava quem, quando, onde (GPS quando houver) e foto quando aplicável. É o coração do antifraude: nada "some" sem deixar rastro.
+- **Trilha de auditoria imutável.** Todo evento (conferido, embarcado, entregue ou divergência) grava quem, quando, onde (GPS quando houver) e foto quando aplicável. É o coração do antifraude: nada "some" sem deixar rastro.
 - **Foto como prova legal.** Fotos obrigatórias com carimbo de data/hora; armazenadas com hash para integridade.
 
 ### A.2 Entidades principais (modelo de dados de alto nível)
@@ -27,14 +27,15 @@ Carga (id, viagem_id, cliente_remetente_id, destinatario_id, cidade_destino_sigl
         nf_dc_id?, criado_por, criado_em)
   ⚠️ **Regra de negócio:** toda carga precisa ter **valor declarado** E **valor cobrado**. Nenhuma carga sobe sem etiqueta e sem cobrança registrada. Cada etiqueta deve gerar cobrança. Relatório separado por viagem deve deixar claro de onde veio cada valor/comissão (mencionada como ~2% sobre montante na transcrição).
   └─ Volume (id, carga_id, uuid, palete_id?, indice_volume, total_volumes, peso,
-             status[recebido|conferido|embarcado|reconferido|desembarcado|entregue|divergente])
+             status[cadastrado|conferido|embarcado|entregue|divergente])
        └─ EventoVolume (volume_id, tipo, usuario_id, timestamp, gps?, foto_id?, obs)
 
 Palete (id, codigo, proprietario[AJC|terceiro], terceiro_id?, status[livre|alocado|em_transito])
   └─ alocação: PaleteViagem (palete_id, viagem_id, cidade_destino_sigla)
 
 NotaFiscalDC (id, tipo[NFe|NFCe|DC], numero, valor, arquivo_id, cliente_id,
-              lancado_por, status[pendente|conferida|divergente])
+              cidade_destino_sigla, carga_id?, viagem_id?, lancado_por,
+              status[pendente|conferida|divergente])
 DeclaracaoConteudo (id, carga_id, valor_declarado, descricao_informada, texto_termo,
                     assinatura_id, aceite_em, ip/dispositivo)
 
@@ -54,18 +55,18 @@ PrestacaoContas (id, viagem_id, gerente_id, itens[], total_declarado, total_sist
 ```
                 ┌──────────── divergente (em qualquer ponto) ───────────┐
                 │                                                         │
-recebido ──► conferido ──► embarcado ──► reconferido(2º bipe) ──► desembarcado ──► entregue
- (porto)      (coletor)    (na balsa)     (conferente balsa)      (balsa→terra)   (agente da cidade assina)
+cadastrado ──► conferido ──► embarcado ──► entregue
+ (NF/DC)       (bipe porto)   (bipe embarcação)  (bipe final + prova)
 
 Cross-docking (carregamento direto na balsa, sem pátio):
-recebido+embarcado ─────────────────────────────────► desembarcado ──► entregue
- (bipe do porto OU da balsa, com foto obrigatória)      (balsa→terra)   (agente da cidade assina)
+cadastrado ──► embarcado ───────────────────────────► entregue
+               (primeiro bipe na embarcação)             (bipe final + prova)
 ```
 - Cada transição exige o evento correspondente. Divergência (item a mais/menos, avaria) abre exceção e notifica o gerente.
-- No **cross-docking** o volume é recebido e embarcado no mesmo ato (não há etapa de pátio nem 2º bipe separado); o bipe pode ser efetivado **pelo conferente do porto ou pelo conferente da balsa** — ver A.4.
+- No **cross-docking** o volume é embarcado no primeiro bipe físico, feito pelo conferente da embarcação; não existe estado intermediário `recebido` — ver A.4.
 
 ### A.4 Dois modelos de recebimento (RF-4)
-- **(a) Porto + Balsa:** carga recebida e conferida no porto → etiquetada/paletizada → embarcada → **2º bipe** na balsa. Fluxo padrão.
+- **(a) Porto + Embarcação:** primeiro bipe no porto muda `cadastrado` para `conferido`; o bipe na embarcação muda `conferido` para `embarcado`.
 - **(b) Carregamento direto (cross-docking):** carga embarcada direto na balsa, sem passar pelo pátio do porto. **Permite múltiplos recebimentos** (vários lotes/horários) na mesma viagem.
 
 > **Quem efetiva o bipe de carregamento direto:** o recebimento/bipe do cross-docking pode ser feito **tanto pelo conferente do porto quanto pelo conferente da balsa**. Ou seja, o recebimento de carregamento direto não é exclusivo de um perfil — quem estiver no ponto onde a carga embarca direto registra o recebimento. O evento grava qual perfil/usuário efetivou (auditoria). Foto de recebimento é **obrigatória** nos dois modelos e por qualquer um dos dois conferentes.
@@ -135,22 +136,25 @@ O upload separado de cliente/agente foi descontinuado em 01/ago/2026. Upload, ca
 - Selecionar viagem.
 - Origem.
 - Destino.
-- Cliente: puxar da NF/DC ou preencher manualmente.
-- Upload de nota/DC.
-- Peso: puxar da NF/DC ou preencher manualmente.
-- Valor de nota/DC: puxar da NF/DC ou preencher manualmente.
+- Cliente: selecionado antes dos documentos.
+- Seleção de uma ou mais NF/DC **livres** do cliente, com busca e seleção múltipla.
+- Todas as NF/DC selecionadas precisam ter o mesmo destino; o destino da carga vem do documento e não é redigitado.
+- Viagem: selecionada somente aqui e precisa atender o destino das notas.
+- Peso, valor e total de volumes: somados no servidor a partir das NF/DC selecionadas.
+- A criação é transacional: vincula os documentos livres e só então cria os volumes. Concorrência de outra operação bloqueia sem duplicar carga.
 
 ---
 
 ### B.3 Lançamento de NF/DC — ADM Notas
 **Persona:** ADM Notas (back-office). **Plataforma:** Web.
 
-**Objetivo:** enviar e validar as NF/DC, criando o vínculo com cliente, carga e viagem no mesmo fluxo.
+**Objetivo:** enviar e validar as NF/DC como documentos fiscais independentes, prontos para seleção posterior em Nova carga.
 
 **Componentes:**
 - Upload real de XML/PDF/foto como primeira ação; XML preenche automaticamente os campos disponíveis.
 - Identificação do emitente por CPF/CNPJ; cliente inexistente é criado na mesma transação.
-- Toda nova NF/DC nasce vinculada a carga e viagem; não existe documento avulso neste fluxo.
+- Toda nova NF/DC nasce livre, com cliente e destino da futura carga, sem carga, viagem, volume ou palete.
+- A fila identifica claramente documentos **livres para carga** e documentos já vinculados.
 - Fila de documentos **pendentes** para conferência.
 - Etiquetagem ocorre exclusivamente no fluxo B.5/recebimento, nunca na fila de Notas.
 - Marcar como **conferida** ou **divergente**.
@@ -207,19 +211,19 @@ O upload separado de cliente/agente foi descontinuado em 01/ago/2026. Upload, ca
 
 ---
 
-### B.7 App Conferente da Balsa — 2º bipe (reconferência)
+### B.7 App Conferente da Embarcação — bipe de embarque
 **Persona:** Conferente da balsa. **Plataforma:** Coletor/Palm, offline-first.
 
 **Objetivo:** reconferir no embarque tudo que foi conferido no porto — segunda barreira antifraude.
 
 **Fluxo:** seleciona a viagem → bipa cada volume que sobe → sistema compara com o que foi conferido no porto.
-- **Match:** volume passa a `reconferido/embarcado`.
+- **Match:** volume passa a `embarcado`.
 - **Não previsto:** volume bipado que não estava na carga → alerta "volume não consta".
 - **Faltante ao fechar:** lista volumes esperados que não foram bipados.
 
 **Estados:** progresso "Embarcados X / Y" · divergência destacada · offline · fechamento com resumo.
 
-> O conferente da balsa atua em **três modos**: (1) **2º bipe / reconferência** desta tela, para carga que já foi conferida no porto; (2) **recebimento de carregamento direto / cross-docking** (tela B.8), para carga que embarca direto na balsa sem ter passado pelo pátio; e (3) **entrega no desembarque** (tela B.9), registrando a descida da carga balsa→terra com assinatura do agente de carga da cidade. Todos disponíveis no mesmo app.
+> O conferente da embarcação atua em dois modos de embarque: (1) carga já `conferida` no porto, que passa a `embarcado`; e (2) cross-docking, no qual a carga vai de `cadastrado` diretamente para `embarcado`. A entrega final é registrada na tela B.9 com prova legal.
 
 ---
 
@@ -228,7 +232,7 @@ O upload separado de cliente/agente foi descontinuado em 01/ago/2026. Upload, ca
 
 **Objetivo:** suportar carga que embarca direto na balsa, em vários lotes/horários, sem passar pelo pátio.
 
-**Componentes:** mesma base do B.4, mas com **lista de recebimentos** da viagem (Recebimento 1, 2, 3…), cada um com sua foto obrigatória e seus volumes. Total consolidado por viagem. O recebimento e o embarque acontecem no mesmo ato (não há 2º bipe separado para esses volumes).
+**Componentes:** mesma base do B.4, mas com **lista de lotes de embarque** da viagem, cada um com sua foto obrigatória e seus volumes. Total consolidado por viagem. O primeiro bipe físico registra diretamente `embarcado`.
 
 **Regras:**
 - Disponível para os dois perfis de conferente (porto e balsa); o app oferece a opção "Carregamento direto" independentemente de quem está logado.
@@ -283,7 +287,7 @@ O upload separado de cliente/agente foi descontinuado em 01/ago/2026. Upload, ca
 
 **Objetivo:** visão em tempo real do que está em cada viagem.
 
-**Componentes:** por viagem — total de volumes (recebidos/embarcados/entregues), valor declarado, valor cobrado, divergências abertas, status dos volumes. Filtros por embarcação, cidade destino, período. Base para o BI de rentabilidade por viagem/embarcação/cidade.
+**Componentes:** por viagem — total de volumes (conferidos/embarcados/entregues), valor declarado, valor cobrado, divergências abertas e estado dos volumes. Filtros por embarcação, cidade destino e período. Base para o BI de rentabilidade por viagem/embarcação/cidade.
 
 ---
 

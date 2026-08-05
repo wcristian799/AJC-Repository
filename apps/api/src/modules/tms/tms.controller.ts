@@ -109,6 +109,12 @@ export class TmsController {
     this.require(body.viagemId, "viagemId");
     this.require(body.clienteRemetenteId, "clienteRemetenteId");
     this.require(body.cidadeDestinoSigla, "cidadeDestinoSigla");
+    if ((body.categoria ?? "carga") === "carga" && (!Array.isArray(body.documentoIds) || body.documentoIds.length === 0)) {
+      throw new BadRequestException("Selecione ao menos uma NF/DC livre para criar a carga");
+    }
+    if (body.documento) {
+      throw new BadRequestException("A NF/DC deve ser lancada antes e selecionada por documentoIds");
+    }
     return this.repository.createCarga(body, user.sub);
   }
 
@@ -146,9 +152,9 @@ export class TmsController {
     @CurrentUser() user: AuthTokenPayload,
   ) {
     this.require(body.uploadId, "uploadId");
-    this.require(body.viagemId, "viagemId");
     this.require(body.remetenteNome, "remetenteNome");
     this.require(body.numero, "numero");
+    this.require(body.cidadeDestinoSigla, "cidadeDestinoSigla");
     this.require(body.agendadoPara, "agendadoPara");
     return this.repository.createDocumento(body, user.sub);
   }
@@ -335,9 +341,14 @@ export class TmsController {
   listDocumentosConferencia(
     @Query("viagemId") viagemId?: string,
     @Query("busca") busca?: string,
+    @Query("modoOperacao") modoOperacao?: "conferencia" | "embarque",
   ) {
     this.require(viagemId, "viagemId");
-    return this.unitizacao.listDocumentosDisponiveis(viagemId!, busca);
+    return this.unitizacao.listDocumentosDisponiveis(
+      viagemId!,
+      busca,
+      modoOperacao ?? "conferencia",
+    );
   }
 
   @Get("conferencias")
@@ -375,7 +386,7 @@ export class TmsController {
     return this.unitizacao.addConferenciaItem(id, body, user.sub);
   }
 
-  @Post("conferencias/:id/volumes/receber")
+  @Post("conferencias/:id/volumes/bipar")
   @RequirePermissions("tms.conferir")
   scanConferenciaVolume(
     @Param("id") id: string,
@@ -444,6 +455,25 @@ export class TmsController {
   ) {
     this.require(body.cidadeSigla, "cidadeSigla");
     return this.repository.createEntrega(body, user.sub);
+  }
+
+  @Post("entregas/evidencias")
+  @RequirePermissions("tms.entregar")
+  @UseInterceptors(
+    FileInterceptor("arquivo", {
+      limits: { fileSize: 12 * 1024 * 1024, files: 1 },
+    }),
+  )
+  uploadEntregaEvidence(
+    @UploadedFile()
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      buffer: Buffer;
+    },
+  ) {
+    return this.evidence.uploadDelivery(file);
   }
 
   @Get("prestacoes")

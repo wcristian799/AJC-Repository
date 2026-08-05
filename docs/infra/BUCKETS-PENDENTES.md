@@ -22,7 +22,7 @@
 | `encomendas-evidencias` | ativo | Encomendas | Foto do volume, NF/DC e assinatura da declaracao. MinIO privado, referencia `s3://`, MIME validado, limite de 12 MB, SHA-256 e vinculo auditavel ao despacho. |
 | `portaria-fotos` | pendente | TMS | Fotos de registro de portaria (`registro_portaria.foto_url`) |
 | `recebimento-fotos` | ativo | TMS | Evidencias fotograficas da conferencia fisica. MinIO privado, MIME de imagem validado, limite de 12 MB, SHA-256 e referencia `s3://` armazenados na conferencia. Quando o aparelho esta offline, o blob fica no IndexedDB ate a sincronizacao autenticada. |
-| `entregas-comprovantes` | pendente | TMS | Assinatura e fotos obrigatorias de entrega (`entrega_comprovante.assinatura_url`, `foto1_url`, `foto2_url`) |
+| `entregas-comprovantes` | ativo | TMS | Assinatura e duas fotos obrigatorias da entrega. MinIO privado, MIME de imagem validado, limite de 12 MB, SHA-256 e referencia `s3://` persistida no comprovante antes da mudanca para `entregue`. |
 | `prestacoes-anexos` | pendente | TMS | PDFs e comprovantes anexos da prestacao de contas (`prestacao_contas.anexos`) |
 | `veiculos-fotos-checklist` | pendente | Veiculos/Maquinas | Fotos por etapa/checklist (`envio_veiculo_foto.foto_url`) |
 | `vendas-gratuidades-documentos` | pendente | Vendas | Comprovantes/documentos de gratuidade (`gratuidade.documento_url`) |

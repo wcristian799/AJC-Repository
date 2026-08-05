@@ -16,6 +16,12 @@ export class VeiculosController {
     return this.repository.list();
   }
 
+  @Get('configuracao-origens')
+  @RequirePermissions('veiculos.ver')
+  originsConfig() {
+    return this.repository.getOriginsConfig();
+  }
+
   @Get(':id')
   @RequirePermissions('veiculos.ver')
   find(@Param('id') id: string) {
