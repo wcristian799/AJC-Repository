@@ -2,6 +2,7 @@ import { validateEncomendasConfig } from './encomendas-config.validator';
 
 const valid = {
   limiteValorFixo: 1000,
+  limitePesoEncomenda: 30,
   tamanhos: [{ codigo: 'P', nome: 'Pequena', pesoMaxKg: 10, ativo: true }],
   formasPagamento: [{ codigo: 'pix', nome: 'Pix', ativo: true }],
   prazoRecebimentoDias: 0,

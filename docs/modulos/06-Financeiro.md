@@ -1,6 +1,6 @@
 # Módulo Financeiro — SPEC + Detalhamento de Telas
 
-> Espinha dorsal do ERP. Núcleo: **contas a pagar/receber**, **tesouraria com caixas em tempo real**, **conciliação bancária**, **cruzamento da prestação de contas das embarcações** com o contas a receber, **compras/estoque** e **pagamento de comissão de agentes**. É onde o controle antifraude vira número.
+> Espinha dorsal do ERP. Núcleo vigente da Etapa 11: **contas a pagar/receber**, **tesouraria com caixas em tempo real**, **DRE**, rastreamento interno de faturas e **pagamento de comissão de agentes condicionado ao recebimento**. Conciliação foi retirada da rodada atual pelo cliente; Compras permanece na Etapa 12.
 
 ---
 
@@ -8,15 +8,14 @@
 
 ### A.1 Submódulos
 1. Contas a Pagar (AP)
-2. Contas a Receber (AR) — incl. rastreio de NF/boleto no CNPJ
+2. Contas a Receber (AR) — incl. controle interno de NF/boleto no CNPJ
 3. Tesouraria — caixas em tempo real
-4. Faturamento — NF-e / NFS-e / boletos
-5. Conciliação bancária
-6. Contas-corrente
-7. Cruzamento de prestação de contas (embarcação ↔ AR)
-8. Controle de estoque (paiol e rancho)
-9. Compras (solicitação → aprovação → status → prazo)
-10. Pagamento de agentes comerciais (comissão)
+4. Faturamento — registro interno de documentos
+5. DRE por caixa/competência
+6. Cruzamento de prestação de contas (embarcação ↔ AR)
+7. Pagamento de agentes comerciais (comissão)
+
+> Conciliação bancária, contas-correntes, estoque, faturamento fiscal externo e Compras não fazem parte da entrega da Etapa 11. Conciliação foi retirada pelo cliente e Compras é a Etapa 12; os demais itens continuam dependentes de banco, fornecedor fiscal ou requisitos homologados.
 
 ### A.2 Caixas mapeados (Tesouraria)
 Visão em tempo real de múltiplos caixas:
@@ -77,7 +76,7 @@ ComissaoAgente (id, agente_id, periodo, lancamentos[], valor_total, status[abert
 - Cadastro manual + geração automática a partir de vendas/cargas.
 - *Estados:* atrasado destacado; vínculo com viagem.
 
-### B.3 Rastreio de NF/boleto emitidos no CNPJ 🔶
+### B.3 Rastreio externo de NF/boleto emitidos no CNPJ 🔶 — bloqueado por fornecedor
 - Lista de documentos emitidos contra o CNPJ da AJC (NF e boletos), com origem e valor.
 - Conciliação com contas a pagar.
 - *Estado:* dependente de integração; placeholder até API definida.
@@ -93,17 +92,17 @@ ComissaoAgente (id, agente_id, periodo, lancamentos[], valor_total, status[abert
 - Movimentos (entrada/saída), origem (venda de passagem/encomenda/F&B), operador, horário.
 - Fechamento de caixa por turno/dia.
 
-### B.6 Faturamento (NF-e / NFS-e / boletos)
+### B.6 Faturamento fiscal (NF-e / NFS-e / boletos) — fora da Etapa 11
 - Emissão de notas e boletos; vínculo a contas a receber.
 - Lista de documentos emitidos, status (emitida, cancelada, paga).
 - Lançamento de NF-e e NFS-e.
 
-### B.7 Conciliação bancária
+### B.7 Conciliação bancária — retirada da Etapa 11 pelo cliente
 - Importa/lê extrato; concilia movimento bancário ↔ contas a pagar/receber.
 - Marca conciliado/divergente; sugestão automática de match.
 - *Estados:* não conciliado · conciliado · divergência.
 
-### B.8 Contas-corrente
+### B.8 Contas-corrente — fase posterior
 - Cadastro de contas bancárias com saldo.
 - Acompanhamento de entradas/saídas; base para conciliação (B.7).
 
@@ -113,12 +112,12 @@ ComissaoAgente (id, agente_id, periodo, lancamentos[], valor_total, status[abert
 - Divergências destacadas (ex.: 2 carros lançados pelo agente que não bateram com o AR).
 - Ações: aprovar, sinalizar divergência, ajustar.
 
-### B.10 Controle de estoque (paiol e rancho)
+### B.10 Controle de estoque (paiol e rancho) — fase posterior
 - Itens por local (paiol/rancho), saldo, mínimo.
 - Entradas (compras) e baixas (consumo); alerta de estoque mínimo.
 - Ligado a Compras (B.11) e ao PDV F&B (consumo de insumos).
 
-### B.11 Compras — solicitação, aprovação, status
+### B.11 Compras — Etapa 12
 **Persona:** Comprador + aprovador.
 - **Solicitação:** item, quantidade, justificativa, local.
 - **Aprovação:** fila para o usuário aprovador (aprovar/reprovar com motivo).

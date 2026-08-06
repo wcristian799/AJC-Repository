@@ -4,7 +4,7 @@ import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CaixaRepository } from './caixa.repository';
-import { AbrirCaixaInput, FinanceiroTituloInput, MovimentoCaixaInput } from './caixa.types';
+import { AbrirCaixaInput, CriarComissaoInput, CriarFaturaInput, FinanceiroTituloInput, LiquidarTituloInput, MovimentoCaixaInput } from './caixa.types';
 
 @UseGuards(AuthGuard)
 @Controller('caixa')
@@ -24,20 +24,79 @@ export class CaixaController {
   }
 
   @Get('titulos')
-  @RequirePermissions('caixa.ver')
-  titulos(@Query('tipo') tipo?: string) {
+  @RequirePermissions('financeiro.ver')
+  titulos(@Query('tipo') tipo?: string, @Query('de') de?: string, @Query('ate') ate?: string, @Query('status') status?: string, @Query('busca') busca?: string, @Query('planoContaId') planoContaId?: string, @Query('centroCustoId') centroCustoId?: string, @Query('page') page?: string, @Query('pageSize') pageSize?: string) {
     if (tipo && tipo !== 'receber' && tipo !== 'pagar') {
       throw new BadRequestException('tipo invalido');
     }
-    const tipoFiltro = tipo as 'receber' | 'pagar' | undefined;
-    return this.repository.titulos(tipoFiltro);
+    return this.repository.titulos({ tipo: tipo as 'receber' | 'pagar' | undefined, de, ate, status, busca, planoContaId, centroCustoId, page: page ? Number(page) : undefined, pageSize: pageSize ? Number(pageSize) : undefined });
   }
 
+  @Get('resumo')
+  @RequirePermissions('financeiro.ver')
+  resumo(@Query('de') de?: string, @Query('ate') ate?: string) { return this.repository.resumo({ de, ate }); }
+
   @Post('titulos')
-  @RequirePermissions('caixa.operar')
+  @RequirePermissions('financeiro.lancar')
   criarTitulo(@Body() body: FinanceiroTituloInput, @CurrentUser() user: AuthTokenPayload) {
     return this.repository.criarTitulo(body, user.sub);
   }
+
+  @Patch('titulos/:id/liquidar')
+  @RequirePermissions('financeiro.baixar')
+  liquidarTitulo(@Param('id') id: string, @Body() body: LiquidarTituloInput, @CurrentUser() user: AuthTokenPayload) { return this.repository.liquidarTitulo(id, body, user.sub); }
+
+  @Get('titulos/:id/historico')
+  @RequirePermissions('financeiro.ver')
+  historicoTitulo(@Param('id') id: string) { return this.repository.historicoTitulo(id); }
+
+  @Get('comissoes')
+  @RequirePermissions('financeiro.ver')
+  comissoes() { return this.repository.comissoes(); }
+
+  @Post('comissoes')
+  @RequirePermissions('financeiro.lancar')
+  criarComissao(@Body() body: CriarComissaoInput, @CurrentUser() user: AuthTokenPayload) { return this.repository.criarComissao(body, user.sub); }
+
+  @Patch('comissoes/:id/liberar')
+  @RequirePermissions('financeiro.comissao_liberar')
+  liberarComissao(@Param('id') id: string, @CurrentUser() user: AuthTokenPayload) { return this.repository.transicionarComissao(id, 'liberada', user.sub); }
+
+  @Patch('comissoes/:id/pagar')
+  @RequirePermissions('financeiro.comissao_pagar')
+  pagarComissao(@Param('id') id: string, @CurrentUser() user: AuthTokenPayload) { return this.repository.transicionarComissao(id, 'pago', user.sub); }
+
+  @Patch('comissoes/:id/cancelar')
+  @RequirePermissions('financeiro.configurar')
+  cancelarComissao(@Param('id') id: string, @CurrentUser() user: AuthTokenPayload) { return this.repository.transicionarComissao(id, 'cancelada', user.sub); }
+
+  @Get('dre')
+  @RequirePermissions('financeiro.dre_ver')
+  dre(@Query('de') de?: string, @Query('ate') ate?: string) { return this.repository.dre(de, ate); }
+
+  @Get('faturas')
+  @RequirePermissions('financeiro.fatura_ver')
+  faturas() { return this.repository.faturas(); }
+
+  @Post('faturas')
+  @RequirePermissions('financeiro.fatura_lancar')
+  criarFatura(@Body() body: CriarFaturaInput, @CurrentUser() user: AuthTokenPayload) { return this.repository.criarFatura(body, user.sub); }
+
+  @Get('plano-contas')
+  @RequirePermissions('financeiro.ver')
+  planoContas() { return this.repository.planoContas(); }
+
+  @Post('plano-contas')
+  @RequirePermissions('financeiro.configurar')
+  salvarPlanoConta(@Body() body: { id?: string; codigo?: string; nome?: string; natureza?: string; contaPaiId?: string | null; ativo?: boolean }, @CurrentUser() user: AuthTokenPayload) { return this.repository.salvarPlanoConta(body, user.sub); }
+
+  @Get('centros-custo')
+  @RequirePermissions('financeiro.ver')
+  centrosCusto() { return this.repository.centrosCusto(); }
+
+  @Post('centros-custo')
+  @RequirePermissions('financeiro.configurar')
+  salvarCentroCusto(@Body() body: { id?: string; codigo?: string; nome?: string; ativo?: boolean }, @CurrentUser() user: AuthTokenPayload) { return this.repository.salvarCentroCusto(body, user.sub); }
 
   @Get(':id/movimentos')
   @RequirePermissions('caixa.ver')

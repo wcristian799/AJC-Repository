@@ -121,6 +121,8 @@ os respectivos adapters e equipamentos estiverem homologados.
 
 `0039_item_preco_tamanho_configuravel.sql` corrige o legado `char(1)` de `item_preco.tamanho`, permitindo os códigos configuráveis validados pela API sem erro interno do PostgreSQL.
 
+`0040_financeiro_operacional_completo.sql` amplia o núcleo financeiro para AP/AR com liquidação parcial, histórico auditável, plano de contas, centros de custo, comissões condicionadas ao recebimento, DRE e controle interno de faturas. Registros legados da migration 0015 permanecem válidos.
+
 ## Auditoria imutável (produção)
 
 `audit_evento` é append-only. Em produção, revogar `UPDATE`/`DELETE` da role da aplicação

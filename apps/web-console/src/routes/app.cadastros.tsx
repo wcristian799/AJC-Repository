@@ -11,6 +11,7 @@ import { OperationalEncomendasConfig } from "@/components/ops/cadastros/Operatio
 import { OperationalPdvConfig } from "@/components/ops/cadastros/OperationalPdvConfig";
 import { OperationalBpeConfig } from "@/components/ops/cadastros/OperationalBpeConfig";
 import { OperationalVeiculosConfig } from "@/components/ops/cadastros/OperationalVeiculosConfig";
+import { OperationalFinanceConfig } from "@/components/ops/cadastros/OperationalFinanceConfig";
 import { CitiesRegistry } from "@/components/ops/cadastros/CitiesRegistry";
 import {
   SectionHeader,
@@ -424,6 +425,7 @@ function Cadastros() {
           <OperationalPdvConfig />
           <OperationalBpeConfig cidades={cidades} />
           <OperationalVeiculosConfig />
+          <OperationalFinanceConfig />
           <OperationalNavigationConfig cidades={cidades} />
         </div>
       )}

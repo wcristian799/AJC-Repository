@@ -30,5 +30,61 @@ export interface FinanceiroTituloInput {
   cargaId?: string;
   bilheteId?: string;
   cotacaoId?: string;
+  competencia?: string;
+  planoContaId?: string;
+  centroCustoId?: string;
+  viagemId?: string;
+  parcelaNumero?: number;
+  parcelasTotal?: number;
+  documentoNome?: string;
+  documentoUrl?: string;
+  documentoHash?: string;
+  clientUuid?: string;
+}
+
+export interface FinanceiroTitulosFiltro {
+  tipo?: 'receber' | 'pagar';
+  de?: string;
+  ate?: string;
+  status?: string;
+  busca?: string;
+  planoContaId?: string;
+  centroCustoId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface LiquidarTituloInput {
+  valor?: number;
+  dataLiquidacao?: string;
+  formaPagamento?: 'dinheiro' | 'pix' | 'cartao_credito' | 'cartao_debito' | 'contrato' | 'cortesia' | 'gratuidade';
+  caixaMovimentoId?: string;
+  observacao?: string;
+  clientUuid?: string;
+}
+
+export interface CriarComissaoInput {
+  agenteId: string;
+  tituloReceberId?: string;
+  viagemId?: string;
+  baseValor: number;
+  percentual: number;
+  clientUuid?: string;
+}
+
+export interface CriarFaturaInput {
+  tipo: 'emitida' | 'recebida';
+  cnpjEmitente?: string;
+  cnpjDestinatario?: string;
+  numero?: string;
+  chaveAcesso?: string;
+  emissao?: string;
+  vencimento?: string;
+  valor: number;
+  status?: string;
+  tituloId?: string;
+  arquivoUrl?: string;
+  arquivoHash?: string;
+  observacao?: string;
   clientUuid?: string;
 }

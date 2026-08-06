@@ -1,432 +1,120 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Wallet, TrendingDown, TrendingUp, Plus, ArrowUpRight, ArrowDownRight, Percent } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CheckCircle2, FileText, Landmark, Plus, Receipt, Wallet } from "lucide-react";
 import { AppShell } from "@/components/ops/AppShell";
+import { DataTable, FilterBar, FilterChip, GhostButton, KPIStat, PrimaryButton, SectionHeader, StatusChip, brl } from "@/components/ops/primitives";
 import {
-  SectionHeader, KPIStat, DataTable, FilterBar, FilterChip, PrimaryButton, GhostButton, StatusChip, brl,
-} from "@/components/ops/primitives";
-import { CountUp } from "@/components/ops/motion-bits";
-import {
-  createFinanceiroTitulo,
-  listAgentes,
-  listCaixas,
-  listCrmCotacoes,
-  listFinanceiroTitulos,
-  type CaixaApi,
-  type CreateFinanceiroTituloInput,
-  type FinanceiroTituloApi,
+  createFinanceiroComissao, createFinanceiroFatura, createFinanceiroTitulo, getFinanceiroDre, getFinanceiroResumo,
+  liquidarFinanceiroTitulo, listAgentes, listFinanceiroCentrosCusto, listFinanceiroComissoes, listFinanceiroFaturas,
+  listFinanceiroPlanoContas, listFinanceiroTitulos, transitionFinanceiroComissao,
+  type FinanceiroCentroCustoApi, type FinanceiroComissaoApi, type FinanceiroDreLinhaApi, type FinanceiroFaturaApi,
+  type FinanceiroPlanoContaApi, type FinanceiroTituloApi,
 } from "@/lib/ajc-api";
 
-export const Route = createFileRoute("/app/financeiro")({
-  head: () => ({ meta: [{ title: "Financeiro · AJC Suite" }] }),
-  component: Financeiro,
-});
+export const Route = createFileRoute("/app/financeiro")({ head: () => ({ meta: [{ title: "Financeiro · AJC Suite" }] }), component: Financeiro });
 
-type Tab = "tesouraria" | "ar" | "ap" | "comissoes";
-
-type UiCaixa = {
-  id: string;
-  tipo: string;
-  referencia: string;
-  saldo: number;
-  entradasDia: number;
-  saidasDia: number;
-  status?: string;
-};
-
-type UiAgenteComissao = {
-  id: string;
-  nome: string;
-  cidade: string;
-  comissaoPct: number;
-  volumeMes: number;
-  idx: number;
-};
-
-type UiTitulo = {
-  id: string;
-  tipo: "receber" | "pagar";
-  descricao: string;
-  parte: string;
-  vencimento: string;
-  valor: number;
-  status: string;
-  origem: string;
-  referencia: string;
-};
+type Tab = "tesouraria" | "ar" | "ap" | "comissoes" | "dre" | "faturas";
+type Periodo = "hoje" | "semana" | "mes" | "personalizado";
 
 function Financeiro() {
   const [tab, setTab] = useState<Tab>("tesouraria");
-  const [caixasApi, setCaixasApi] = useState<UiCaixa[]>([]);
-  const [agentesApi, setAgentesApi] = useState<UiAgenteComissao[]>([]);
-  const [titulosApi, setTitulosApi] = useState<UiTitulo[]>([]);
+  const [periodo, setPeriodo] = useState<Periodo>("mes");
+  const [de, setDe] = useState(primeiroDiaMes());
+  const [ate, setAte] = useState(hojeISO());
+  const [busca, setBusca] = useState("");
+  const [planoContaId, setPlanoContaId] = useState("");
+  const [centroCustoId, setCentroCustoId] = useState("");
+  const [titulos, setTitulos] = useState<FinanceiroTituloApi[]>([]);
+  const [resumo, setResumo] = useState({ a_receber: 0, a_pagar: 0, recebido: 0, pago: 0, total: 0, vencidas: 0 });
+  const [comissoes, setComissoes] = useState<FinanceiroComissaoApi[]>([]);
+  const [faturas, setFaturas] = useState<FinanceiroFaturaApi[]>([]);
+  const [dre, setDre] = useState<FinanceiroDreLinhaApi[]>([]);
+  const [agentes, setAgentes] = useState<Array<{ id: string; nome: string; percentualComissao: number | null }>>([]);
+  const [planos, setPlanos] = useState<FinanceiroPlanoContaApi[]>([]);
+  const [centros, setCentros] = useState<FinanceiroCentroCustoApi[]>([]);
+  const [caixas, setCaixas] = useState<Array<{ id: string; referencia: string; saldo: number; entradas_dia: number; saidas_dia: number; status: string }>>([]);
   const [erro, setErro] = useState<string | null>(null);
-  const [showTituloForm, setShowTituloForm] = useState(false);
-  const [salvandoTitulo, setSalvandoTitulo] = useState(false);
-  const [tituloMensagem, setTituloMensagem] = useState<string | null>(null);
-  const [tituloForm, setTituloForm] = useState({
-    tipo: "receber" as "receber" | "pagar",
-    descricao: "",
-    parteNome: "",
-    vencimento: hojeISO(),
-    valor: "",
-    observacao: "",
-  });
+  const [busy, setBusy] = useState(false);
+  const [showTitulo, setShowTitulo] = useState(false);
+  const [showComissao, setShowComissao] = useState(false);
+  const [showFatura, setShowFatura] = useState(false);
+  const [tituloForm, setTituloForm] = useState({ tipo: "receber" as "receber" | "pagar", descricao: "", parteNome: "", vencimento: hojeISO(), competencia: hojeISO(), valor: "", planoContaId: "", centroCustoId: "", observacao: "" });
+  const [comissaoForm, setComissaoForm] = useState({ agenteId: "", tituloReceberId: "", baseValor: "", percentual: "" });
+  const [faturaForm, setFaturaForm] = useState({ tipo: "recebida" as "recebida" | "emitida", numero: "", chaveAcesso: "", cnpjEmitente: "", cnpjDestinatario: "", emissao: hojeISO(), vencimento: hojeISO(), valor: "", observacao: "" });
 
-  function carregarDados() {
-    let alive = true;
-    Promise.all([listCaixas(), listAgentes(), listCrmCotacoes(), listFinanceiroTitulos()])
-      .then(([caixas, agentes, cotacoes, titulos]) => {
-        if (!alive) return;
-        setCaixasApi(caixas.map(mapCaixa));
-        setTitulosApi(titulos.map(mapTitulo));
-        setAgentesApi(agentes.map((a, idx) => ({
-          id: a.id,
-          nome: a.nome,
-          cidade: a.cidadeSigla,
-          comissaoPct: a.percentualComissao ?? 0,
-          volumeMes: cotacoes
-            .filter((c) => c.agenteId === a.id)
-            .reduce((sum, c) => sum + (c.valorEstimado ?? 0), 0),
-          idx,
-        })));
-        setErro(null);
-      })
-      .catch((error) => {
-        if (!alive) return;
-        setCaixasApi([]);
-        setAgentesApi([]);
-        setTitulosApi([]);
-        setErro(error instanceof Error ? error.message : "Falha ao carregar financeiro");
-      });
-    return () => {
-      alive = false;
-    };
-  }
-
-  useEffect(() => {
-    return carregarDados();
-  }, []);
-
-  const caixas = useMemo<UiCaixa[]>(() => caixasApi, [caixasApi]);
-  const agentes = useMemo<UiAgenteComissao[]>(() => agentesApi, [agentesApi]);
-  const contasReceber = useMemo(() => titulosApi.filter((t) => t.tipo === "receber"), [titulosApi]);
-  const contasPagar = useMemo(() => titulosApi.filter((t) => t.tipo === "pagar"), [titulosApi]);
-
-  const saldo = caixas.reduce((s, c) => s + c.saldo, 0);
-  const aPagar = contasPagar.filter((c) => c.status !== "pago").reduce((s, c) => s + c.valor, 0);
-  const aReceber = contasReceber.filter((c) => c.status !== "recebido").reduce((s, c) => s + c.valor, 0);
-  const vencidas = titulosApi.filter((c) => c.status === "vencida").length;
-
-  const tone = (s: string) =>
-    s === "vencida" ? "danger" :
-    s === "vence_semana" ? "warning" :
-    s === "pago" || s === "recebido" ? "success" :
-    "info";
-
-  const tabs: [Tab, string][] = [
-    ["tesouraria", "Tesouraria · Caixas"],
-    ["ar", "Contas a receber"],
-    ["ap", "Contas a pagar"],
-    ["comissoes", "Comissões de agentes"],
-  ];
-
-  async function salvarTituloMinimo() {
-    const valor = parseDecimal(tituloForm.valor);
-    if (!tituloForm.descricao.trim() || !tituloForm.parteNome.trim() || !tituloForm.vencimento || valor <= 0) {
-      setTituloMensagem("Preencha descricao, parte, vencimento e valor maior que zero.");
-      return;
-    }
-
-    setSalvandoTitulo(true);
-    setTituloMensagem(null);
+  const range = useMemo(() => intervalo(periodo, de, ate), [periodo, de, ate]);
+  const carregar = async () => {
+    setErro(null);
     try {
-      const payload: CreateFinanceiroTituloInput = {
-        tipo: tituloForm.tipo,
-        descricao: tituloForm.descricao.trim(),
-        parteNome: tituloForm.parteNome.trim(),
-        vencimento: tituloForm.vencimento,
-        valor,
-        origem: "manual_financeiro_minimo",
-        observacao: tituloForm.observacao.trim() || undefined,
-        clientUuid: crypto.randomUUID(),
-      };
-      const criado = await createFinanceiroTitulo(payload);
-      setTitulosApi((current) => [mapTitulo(criado), ...current.filter((t) => t.id !== criado.id)]);
-      setTab(criado.tipo === "pagar" ? "ap" : "ar");
-      setShowTituloForm(false);
-      setTituloForm({
-        tipo: criado.tipo === "pagar" ? "pagar" : "receber",
-        descricao: "",
-        parteNome: "",
-        vencimento: hojeISO(),
-        valor: "",
-        observacao: "",
-      });
-      setTituloMensagem("Lancamento minimo registrado no AP/AR real.");
-      carregarDados();
-    } catch (error) {
-      setTituloMensagem(error instanceof Error ? error.message : "Falha ao salvar lancamento minimo");
-    } finally {
-      setSalvandoTitulo(false);
-    }
+      const [ts, summary, cs, fs, dreRows, agents, caixasApi, planosApi, centrosApi] = await Promise.all([
+        listFinanceiroTitulos({ de: range.de, ate: range.ate, busca: busca || undefined, planoContaId: planoContaId || undefined, centroCustoId: centroCustoId || undefined }),
+        getFinanceiroResumo({ de: range.de, ate: range.ate }),
+        listFinanceiroComissoes(), listFinanceiroFaturas(), getFinanceiroDre({ de: range.de, ate: range.ate }), listAgentes(), fetchCaixas(), listFinanceiroPlanoContas(), listFinanceiroCentrosCusto(),
+      ]);
+      setTitulos(ts); setResumo(summary); setComissoes(cs); setFaturas(fs); setDre(dreRows); setAgentes(agents); setCaixas(caixasApi); setPlanos(planosApi); setCentros(centrosApi);
+    } catch (e) { setErro(e instanceof Error ? e.message : "Falha ao carregar o financeiro"); }
+  };
+  useEffect(() => { void carregar(); }, [range.de, range.ate, busca, planoContaId, centroCustoId]);
+
+  const receber = titulos.filter((t) => t.tipo === "receber");
+  const pagar = titulos.filter((t) => t.tipo === "pagar");
+  const saldo = caixas.reduce((sum, caixa) => sum + caixa.saldo, 0);
+  const statusTone = (status: string) => status === "recebido" || status === "pago" ? "success" : status === "vencida" ? "danger" : status === "cancelado" ? "neutral" : "warning";
+
+  async function liquidar(titulo: FinanceiroTituloApi) {
+    const raw = window.prompt(`Valor para liquidar (restante ${brl(titulo.valor - titulo.valor_liquidado)})`, String((titulo.valor - titulo.valor_liquidado).toFixed(2)).replace(".", ","));
+    if (raw === null) return;
+    const valor = decimal(raw);
+    if (!valor) return;
+    setBusy(true); try { const saved = await liquidarFinanceiroTitulo(titulo.id, { valor, formaPagamento: "pix", clientUuid: crypto.randomUUID() }); setTitulos((current) => current.map((item) => item.id === saved.id ? saved : item)); await carregar(); } catch (e) { setErro(e instanceof Error ? e.message : "Falha ao liquidar titulo"); } finally { setBusy(false); }
   }
 
-  return (
-    <AppShell crumb="Financeiro">
-      <SectionHeader
-        eyebrow="Tesouraria"
-        title="Financeiro · caixas em tempo real"
-        description="Porto, balsas, encomendas, agentes e lanchonetes consolidados. AP/AR e comissões — visão leve do MVP (núcleo é Fase 2)."
-        actions={
-          <>
-            <GhostButton>Plano de contas 🔶</GhostButton>
-            <PrimaryButton icon={Plus} onClick={() => setShowTituloForm((value) => !value)}>Lançamento mínimo</PrimaryButton>
-          </>
-        }
-      />
+  async function salvarTitulo() {
+    const valor = decimal(tituloForm.valor);
+    if (!tituloForm.descricao.trim() || !tituloForm.parteNome.trim() || !valor) { setErro("Preencha descricao, parte e valor maior que zero."); return; }
+    setBusy(true); try { await createFinanceiroTitulo({ tipo: tituloForm.tipo, descricao: tituloForm.descricao.trim(), parteNome: tituloForm.parteNome.trim(), vencimento: tituloForm.vencimento, competencia: tituloForm.competencia, valor, origem: "manual_financeiro", planoContaId: tituloForm.planoContaId || undefined, centroCustoId: tituloForm.centroCustoId || undefined, observacao: tituloForm.observacao.trim() || undefined, clientUuid: crypto.randomUUID() }); setShowTitulo(false); setTituloForm({ tipo: tituloForm.tipo, descricao: "", parteNome: "", vencimento: hojeISO(), competencia: hojeISO(), valor: "", planoContaId: "", centroCustoId: "", observacao: "" }); await carregar(); } catch (e) { setErro(e instanceof Error ? e.message : "Falha ao salvar titulo"); } finally { setBusy(false); }
+  }
 
-      <div className="mt-4 surface-card p-4">
-        <p className="text-sm font-medium text-foreground">Recorte desta rodada</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Caixa leve e AP/AR operacional já consomem backend real. Plano de contas, conciliação bancária, Compras e DRE ficam para a etapa financeira posterior.
-        </p>
-        {erro && <p className="mt-2 text-xs text-[color:var(--danger)]">API: {erro}</p>}
-      </div>
+  async function salvarComissao() {
+    const baseValor = decimal(comissaoForm.baseValor); const percentual = decimal(comissaoForm.percentual);
+    if (!comissaoForm.agenteId || !comissaoForm.tituloReceberId || !baseValor || !percentual) { setErro("Informe agente, conta a receber, base e percentual da comissao."); return; }
+    setBusy(true); try { await createFinanceiroComissao({ agenteId: comissaoForm.agenteId, tituloReceberId: comissaoForm.tituloReceberId || undefined, baseValor, percentual, clientUuid: crypto.randomUUID() }); setShowComissao(false); await carregar(); } catch (e) { setErro(e instanceof Error ? e.message : "Falha ao criar comissao"); } finally { setBusy(false); }
+  }
 
-      {showTituloForm && (
-        <div className="mt-4 surface-card brand-rail brand-rail-left p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-foreground">Lancamento minimo AP/AR</p>
-              <p className="mt-1 text-xs text-muted-foreground">Registro manual operacional para contas a pagar ou receber. Plano de contas completo segue fase financeira posterior.</p>
-            </div>
-            <div className="inline-flex rounded-lg bg-[color:var(--muted)] p-1 ring-1 ring-[color:var(--hairline)]">
-              {(["receber", "pagar"] as const).map((tipo) => (
-                <button
-                  key={tipo}
-                  onClick={() => setTituloForm((form) => ({ ...form, tipo }))}
-                  className={`h-8 rounded-md px-3 text-xs font-medium transition-colors ${tituloForm.tipo === tipo ? "bg-[color:var(--surface-elev)] text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  {tipo === "receber" ? "Receber" : "Pagar"}
-                </button>
-              ))}
-            </div>
-          </div>
+  async function salvarFatura() {
+    const valor = decimal(faturaForm.valor); if (!valor) { setErro("Informe o valor da fatura."); return; }
+    setBusy(true); try { await createFinanceiroFatura({ tipo: faturaForm.tipo, numero: faturaForm.numero || undefined, chaveAcesso: faturaForm.chaveAcesso || undefined, cnpjEmitente: faturaForm.cnpjEmitente || undefined, cnpjDestinatario: faturaForm.cnpjDestinatario || undefined, emissao: faturaForm.emissao, vencimento: faturaForm.vencimento, valor, observacao: faturaForm.observacao || undefined, clientUuid: crypto.randomUUID() }); setShowFatura(false); await carregar(); } catch (e) { setErro(e instanceof Error ? e.message : "Falha ao registrar fatura"); } finally { setBusy(false); }
+  }
+  async function mudarComissao(id: string, acao: "liberada" | "pago" | "cancelada") { setBusy(true); try { await transitionFinanceiroComissao(id, acao); await carregar(); } catch (e) { setErro(e instanceof Error ? e.message : "Falha ao atualizar comissao"); } finally { setBusy(false); } }
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <FormInput label="Descricao" value={tituloForm.descricao} onChange={(descricao) => setTituloForm((form) => ({ ...form, descricao }))} placeholder="Frete, fornecedor, ajuste..." className="xl:col-span-2" />
-            <FormInput label={tituloForm.tipo === "receber" ? "Cliente/parte" : "Fornecedor/parte"} value={tituloForm.parteNome} onChange={(parteNome) => setTituloForm((form) => ({ ...form, parteNome }))} placeholder="Nome ou razao social" />
-            <FormInput label="Vencimento" type="date" value={tituloForm.vencimento} onChange={(vencimento) => setTituloForm((form) => ({ ...form, vencimento }))} />
-            <FormInput label="Valor" value={tituloForm.valor} onChange={(valor) => setTituloForm((form) => ({ ...form, valor }))} placeholder="0,00" inputMode="decimal" />
-            <FormInput label="Observacao" value={tituloForm.observacao} onChange={(observacao) => setTituloForm((form) => ({ ...form, observacao }))} placeholder="Opcional" className="md:col-span-2 xl:col-span-5" />
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <PrimaryButton icon={Plus} onClick={salvarTituloMinimo} disabled={salvandoTitulo}>{salvandoTitulo ? "Salvando..." : "Salvar lancamento"}</PrimaryButton>
-            <GhostButton onClick={() => setShowTituloForm(false)}>Cancelar</GhostButton>
-            {tituloMensagem && <span className="text-xs text-muted-foreground">{tituloMensagem}</span>}
-          </div>
-        </div>
-      )}
-
-      {!showTituloForm && tituloMensagem && (
-        <p className="mt-3 rounded-lg bg-[color:var(--muted)] px-3 py-2 text-xs text-muted-foreground">{tituloMensagem}</p>
-      )}
-
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KPIStat index={0} label="Saldo consolidado" value={brl(saldo)} hint={`${caixas.length} caixas`} icon={Wallet} />
-        <KPIStat index={1} label="A receber" value={brl(aReceber)} hint={`${contasReceber.length} títulos`} delta={{ value: "real", positive: true }} icon={TrendingUp} />
-        <KPIStat index={2} label="A pagar" value={brl(aPagar)} hint={`${contasPagar.length} títulos`} delta={{ value: "real", positive: false }} icon={TrendingDown} />
-        <KPIStat index={3} label="Vencidas" value={String(vencidas)} hint="ação imediata" />
-      </section>
-
-      <div className="mt-6 flex flex-wrap items-center gap-1 border-b border-[color:var(--hairline)]">
-        {tabs.map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`relative -mb-px px-4 py-3 text-sm font-medium transition-colors ${tab === k ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            {label}
-            {tab === k && <span className="absolute inset-x-2 -bottom-px h-[2px] bg-[color:var(--brand)]" />}
-          </button>
-        ))}
-      </div>
-
-      {tab === "tesouraria" && (
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {caixas.map((c) => (
-            <div key={c.id} className="surface-card brand-rail brand-rail-left p-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{c.tipo}</p>
-              <p className="mt-1 text-sm font-medium text-foreground">{c.referencia}</p>
-              <p className="big-numeric mt-4 text-3xl text-foreground">R$ <CountUp to={c.saldo} duration={1.5} /></p>
-              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-md bg-[color:color-mix(in_oklab,var(--success)_10%,transparent)] px-2.5 py-2 ring-1 ring-[color:color-mix(in_oklab,var(--success)_25%,transparent)]">
-                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-[0.14em] text-[color:var(--success)]">
-                    <ArrowUpRight className="h-3 w-3" /> Entradas
-                  </div>
-                  <p className="mt-0.5 font-mono text-[color:var(--success)]">{brl(c.entradasDia)}</p>
-                </div>
-                <div className="rounded-md bg-[color:color-mix(in_oklab,var(--danger)_10%,transparent)] px-2.5 py-2 ring-1 ring-[color:color-mix(in_oklab,var(--danger)_25%,transparent)]">
-                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-[0.14em] text-[color:var(--danger)]">
-                    <ArrowDownRight className="h-3 w-3" /> Saídas
-                  </div>
-                  <p className="mt-0.5 font-mono text-[color:var(--danger)]">{brl(c.saidasDia)}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === "ap" && (
-        <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar fornecedor, descrição...">
-            <FilterChip active>Hoje</FilterChip>
-            <FilterChip>Semana</FilterChip>
-            <FilterChip>Mês</FilterChip>
-            <FilterChip>Personalizado</FilterChip>
-            <input type="date" className="h-9 rounded-md bg-[color:var(--muted)] px-2 text-xs text-foreground ring-1 ring-[color:var(--hairline)]" />
-          </FilterBar>
-          <DataTable
-            rows={contasPagar}
-            columns={[
-              { key: "descricao", header: "Descrição", render: (r) => <span className="font-medium">{r.descricao}</span> },
-              { key: "parte", header: "Fornecedor" },
-              { key: "vencimento", header: "Vencimento", render: (r) => <span className="font-mono text-xs">{r.vencimento}</span> },
-              { key: "valor", header: "Valor", align: "right", render: (r) => <span className="font-mono">{brl(r.valor)}</span> },
-              { key: "status", header: "Status", render: (r) => <StatusChip tone={tone(r.status) as never}>{r.status.replace("_", " ")}</StatusChip> },
-              { key: "origem", header: "Origem", render: (r) => <span className="text-xs text-muted-foreground">{r.origem}</span> },
-            ]}
-          />
-        </div>
-      )}
-
-      {tab === "ar" && (
-        <div className="mt-5 space-y-4">
-          <FilterBar searchPlaceholder="Buscar cliente, origem...">
-            <FilterChip active>Hoje</FilterChip>
-            <FilterChip>Semana</FilterChip>
-            <FilterChip>Mês</FilterChip>
-            <FilterChip>Personalizado</FilterChip>
-            <input type="date" className="h-9 rounded-md bg-[color:var(--muted)] px-2 text-xs text-foreground ring-1 ring-[color:var(--hairline)]" />
-          </FilterBar>
-          <DataTable
-            rows={contasReceber}
-            columns={[
-              { key: "descricao", header: "Descrição", render: (r) => <span className="font-medium">{r.descricao}</span> },
-              { key: "parte", header: "Cliente" },
-              { key: "vencimento", header: "Vencimento", render: (r) => <span className="font-mono text-xs">{r.vencimento}</span> },
-              { key: "valor", header: "Valor", align: "right", render: (r) => <span className="font-mono">{brl(r.valor)}</span> },
-              { key: "status", header: "Status", render: (r) => <StatusChip tone={tone(r.status) as never}>{r.status.replace("_", " ")}</StatusChip> },
-              { key: "referencia", header: "Referência", render: (r) => <span className="text-xs text-muted-foreground">{r.referencia}</span> },
-            ]}
-          />
-        </div>
-      )}
-
-      {tab === "comissoes" && (
-        <div className="mt-5 space-y-4">
-          <div className="surface-card brand-rail brand-rail-left flex flex-wrap items-center gap-3 p-4">
-            <Percent className="h-4 w-4 text-[color:var(--brand)]" />
-            <span className="text-sm font-medium">Comissão estimada do período</span>
-            <span className="text-xs text-muted-foreground">a partir da captação dos agentes (CRM) · regras finais 🔶 diretoria</span>
-            <span className="ml-auto big-numeric text-2xl text-[color:var(--brand)]">
-              {brl(agentes.reduce((s, a) => s + (a.volumeMes * a.comissaoPct) / 100, 0))}
-            </span>
-          </div>
-          <DataTable
-            rows={agentes}
-            columns={[
-              { key: "nome", header: "Agente", render: (r) => <span className="font-medium">{r.nome}</span> },
-              { key: "cidade", header: "Cidade" },
-              { key: "ar", header: "Conta a receber", render: (r) => <span className="font-mono text-xs">{r.idx % 2 === 0 ? "AR pago" : "AR em aberto"}</span> },
-              { key: "volumeMes", header: "Captação", align: "right", render: (r) => <span className="font-mono">{brl(r.volumeMes)}</span> },
-              { key: "comissaoPct", header: "%", align: "right", render: (r) => <span className="font-mono">{r.comissaoPct.toFixed(1)}%</span> },
-              { key: "comissao", header: "Comissão est.", align: "right", render: (r) => <span className="font-mono text-[color:var(--brand)]">{brl((r.volumeMes * r.comissaoPct) / 100)}</span> },
-              { key: "status", header: "Status", render: (r) => {
-                const status = r.idx % 3 === 0 ? "pago" : r.idx % 2 === 0 ? "liberada" : "em aberto";
-                const statusTone = status === "pago" ? "success" : status === "liberada" ? "warning" : "info";
-                return <StatusChip tone={statusTone}>{status}</StatusChip>;
-              } },
-              { key: "datas", header: "Datas", render: (r) => <span className="text-[11px] text-muted-foreground">abriu 22/06 · {r.idx % 2 === 0 ? "liberou 25/06" : "aguarda AR"}</span> },
-            ]}
-          />
-          <p className="text-center text-[11px] text-muted-foreground">
-            Fechamento por período gera conta a pagar ao agente. Cruzamento da prestação de contas das viagens entra na fase financeira posterior.
-          </p>
-        </div>
-      )}
-    </AppShell>
-  );
+  return <AppShell crumb="Financeiro">
+    <SectionHeader eyebrow="Tesouraria e resultado" title="Financeiro operacional" description="Contas, recebimentos, pagamentos e comissões com rastreabilidade por período e centro de custo." actions={<div className="flex flex-wrap gap-2"><GhostButton onClick={() => setShowFatura((value) => !value)} icon={FileText}>Registrar fatura</GhostButton><PrimaryButton onClick={() => setShowTitulo((value) => !value)} icon={Plus}>Novo título</PrimaryButton></div>} />
+    {erro && <div role="alert" className="mt-4 rounded-lg bg-[color:color-mix(in_oklab,var(--danger)_12%,transparent)] px-4 py-3 text-sm text-[color:var(--danger)]">{erro}</div>}
+    <div className="mt-5 flex flex-wrap items-center gap-2">
+      {([["hoje", "Hoje"], ["semana", "Semana"], ["mes", "Mês"], ["personalizado", "Personalizado"]] as const).map(([value, label]) => <FilterChip key={value} active={periodo === value} onClick={() => setPeriodo(value)}>{label}</FilterChip>)}
+      {periodo === "personalizado" && <><input aria-label="Data inicial" type="date" value={de} onChange={(e) => setDe(e.target.value)} className="field max-w-40" /><span className="text-xs text-muted-foreground">até</span><input aria-label="Data final" type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="field max-w-40" /></>}
+    </div>
+    <section className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><KPIStat index={0} label="Saldo em caixas" value={brl(saldo)} hint={`${caixas.length} caixas conectados`} icon={Wallet} /><KPIStat index={1} label="A receber" value={brl(resumo.a_receber)} hint={`${receber.length} títulos no período`} delta={{ value: "aberto", positive: true }} icon={ArrowUpRight} /><KPIStat index={2} label="A pagar" value={brl(resumo.a_pagar)} hint={`${pagar.length} títulos no período`} delta={{ value: "compromisso", positive: false }} icon={ArrowDownRight} /><KPIStat index={3} label="Vencidas" value={String(resumo.vencidas)} hint="exigem ação" icon={Receipt} /></section>
+    <div className="mt-6 flex flex-wrap gap-1 border-b border-[color:var(--hairline)]">{([["tesouraria", "Caixas"], ["ar", "Contas a receber"], ["ap", "Contas a pagar"], ["comissoes", "Comissões"], ["dre", "DRE"], ["faturas", "Faturas"]] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`relative -mb-px px-4 py-3 text-sm font-medium ${tab === value ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{label}{tab === value && <span className="absolute inset-x-2 -bottom-px h-[2px] bg-[color:var(--brand)]" />}</button>)}</div>
+    {showTitulo && <FinanceiroForm title="Novo título financeiro" onSave={salvarTitulo} busy={busy}><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6"><SelectField label="Natureza" value={tituloForm.tipo} onChange={(value) => setTituloForm((f) => ({ ...f, tipo: value as "receber" | "pagar" }))} options={[["receber", "A receber"], ["pagar", "A pagar"]]} /><InputField label="Descrição" value={tituloForm.descricao} onChange={(value) => setTituloForm((f) => ({ ...f, descricao: value }))} className="xl:col-span-2" /><InputField label="Parte" value={tituloForm.parteNome} onChange={(value) => setTituloForm((f) => ({ ...f, parteNome: value }))} /><InputField label="Vencimento" type="date" value={tituloForm.vencimento} onChange={(value) => setTituloForm((f) => ({ ...f, vencimento: value }))} /><InputField label="Valor" value={tituloForm.valor} onChange={(value) => setTituloForm((f) => ({ ...f, valor: value }))} inputMode="decimal" /><InputField label="Competência" type="date" value={tituloForm.competencia} onChange={(value) => setTituloForm((f) => ({ ...f, competencia: value }))} /><SelectField label="Plano de contas" value={tituloForm.planoContaId} onChange={(value) => setTituloForm((f) => ({ ...f, planoContaId: value }))} options={[["", "Sem classificação"], ...planos.filter((item) => item.ativo).map((item) => [item.id, `${item.codigo} · ${item.nome}`] as [string, string])]} /><SelectField label="Centro de custo" value={tituloForm.centroCustoId} onChange={(value) => setTituloForm((f) => ({ ...f, centroCustoId: value }))} options={[["", "Sem centro de custo"], ...centros.filter((item) => item.ativo).map((item) => [item.id, `${item.codigo} · ${item.nome}`] as [string, string])]} /><InputField label="Observação" value={tituloForm.observacao} onChange={(value) => setTituloForm((f) => ({ ...f, observacao: value }))} className="md:col-span-2 xl:col-span-3" /></div></FinanceiroForm>}
+    {showFatura && <FinanceiroForm title="Registrar fatura interna" onSave={salvarFatura} busy={busy}><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6"><SelectField label="Tipo" value={faturaForm.tipo} onChange={(value) => setFaturaForm((f) => ({ ...f, tipo: value as "recebida" | "emitida" }))} options={[["recebida", "Recebida no CNPJ"], ["emitida", "Emitida pela AJC"]]} /><InputField label="Número" value={faturaForm.numero} onChange={(value) => setFaturaForm((f) => ({ ...f, numero: value }))} /><InputField label="Chave de acesso" value={faturaForm.chaveAcesso} onChange={(value) => setFaturaForm((f) => ({ ...f, chaveAcesso: value }))} className="xl:col-span-2" /><InputField label="CNPJ emissor" value={faturaForm.cnpjEmitente} onChange={(value) => setFaturaForm((f) => ({ ...f, cnpjEmitente: value }))} /><InputField label="CNPJ destinatário" value={faturaForm.cnpjDestinatario} onChange={(value) => setFaturaForm((f) => ({ ...f, cnpjDestinatario: value }))} /><InputField label="Emissão" type="date" value={faturaForm.emissao} onChange={(value) => setFaturaForm((f) => ({ ...f, emissao: value }))} /><InputField label="Vencimento" type="date" value={faturaForm.vencimento} onChange={(value) => setFaturaForm((f) => ({ ...f, vencimento: value }))} /><InputField label="Valor" value={faturaForm.valor} onChange={(value) => setFaturaForm((f) => ({ ...f, valor: value }))} inputMode="decimal" /><InputField label="Observação" value={faturaForm.observacao} onChange={(value) => setFaturaForm((f) => ({ ...f, observacao: value }))} className="md:col-span-2 xl:col-span-3" /></div></FinanceiroForm>}
+    {tab !== "tesouraria" && tab !== "dre" && tab !== "faturas" && <FilterBar searchPlaceholder={tab === "ar" ? "Buscar cliente, origem ou viagem..." : tab === "ap" ? "Buscar fornecedor, descrição ou centro de custo..." : "Buscar agente ou viagem..."} searchValue={busca} onSearchChange={setBusca}>{(tab === "ar" || tab === "ap") && <><select aria-label="Filtrar por plano de contas" value={planoContaId} onChange={(event) => setPlanoContaId(event.target.value)} className="field h-9 w-auto min-w-44"><option value="">Todos os planos</option>{planos.filter((item) => item.ativo).map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.nome}</option>)}</select><select aria-label="Filtrar por centro de custo" value={centroCustoId} onChange={(event) => setCentroCustoId(event.target.value)} className="field h-9 w-auto min-w-44"><option value="">Todos os centros</option>{centros.filter((item) => item.ativo).map((item) => <option key={item.id} value={item.id}>{item.codigo} · {item.nome}</option>)}</select></>}</FilterBar>}
+    {tab === "tesouraria" && <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{caixas.map((caixa) => <div key={caixa.id} className="surface-card p-5"><div className="flex items-center justify-between"><Landmark className="h-4 w-4 text-[color:var(--brand)]" /><StatusChip tone={caixa.status === "aberto" ? "success" : "neutral"}>{caixa.status}</StatusChip></div><p className="mt-4 text-sm font-medium">{caixa.referencia}</p><p className="big-numeric mt-2 text-3xl">{brl(caixa.saldo)}</p><div className="mt-4 grid grid-cols-2 gap-2 text-xs"><span className="rounded-md bg-[color:color-mix(in_oklab,var(--success)_12%,transparent)] p-2 text-[color:var(--success)]">Entradas<br /><b>{brl(caixa.entradas_dia)}</b></span><span className="rounded-md bg-[color:color-mix(in_oklab,var(--danger)_12%,transparent)] p-2 text-[color:var(--danger)]">Saídas<br /><b>{brl(caixa.saidas_dia)}</b></span></div></div>)}</div>}
+    {(tab === "ar" || tab === "ap") && <DataTable rows={tab === "ar" ? receber : pagar} empty={tab === "ar" ? "Nenhuma conta a receber no período" : "Nenhuma conta a pagar no período"} columns={[{ key: "descricao", header: "Título", render: (row) => <span className="font-medium">{row.descricao}</span> }, { key: "parte_nome", header: tab === "ar" ? "Cliente" : "Fornecedor" }, { key: "competencia", header: "Competência", render: (row) => <span className="font-mono text-xs">{formatDate(row.competencia ?? row.vencimento)}</span> }, { key: "vencimento", header: "Vencimento", render: (row) => <span className="font-mono text-xs">{formatDate(row.vencimento)}</span> }, { key: "valor", header: "Valor", align: "right", render: (row) => <span className="font-mono">{brl(row.valor)}</span> }, { key: "status", header: "Status", render: (row) => <StatusChip tone={statusTone(row.status) as never}>{labelStatus(row.status)}</StatusChip> }, { key: "acao", header: "Ação", align: "right", render: (row) => !["pago", "recebido", "cancelado"].includes(row.status) ? <button disabled={busy} onClick={() => void liquidar(row)} className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)] hover:bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)]">Liquidar</button> : <span className="text-xs text-muted-foreground">{row.pago_em ? formatDate(row.pago_em) : "Concluído"}</span> }]} />}
+    {tab === "comissoes" && <><div className="mt-5 flex justify-end"><PrimaryButton icon={Plus} onClick={() => setShowComissao((value) => !value)}>Nova comissão</PrimaryButton></div>{showComissao && <FinanceiroForm title="Nova comissão vinculada ao recebimento" onSave={salvarComissao} busy={busy}><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"><SelectField label="Agente" value={comissaoForm.agenteId} onChange={(value) => { const agente = agentes.find((item) => item.id === value); setComissaoForm((f) => ({ ...f, agenteId: value, percentual: agente?.percentualComissao == null ? f.percentual : String(agente.percentualComissao).replace(".", ",") })); }} options={[["", "Selecionar agente"], ...agentes.map((agente) => [agente.id, agente.nome] as [string, string])]} /><SelectField label="Conta a receber" value={comissaoForm.tituloReceberId} onChange={(value) => { const titulo = receber.find((item) => item.id === value); setComissaoForm((f) => ({ ...f, tituloReceberId: value, baseValor: titulo ? String(titulo.valor).replace(".", ",") : f.baseValor })); }} options={[["", "Selecionar título"], ...receber.map((titulo) => [titulo.id, `${titulo.descricao} · ${brl(titulo.valor)}`] as [string, string])]} /><InputField label="Base recebível" value={comissaoForm.baseValor} onChange={(value) => setComissaoForm((f) => ({ ...f, baseValor: value }))} inputMode="decimal" /><InputField label="Percentual" value={comissaoForm.percentual} onChange={(value) => setComissaoForm((f) => ({ ...f, percentual: value }))} inputMode="decimal" /></div></FinanceiroForm>}<DataTable rows={comissoes} empty="Nenhuma comissão registrada" columns={[{ key: "agente_nome", header: "Agente" }, { key: "viagem_codigo", header: "Viagem" }, { key: "base_valor", header: "Base", align: "right", render: (row) => brl(row.base_valor) }, { key: "percentual", header: "%", align: "right", render: (row) => `${row.percentual.toFixed(2)}%` }, { key: "valor", header: "Comissão", align: "right", render: (row) => <span className="font-mono text-[color:var(--brand)]">{brl(row.valor)}</span> }, { key: "status", header: "Status", render: (row) => <StatusChip tone={row.status === "pago" ? "success" : row.status === "liberada" ? "warning" : "info"}>{labelComissao(row.status)}</StatusChip> }, { key: "acao", header: "Ação", align: "right", render: (row) => row.status === "em_aberto" ? <button disabled={busy} onClick={() => void mudarComissao(row.id, "liberada")} className="rounded-md px-2.5 py-1.5 text-xs text-[color:var(--warning)] ring-1 ring-[color:color-mix(in_oklab,var(--warning)_30%,transparent)]">Validar recebimento</button> : row.status === "liberada" ? <button disabled={busy} onClick={() => void mudarComissao(row.id, "pago")} className="rounded-md px-2.5 py-1.5 text-xs text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)]">Registrar repasse</button> : <span className="text-xs text-muted-foreground">Histórico preservado</span> }]} /></>}
+    {tab === "dre" && <div className="mt-5"><div className="surface-card mb-4 p-4 text-sm text-muted-foreground">DRE no regime de <b>{dre[0]?.modo === "competencia" ? "competência" : "caixa"}</b>, conforme a versão publicada em Cadastros. Linhas sem plano de contas aparecem como <b>Sem classificação</b> para saneamento, nunca são inventadas.</div><DataTable rows={dre.map((row, index) => ({ ...row, id: `${row.codigo}-${row.centro_custo_codigo}-${index}` }))} empty="Nenhum lançamento no período" columns={[{ key: "natureza", header: "Natureza", render: (row) => <StatusChip tone={row.natureza === "receita" ? "success" : "danger"}>{row.natureza}</StatusChip> }, { key: "codigo", header: "Conta" }, { key: "conta", header: "Descrição" }, { key: "centro_custo", header: "Centro de custo" }, { key: "total", header: "Total", align: "right", render: (row) => brl(row.total) }]} /></div>}
+    {tab === "faturas" && <div className="mt-5"><DataTable rows={faturas} empty="Nenhuma fatura registrada" columns={[{ key: "tipo", header: "Tipo", render: (row) => <StatusChip tone={row.tipo === "recebida" ? "info" : "brand"}>{row.tipo === "recebida" ? "Recebida no CNPJ" : "Emitida"}</StatusChip> }, { key: "numero", header: "Número" }, { key: "chave_acesso", header: "Chave" }, { key: "emissao", header: "Emissão", render: (row) => formatDate(row.emissao) }, { key: "vencimento", header: "Vencimento", render: (row) => formatDate(row.vencimento) }, { key: "valor", header: "Valor", align: "right", render: (row) => brl(row.valor) }, { key: "status", header: "Status", render: (row) => <StatusChip tone={row.status === "paga" ? "success" : "warning"}>{row.status}</StatusChip> }]} /></div>}
+  </AppShell>;
 }
 
-function mapCaixa(caixa: CaixaApi): UiCaixa {
-  return {
-    id: caixa.id,
-    tipo: caixa.tipo,
-    referencia: caixa.referencia ?? caixa.operador_nome,
-    saldo: caixa.saldo,
-    entradasDia: caixa.entradas_dia,
-    saidasDia: caixa.saidas_dia,
-    status: caixa.status,
-  };
-}
-
-function mapTitulo(titulo: FinanceiroTituloApi): UiTitulo {
-  const referencia = titulo.bilhete_codigo ?? titulo.carga_codigo ?? titulo.origem;
-  return {
-    id: titulo.id,
-    tipo: titulo.tipo,
-    descricao: titulo.descricao,
-    parte: titulo.parte_nome,
-    vencimento: new Date(`${titulo.vencimento}T00:00:00`).toLocaleDateString("pt-BR"),
-    valor: titulo.valor,
-    status: titulo.status,
-    origem: titulo.origem,
-    referencia,
-  };
-}
-
-function parseDecimal(value: string) {
-  const normalized = value.replace(/\./g, "").replace(",", ".").trim();
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function hojeISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function FormInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  inputMode,
-  className = "",
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  type?: string;
-  inputMode?: "decimal" | "numeric";
-  className?: string;
-}) {
-  return (
-    <label className={`text-xs text-muted-foreground ${className}`}>
-      {label}
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        className="mt-1 h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/55 focus:border-[color:var(--brand)]"
-      />
-    </label>
-  );
-}
+function FinanceiroForm({ title, onSave, busy, children }: { title: string; onSave: () => void; busy: boolean; children: React.ReactNode }) { return <div className="mt-4 surface-card border border-[color:var(--hairline-brand)] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold">{title}</h2><p className="mt-1 text-xs text-muted-foreground">O lançamento entra no histórico e fica disponível para auditoria.</p></div><PrimaryButton icon={CheckCircle2} disabled={busy} onClick={onSave}>{busy ? "Salvando..." : "Salvar"}</PrimaryButton></div><div className="mt-4">{children}</div></div>; }
+function InputField({ label, value, onChange, type = "text", inputMode, className = "" }: { label: string; value: string; onChange: (value: string) => void; type?: string; inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"]; className?: string }) { return <label className={`block text-xs text-muted-foreground ${className}`}>{label}<input type={type} inputMode={inputMode} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none focus:border-[color:var(--brand)]" /></label>; }
+function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<[string, string]> }) { return <label className="block text-xs text-muted-foreground">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--muted)] px-3 text-sm text-foreground outline-none focus:border-[color:var(--brand)]">{options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>; }
+function decimal(value: string) { const normalized = value.replace(/\./g, "").replace(",", ".").trim(); const parsed = Number(normalized); return Number.isFinite(parsed) ? parsed : 0; }
+function hojeISO() { return new Date().toISOString().slice(0, 10); }
+function primeiroDiaMes() { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10); }
+function intervalo(periodo: Periodo, de: string, ate: string) { const now = new Date(); const hoje = hojeISO(); if (periodo === "hoje") return { de: hoje, ate: hoje }; if (periodo === "semana") { const start = new Date(now); start.setDate(now.getDate() - ((now.getDay() + 6) % 7)); return { de: start.toISOString().slice(0, 10), ate: hoje }; } if (periodo === "mes") return { de: primeiroDiaMes(), ate: hoje }; return { de, ate }; }
+function formatDate(value: string | null) { return value ? new Date(`${value.slice(0, 10)}T00:00:00`).toLocaleDateString("pt-BR") : "—"; }
+function labelStatus(value: string) { return ({ aberto: "Em aberto", vence_semana: "Vence nesta semana", vencida: "Vencida", pago: "Pago", recebido: "Recebido", cancelado: "Cancelado" } as Record<string, string>)[value] ?? value; }
+function labelComissao(value: string) { return ({ em_aberto: "Em aberto", liberada: "Liberada", pago: "Pago", cancelada: "Cancelada" } as Record<string, string>)[value] ?? value; }
+async function fetchCaixas() { const { listCaixas } = await import("@/lib/ajc-api"); return listCaixas(); }

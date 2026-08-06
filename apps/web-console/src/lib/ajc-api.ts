@@ -2315,6 +2315,9 @@ export type FinanceiroTituloApi = {
   parte_nome: string;
   vencimento: string;
   valor: number;
+  valor_liquidado: number;
+  pago_em: string | null;
+  competencia: string | null;
   status: "aberto" | "vence_semana" | "vencida" | "pago" | "recebido" | "cancelado" | string;
   origem: string;
   observacao: string | null;
@@ -2325,6 +2328,19 @@ export type FinanceiroTituloApi = {
   carga_id: string | null;
   bilhete_id: string | null;
   cotacao_id: string | null;
+  viagem_id: string | null;
+  viagem_codigo: string | null;
+  plano_conta_id: string | null;
+  plano_conta_codigo: string | null;
+  plano_conta_nome: string | null;
+  centro_custo_id: string | null;
+  centro_custo_codigo: string | null;
+  centro_custo_nome: string | null;
+  parcela_numero: number | null;
+  parcelas_total: number | null;
+  documento_nome: string | null;
+  documento_url: string | null;
+  documento_hash: string | null;
   client_uuid: string | null;
   criado_em: string;
   atualizado_em: string | null;
@@ -2352,8 +2368,24 @@ export type CreateFinanceiroTituloInput = {
   cargaId?: string;
   bilheteId?: string;
   cotacaoId?: string;
+  competencia?: string;
+  planoContaId?: string;
+  centroCustoId?: string;
+  viagemId?: string;
+  parcelaNumero?: number;
+  parcelasTotal?: number;
+  documentoNome?: string;
+  documentoUrl?: string;
+  documentoHash?: string;
   clientUuid?: string;
 };
+
+export type FinanceiroResumoApi = { a_receber: number; a_pagar: number; recebido: number; pago: number; total: number; vencidas: number };
+export type FinanceiroComissaoApi = { id: string; agente_id: string; agente_nome: string; viagem_id: string | null; viagem_codigo: string | null; titulo_receber_id: string | null; base_valor: number; percentual: number; valor: number; status: "em_aberto" | "liberada" | "pago" | "cancelada"; aberta_em: string; liberada_em: string | null; paga_em: string | null; titulo_pagar_id: string | null };
+export type FinanceiroDreLinhaApi = { modo?: "caixa" | "competencia"; natureza: string; codigo: string; conta: string; centro_custo_codigo: string; centro_custo: string; total: number };
+export type FinanceiroFaturaApi = { id: string; tipo: "emitida" | "recebida"; cnpj_emitente: string | null; cnpj_destinatario: string | null; numero: string | null; chave_acesso: string | null; emissao: string | null; vencimento: string | null; valor: number; status: string; titulo_id: string | null; titulo_descricao: string | null; arquivo_url: string | null; observacao: string | null };
+export type FinanceiroPlanoContaApi = { id: string; codigo: string; nome: string; natureza: "receita" | "despesa" | "ativo" | "passivo" | "patrimonio"; conta_pai_id: string | null; conta_pai_codigo: string | null; conta_pai_nome: string | null; ativo: boolean };
+export type FinanceiroCentroCustoApi = { id: string; codigo: string; nome: string; ativo: boolean };
 
 export type OperacaoAlertaApi = {
   id: string;
@@ -2614,12 +2646,40 @@ export function fecharCaixa(caixaId: string, valorFechamento?: number) {
   });
 }
 
-export function listFinanceiroTitulos(params?: { tipo?: "receber" | "pagar" }) {
+export function listFinanceiroTitulos(params?: { tipo?: "receber" | "pagar"; de?: string; ate?: string; status?: string; busca?: string; planoContaId?: string; centroCustoId?: string }) {
   const search = new URLSearchParams();
   if (params?.tipo) search.set("tipo", params.tipo);
+  if (params?.de) search.set("de", params.de);
+  if (params?.ate) search.set("ate", params.ate);
+  if (params?.status) search.set("status", params.status);
+  if (params?.busca) search.set("busca", params.busca);
+  if (params?.planoContaId) search.set("planoContaId", params.planoContaId);
+  if (params?.centroCustoId) search.set("centroCustoId", params.centroCustoId);
   const suffix = search.toString() ? `?${search.toString()}` : "";
   return request<FinanceiroTituloApi[]>(`/caixa/titulos${suffix}`, { auth: true });
 }
+
+export function getFinanceiroResumo(params?: { de?: string; ate?: string }) {
+  const search = new URLSearchParams();
+  if (params?.de) search.set("de", params.de);
+  if (params?.ate) search.set("ate", params.ate);
+  return request<FinanceiroResumoApi>(`/caixa/resumo${search.size ? `?${search}` : ""}`, { auth: true });
+}
+
+export function liquidarFinanceiroTitulo(id: string, input: { valor?: number; dataLiquidacao?: string; formaPagamento?: string; observacao?: string; clientUuid?: string }) {
+  return request<FinanceiroTituloApi>(`/caixa/titulos/${id}/liquidar`, { method: "PATCH", auth: true, body: JSON.stringify(input) });
+}
+
+export function listFinanceiroComissoes() { return request<FinanceiroComissaoApi[]>("/caixa/comissoes", { auth: true }); }
+export function createFinanceiroComissao(input: { agenteId: string; tituloReceberId?: string; viagemId?: string; baseValor: number; percentual: number; clientUuid?: string }) { return request<FinanceiroComissaoApi>("/caixa/comissoes", { method: "POST", auth: true, body: JSON.stringify(input) }); }
+export function transitionFinanceiroComissao(id: string, acao: "liberada" | "pago" | "cancelada") { const endpoint = acao === "liberada" ? "liberar" : acao === "pago" ? "pagar" : "cancelar"; return request<FinanceiroComissaoApi>(`/caixa/comissoes/${id}/${endpoint}`, { method: "PATCH", auth: true, body: "{}" }); }
+export function getFinanceiroDre(params?: { de?: string; ate?: string }) { const search=new URLSearchParams(); if(params?.de)search.set("de",params.de);if(params?.ate)search.set("ate",params.ate);return request<FinanceiroDreLinhaApi[]>(`/caixa/dre${search.size?`?${search}`:""}`,{auth:true}); }
+export function listFinanceiroFaturas() { return request<FinanceiroFaturaApi[]>("/caixa/faturas", { auth: true }); }
+export function createFinanceiroFatura(input: { tipo: "emitida" | "recebida"; cnpjEmitente?: string; cnpjDestinatario?: string; numero?: string; chaveAcesso?: string; emissao?: string; vencimento?: string; valor: number; status?: string; tituloId?: string; arquivoUrl?: string; arquivoHash?: string; observacao?: string; clientUuid?: string }) { return request<FinanceiroFaturaApi>("/caixa/faturas", { method: "POST", auth: true, body: JSON.stringify(input) }); }
+export function listFinanceiroPlanoContas() { return request<FinanceiroPlanoContaApi[]>("/caixa/plano-contas", { auth: true }); }
+export function saveFinanceiroPlanoConta(input: { id?: string; codigo: string; nome: string; natureza: FinanceiroPlanoContaApi["natureza"]; contaPaiId?: string | null; ativo?: boolean }) { return request<FinanceiroPlanoContaApi>("/caixa/plano-contas", { method: "POST", auth: true, body: JSON.stringify(input) }); }
+export function listFinanceiroCentrosCusto() { return request<FinanceiroCentroCustoApi[]>("/caixa/centros-custo", { auth: true }); }
+export function saveFinanceiroCentroCusto(input: { id?: string; codigo: string; nome: string; ativo?: boolean }) { return request<FinanceiroCentroCustoApi>("/caixa/centros-custo", { method: "POST", auth: true, body: JSON.stringify(input) }); }
 
 export function createFinanceiroTitulo(input: CreateFinanceiroTituloInput) {
   return request<FinanceiroTituloApi>("/caixa/titulos", {

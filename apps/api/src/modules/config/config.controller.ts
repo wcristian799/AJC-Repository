@@ -23,6 +23,7 @@ import { validateEncomendasConfig } from "../encomendas/encomendas-config.valida
 import { validatePdvConfig } from "../vendas/vendas-pdv.validator";
 import { validateVeiculosOrigensConfig } from "../veiculos/veiculos-config.validator";
 import { validateBpeConfig } from "../fiscal/fiscal-config.validator";
+import { validateFinanceiroConfig } from "../caixa/financeiro-config.validator";
 
 interface PublishConfigBody {
   valor?: unknown;
@@ -74,6 +75,9 @@ export class ConfigController {
     if (chave.trim() === "vendas_bpe_integracao" && !user.permissions.includes("fiscal.configurar")) {
       throw new ForbiddenException("Permissao insuficiente para configurar BP-e");
     }
+    if (chave.trim() === "financeiro_operacao" && !user.permissions.includes("financeiro.configurar")) {
+      throw new ForbiddenException("Permissao insuficiente para configurar o financeiro");
+    }
     if (chave.trim() === "navegacao_rotas_horarios") {
       validateNavegacaoRoutesConfig(body.valor);
     }
@@ -100,6 +104,9 @@ export class ConfigController {
     }
     if (chave.trim() === "vendas_bpe_integracao") {
       validateBpeConfig(body.valor);
+    }
+    if (chave.trim() === "financeiro_operacao") {
+      validateFinanceiroConfig(body.valor);
     }
     return this.repository.publish(chave.trim(), body.valor, user.sub);
   }
