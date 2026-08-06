@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 
 export type EncomendasConfig = {
   limiteValorFixo: number;
+  limitePesoEncomenda: number;
   tamanhos: Array<{ codigo: string; nome: string; pesoMaxKg: number; ativo: boolean }>;
   formasPagamento: Array<{ codigo: string; nome: string; ativo: boolean }>;
   prazoRecebimentoDias: number;
@@ -13,6 +14,7 @@ export type EncomendasConfig = {
 export function validateEncomendasConfig(value: unknown): asserts value is EncomendasConfig {
   const config = record(value, 'Configuracao de encomendas invalida');
   positive(config.limiteValorFixo, 'limiteValorFixo');
+  positive(config.limitePesoEncomenda, 'limitePesoEncomenda');
   integer(config.prazoRecebimentoDias, 'prazoRecebimentoDias', 0, 365);
   if (typeof config.exigeFotoEncomenda !== 'boolean' || typeof config.exigeDocumento !== 'boolean') {
     throw new BadRequestException('exigeFotoEncomenda e exigeDocumento devem ser booleanos');

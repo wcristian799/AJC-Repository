@@ -267,11 +267,10 @@ export function OperationalPdvConfig() {
                 }
               />
               <Toggle
-                label="Integração fiscal ativa"
+                label="Integração fiscal ativa (gerenciada no bloco BP-e)"
                 value={draft.fiscal.integracaoAtiva}
-                onChange={(value) =>
-                  setDraft({ ...draft, fiscal: { ...draft.fiscal, integracaoAtiva: value } })
-                }
+                onChange={() => undefined}
+                disabled
               />
             </div>
           </Block>
@@ -351,10 +350,12 @@ function Toggle({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: boolean;
   onChange: (value: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="flex min-h-11 items-center justify-between gap-2 rounded-lg px-3 text-xs ring-1 ring-[color:var(--hairline)]">
@@ -362,6 +363,7 @@ function Toggle({
       <input
         type="checkbox"
         checked={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
         className="accent-[color:var(--brand)]"
       />

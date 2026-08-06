@@ -23,15 +23,23 @@ O arquivo `.pfx` provavelmente é um certificado digital A1 com chave privada, u
 - O front pode continuar mostrando BP-e como opção/obrigatoriedade por canal conforme reunião.
 - O backend fiscal poderá prever configuração segura para certificado A1, mas a implementação ainda depende das validações abaixo.
 
-## Pendências Que Continuam
+## Atualização 05/ago/2026
+
+- AJC confirmou que já emite BP-e por outro sistema; o credenciamento operacional deixa de ser bloqueio presumido.
+- Fornecedor escolhido: **NS BP-e API**.
+- Adapter real, outbox, worker, webhook, download e cancelamento foram implementados na migration 0037 e no módulo fiscal.
+- O PFX será mantido no cofre/painel da NS, não em volume da aplicação.
+
+## Pendências para ativação
 
 - Senha do arquivo PFX.
 - Validade do certificado.
 - Cadeia emissora e tipo de certificado, por exemplo e-CNPJ A1.
 - Confirmação de que este certificado pode ser usado no fluxo BP-e da AJC.
-- Credenciamento da AJC na SEFAZ-PA para BP-e.
-- Fornecedor/API/biblioteca fiscal para emissão de BP-e.
-- Ambiente de homologação e produção.
+- Contratação/liberação da conta NS e token de homologação/produção.
+- Upload seguro do PFX e confirmação da validade no painel NS.
+- Série exclusiva, próximo número e códigos fiscais aprovados pelo contador/NS.
+- Homologação completa antes da troca para produção.
 - Política operacional de renovação antes do vencimento.
 - Decisão de onde guardar o certificado em produção: secret manager, volume seguro ou serviço fiscal terceirizado.
 
@@ -41,5 +49,5 @@ Antes de construir o backend definitivo do Portal online:
 
 1. Validar o PFX com a senha correta em ambiente local controlado.
 2. Confirmar validade, CNPJ, cadeia e usos do certificado.
-3. Confirmar com contador/fornecedor fiscal o caminho BP-e/SEFAZ-PA.
+3. Executar o onboarding NS em `docs/deploy/NS-BPe-Onboarding.md`.
 4. Definir gateway de pagamento e emissão fiscal como dois fluxos plugáveis, ligados por estados de pedido/pagamento/bilhete.

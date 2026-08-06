@@ -111,6 +111,16 @@ os respectivos adapters e equipamentos estiverem homologados.
 
 `0036_documento_independente_viagem_gerente_origens_veiculos.sql` separa o lançamento fiscal da criação da carga, registra responsável/horário real do início e encerramento da viagem e transforma `envio_veiculo.origem_cadastro` em código configurável. A migration publica `veiculos_origens_cadastro` com os valores históricos apenas como carga inicial editável e cria a permissão `navegacao.operar_viagem`. Ela não apaga cargas antigas nem atribui automaticamente a nova permissão a perfis operacionais; essa distribuição deve ser feita em Cadastros conforme a função real de cada usuário.
 
+## Integração BP-e NS
+
+`0037_bpe_integracao_ns.sql` adiciona código IBGE às cidades, estados e metadados reais do BP-e, numeração segura por CNPJ/ambiente/série, webhook idempotente, permissões fiscais e a configuração versionada `vendas_bpe_integracao`. A configuração inicial nasce desativada e sem dados fiscais inventados. Aplicar antes de publicar a API/worker com o adapter NS.
+
+## Cliente de passagem e recortes de Vendas
+
+`0038_clientes_passagem_filtros_vendas.sql` separa o cliente de passagem do cliente corporativo do CRM, adiciona os snapshots pessoais ao bilhete e publica `limitePesoEncomenda` na configuração versionada. Aplicar antes do backend/front que usam os novos contratos.
+
+`0039_item_preco_tamanho_configuravel.sql` corrige o legado `char(1)` de `item_preco.tamanho`, permitindo os códigos configuráveis validados pela API sem erro interno do PostgreSQL.
+
 ## Auditoria imutável (produção)
 
 `audit_evento` é append-only. Em produção, revogar `UPDATE`/`DELETE` da role da aplicação

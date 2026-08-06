@@ -7,6 +7,7 @@ import { CaixaModule } from './modules/caixa/caixa.module';
 import { ConfigModule } from './modules/config/config.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { EncomendasModule } from './modules/encomendas/encomendas.module';
+import { FiscalModule } from './modules/fiscal/fiscal.module';
 import { NavegacaoModule } from './modules/navegacao/navegacao.module';
 import { OperacaoModule } from './modules/operacao/operacao.module';
 import { PortalModule } from './modules/portal/portal.module';
@@ -34,6 +35,7 @@ import { VendasModule } from './modules/vendas/vendas.module';
     TmsModule,
     VeiculosModule,
     EncomendasModule,
+    FiscalModule,
     VendasModule,
     CaixaModule,
     CrmModule,

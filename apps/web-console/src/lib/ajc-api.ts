@@ -341,6 +341,7 @@ export type CidadeApi = {
   sigla: string;
   nome: string;
   uf: string;
+  codigoIbge: string | null;
   isBase: boolean;
   ativo: boolean;
 };
@@ -349,6 +350,7 @@ export type SaveCidadeInput = {
   sigla?: string;
   nome: string;
   uf: string;
+  codigoIbge?: string | null;
   isBase: boolean;
   ativo: boolean;
 };
@@ -660,6 +662,60 @@ export function publishConfigValue(chave: string, valor: unknown) {
   });
 }
 
+export type BpeIntegrationConfigApi = {
+  schemaVersion: 1;
+  provider: "ns";
+  habilitada: boolean;
+  ambiente: "homologacao" | "producao";
+  versaoLayout: string;
+  serie: number | null;
+  numeroInicial: number | null;
+  modal: string;
+  verProc: string;
+  tpBPe: string;
+  indPres: string;
+  emitente: {
+    cnpj: string;
+    ie: string;
+    razaoSocial: string;
+    im: string;
+    cnae: string;
+    crt: string;
+    tar: string;
+    endereco: { logradouro: string; numero: string; bairro: string; codigoIbge: string; municipio: string; uf: string };
+  };
+  rotas: Array<{ origemSigla: string; destinoSigla: string; cPercurso: string; xPercurso: string; tpViagem: string; tpServ: string; tpTrecho: string }>;
+  classes: Array<{ classe: string; tpAcomodacao: string }>;
+  pagamentos: Array<{ formaPagamento: string; tPag: string }>;
+  componenteTarifa: string | null;
+  tipoDocumentoPassageiroPadrao: string | null;
+  impostos: Record<string, unknown>;
+  operacao: { pollingSegundos: number; tentativasConsulta: number; retryMinutos: number; maxTentativas: number };
+};
+
+export type BpeReadinessApi = {
+  provider: string;
+  habilitada: boolean;
+  ambiente: string | null;
+  configVersao: number | null;
+  configuracaoValida: boolean;
+  erroConfiguracao: string | null;
+  tokenConfigurado: boolean;
+  webhookConfigurado: boolean;
+  storageConfigurado: boolean;
+  cidadesSemCodigoIbge: Array<{ sigla: string; nome: string }>;
+  pronta: boolean;
+};
+
+export async function getBpeIntegrationConfig() {
+  const result = await getConfigValue("vendas_bpe_integracao");
+  return { ...result, valor: result.valor as BpeIntegrationConfigApi };
+}
+
+export function getBpeReadiness() {
+  return request<BpeReadinessApi>("/fiscal/bpe/configuracao/status", { auth: true });
+}
+
 export function listPrecos(params?: { tipo?: string }) {
   const search = new URLSearchParams();
   if (params?.tipo) search.set("tipo", params.tipo);
@@ -732,6 +788,7 @@ export type TmsCargaApi = {
 
 export type EncomendasConfigApi = {
   limiteValorFixo: number;
+  limitePesoEncomenda: number;
   tamanhos: Array<{ codigo: string; nome: string; pesoMaxKg: number; ativo: boolean }>;
   formasPagamento: Array<{ codigo: string; nome: string; ativo: boolean }>;
   prazoRecebimentoDias: number;
@@ -2012,6 +2069,11 @@ export type BilheteApi = {
   cliente_nome: string | null;
   passageiro_nome: string | null;
   passageiro_documento: string | null;
+  cliente_passagem_id?: string | null;
+  cliente_passagem_nome?: string | null;
+  passageiro_data_nascimento?: string | null;
+  passageiro_telefone?: string | null;
+  passageiro_sexo?: string | null;
   classe: string;
   subtipo: string | null;
   tipo: "online" | "pdv" | "totem" | "contrato" | "cortesia" | "gratuidade" | string;
@@ -2197,6 +2259,18 @@ export type VendasResumoApi = {
   }>;
 };
 
+export type ClientePassagemApi = {
+  id: string;
+  nome: string;
+  cpf: string | null;
+  data_nascimento: string;
+  telefone: string | null;
+  sexo: string;
+  ativo: boolean;
+  criado_em: string;
+  atualizado_em: string;
+};
+
 export type ValidarBilheteApiResult = {
   resultado: "valido" | "ja_validado" | "bloqueado";
   bilhete: BilheteApi;
@@ -2365,15 +2439,29 @@ export type OperacaoRelatorioDiaApi = {
   };
 };
 
-export function listBilhetes(params?: { viagemId?: string }) {
+export function listBilhetes(params?: { viagemId?: string; embarcacaoId?: string; dataInicio?: string; dataFim?: string }) {
   const search = new URLSearchParams();
   if (params?.viagemId) search.set("viagemId", params.viagemId);
+  if (params?.embarcacaoId) search.set("embarcacaoId", params.embarcacaoId);
+  if (params?.dataInicio) search.set("dataInicio", params.dataInicio);
+  if (params?.dataFim) search.set("dataFim", params.dataFim);
   const suffix = search.toString() ? `?${search.toString()}` : "";
   return request<BilheteApi[]>(`/vendas/bilhetes${suffix}`, { auth: true });
 }
 
-export function getVendasResumo() {
-  return request<VendasResumoApi>("/vendas/resumo", { auth: true });
+export function getVendasResumo(params?: { viagemId?: string; embarcacaoId?: string; dataInicio?: string; dataFim?: string }) {
+  const search = new URLSearchParams();
+  Object.entries(params ?? {}).forEach(([key, value]) => { if (value) search.set(key, value); });
+  const suffix = search.toString() ? `?${search}` : "";
+  return request<VendasResumoApi>(`/vendas/resumo${suffix}`, { auth: true });
+}
+
+export function listClientesPassagem(busca?: string) {
+  const suffix = busca?.trim() ? `?busca=${encodeURIComponent(busca.trim())}` : "";
+  return request<ClientePassagemApi[]>(`/vendas/clientes-passagem${suffix}`, { auth: true });
+}
+export function createClientePassagem(input: { nome: string; cpf?: string; dataNascimento: string; telefone?: string; sexo: string }) {
+  return request<ClientePassagemApi>("/vendas/clientes-passagem", { method: "POST", auth: true, body: JSON.stringify(input) });
 }
 
 export function createBilhete(input: CreateBilheteApiInput) {
@@ -2413,6 +2501,10 @@ export function createPdvVenda(input: {
     gratuidadeTipo?: "idoso" | "pcd" | "crianca" | "outro";
     documentoUrl?: string;
     observacoes?: string;
+    clientePassagemId?: string;
+    passageiroDataNascimento?: string;
+    passageiroTelefone?: string;
+    passageiroSexo?: string;
   }>;
   pagamentos: Array<{
     formaPagamento: "dinheiro" | "pix" | "cartao_credito" | "cartao_debito";

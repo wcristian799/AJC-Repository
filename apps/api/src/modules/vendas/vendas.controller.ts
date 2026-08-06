@@ -4,7 +4,7 @@ import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { VendasRepository } from './vendas.repository';
-import { CreateBilheteInput, CreateCortesiaInput, CreatePdvVendaInput, ValidarBilheteInput } from './vendas.types';
+import { CreateBilheteInput, CreateCortesiaInput, CreatePdvVendaInput, SaveClientePassagemInput, ValidarBilheteInput } from './vendas.types';
 
 @UseGuards(AuthGuard)
 @Controller('vendas')
@@ -13,15 +13,23 @@ export class VendasController {
 
   @Get('bilhetes')
   @RequirePermissions('vendas.ver')
-  listBilhetes(@Query('viagemId') viagemId?: string) {
-    return this.repository.listBilhetes(viagemId);
+  listBilhetes(@Query('viagemId') viagemId?: string, @Query('embarcacaoId') embarcacaoId?: string, @Query('dataInicio') dataInicio?: string, @Query('dataFim') dataFim?: string) {
+    return this.repository.listBilhetes({ viagemId, embarcacaoId, dataInicio, dataFim });
   }
 
   @Get('resumo')
   @RequirePermissions('vendas.ver')
-  resumo() {
-    return this.repository.resumo();
+  resumo(@Query('viagemId') viagemId?: string, @Query('embarcacaoId') embarcacaoId?: string, @Query('dataInicio') dataInicio?: string, @Query('dataFim') dataFim?: string) {
+    return this.repository.resumo({ viagemId, embarcacaoId, dataInicio, dataFim });
   }
+
+  @Get('clientes-passagem')
+  @RequirePermissions('vendas.ver')
+  listClientesPassagem(@Query('busca') busca?: string) { return this.repository.listClientesPassagem(busca); }
+
+  @Post('clientes-passagem')
+  @RequirePermissions('vendas.vender')
+  createClientePassagem(@Body() body: SaveClientePassagemInput, @CurrentUser() user: AuthTokenPayload) { return this.repository.createClientePassagem(body, user.sub); }
 
   @Get('bilhetes/:id')
   @RequirePermissions('vendas.ver')

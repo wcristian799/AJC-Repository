@@ -26,6 +26,7 @@
 | `prestacoes-anexos` | pendente | TMS | PDFs e comprovantes anexos da prestacao de contas (`prestacao_contas.anexos`) |
 | `veiculos-fotos-checklist` | pendente | Veiculos/Maquinas | Fotos por etapa/checklist (`envio_veiculo_foto.foto_url`) |
 | `vendas-gratuidades-documentos` | pendente | Vendas | Comprovantes/documentos de gratuidade (`gratuidade.documento_url`) |
+| `bpe-documentos` | ativo | Fiscal / Vendas | XML autorizado, DABPE PDF e XML de cancelamento. MinIO privado, SHA-256 persistido e download apenas por URL assinada temporaria. |
 
 ## Hospedagem recomendada
 

@@ -1,5 +1,29 @@
 # STATUS â€” DiÃ¡rio vivo do projeto AJC
 
+## Trabalho 2026-08-06 - Ajustes de Vendas, PDV e Encomendas
+
+- Vendas agora filtra no backend por Viagem / EmbarcaÃ§Ã£o e perÃ­odo da viagem. O mesmo recorte alimenta Passagens, Canais de venda, OcupaÃ§Ã£o por classe e RelatÃ³rio regulatÃ³rio.
+- O PDV deixou de reutilizar o cliente corporativo do CRM. A migration 0038 cria `cliente_passagem`, com nome, CPF, nascimento, telefone opcional e sexo, e persiste snapshots no bilhete.
+- A seleÃ§Ã£o de Viagem / EmbarcaÃ§Ã£o do PDV ganhou modal pesquisÃ¡vel com cÃ³digo, embarcaÃ§Ã£o, rota, data/hora e status.
+- O gerador de cortesias carrega as viagens mesmo se `limite_cortesia` estiver pendente; nesse caso somente a emissÃ£o fica bloqueada.
+- Cadastros > Encomendas ganhou labels explÃ­citas na tabela por trecho. O valor fixo vale atÃ© `limiteValorFixo`; o percentual Ã© aplicado somente acima dele.
+- O teto de encomenda passou a ser `limitePesoEncomenda`, editÃ¡vel na configuraÃ§Ã£o. Acima dele o backend orienta lanÃ§ar como carga. A migration preserva 30 kg como valor inicial editÃ¡vel, nÃ£o como constante de cÃ³digo.
+- A migration 0039 amplia `item_preco.tamanho` de `char(1)` para `varchar(24)`, eliminando o erro interno ao publicar cÃ³digos configurÃ¡veis maiores que um caractere.
+- QA: migrations locais 39/39, build NestJS no WSL e build TanStack/Vite/Nitro verdes. A suÃ­te Jest completa excedeu 120 s sem resultado e nÃ£o foi declarada verde.
+- Deploy: aplicar 0038 e 0039 antes da API/front. NÃ£o executar o seed mÃ­nimo em banco com vendas existentes, pois itens de preÃ§o jÃ¡ referenciados nÃ£o podem ser substituÃ­dos.
+
+## Trabalho 2026-08-05 - IntegraÃ§Ã£o real de BP-e via NS Tecnologia
+
+- Provedor decidido e implementado: NS BP-e API. O AJC nÃ£o fala SOAP diretamente com a SEFAZ e nÃ£o guarda PFX/senha; o certificado corporativo fica no cofre/painel da NS e os secrets ficam no Coolify.
+- Migration `0037_bpe_integracao_ns.sql` aplicada no PostgreSQL local. Ela adiciona cÃ³digo IBGE Ã s cidades, estados/metadados reais do BP-e, numeraÃ§Ã£o segura por CNPJ/ambiente/sÃ©rie, webhook idempotente, permissÃµes fiscais e a configuraÃ§Ã£o `vendas_bpe_integracao` desativada por padrÃ£o.
+- Vendas individuais, PDV e portal deixaram de gerar `stub_emitido`: criam pendÃªncia fiscal real na mesma transaÃ§Ã£o. TambÃ©m foi corrigido o uso da coluna inexistente `servico`; o contrato correto Ã© `provider`.
+- Worker pg-boss ganhou a fila `fiscal-bpe-emitir`, varredura da outbox, trava por documento e lease transacional contra emissÃ£o concorrente, emissÃ£o NS, consulta de processamento, retry, rejeiÃ§Ã£o, contingÃªncia e armazenamento de XML/DABPE no bucket privado `bpe-documentos` com SHA-256.
+- API fiscal criada para readiness, consulta por bilhete, reprocessamento, download assinado, cancelamento e webhook NS com Basic Auth/idempotÃªncia. A preparaÃ§Ã£o do cancelamento Ã© transacional, guarda o XML do evento e exige permissÃ£o/justificativa; credencial invÃ¡lida do webhook responde 401.
+- Cadastros â€º Cidades edita e pesquisa cÃ³digo IBGE. Cadastros â€º ConfiguraÃ§Ãµes operacionais ganhou painel BP-e com ambiente, sÃ©rie, nÃºmero inicial, emitente, percursos, classes, pagamentos, componente, tributaÃ§Ã£o e retry; token/PFX nÃ£o aparecem no navegador.
+- SeguranÃ§a/deploy: compose e `.env.coolify.example` documentam `BPE_NS_*` e webhook. ADR 04, runbook `docs/deploy/NS-BPe-Onboarding.md`, mÃ³dulo de Vendas, certificado, buckets e migrations foram atualizados.
+- QA: migration 37/37; build Nest verde; 14 suites/47 testes Jest verdes; build TanStack/Vite/Nitro/Vercel verde. InspeÃ§Ã£o autenticada em desktop e 390Ã—844 validou BP-e e Cidades sem overflow horizontal; os Ãºnicos logs observados eram do redirecionamento inicial sem token, anteriores ao login. Nenhuma chamada real Ã  NS foi feita sem token/conta de homologaÃ§Ã£o.
+- PrÃ³ximo passo externo: contratar/liberar NS BP-e API, subir o PFX no painel seguro, obter token, confirmar sÃ©rie exclusiva/prÃ³ximo nÃºmero e cÃ³digos fiscais com contador/NS, preencher Cadastros e executar a homologaÃ§Ã£o antes de produÃ§Ã£o.
+
 ## Trabalho 2026-08-04 - Intertrechos em horas e minutos
 - Cadastros > Configuracoes operacionais > Navegacao passou a editar o tempo de cada parada em campos separados de horas e minutos, preservando offsetMinutos no JSON versionado e no backend.
 - Exemplo: 960 minutos e apresentado como 16 h 00 min. O campo de minutos limita a faixa visual a 0-59 e a conversao para o total permanece automatica.
@@ -190,7 +214,7 @@ umero do pedido / venda ficaram explicitamente dinamicos pela primeira nota sele
 - **Proximo passo recomendado:** continuar lacunas auxiliares restantes: busca/assinatura real no despacho de encomenda, filtros AP/AR e stubs auditaveis finais de gateway/totem/balanca/notificacao.
 ## Trabalho 2026-07-03 - QR real em bilhetes e etiquetas
 - **Contexto:** `/cliente`, `/portal`, `/totem` e o preview de etiqueta ainda desenhavam QR deterministico decorativo, embora o backend ja gere `qr_token` real para bilhetes e UUID real para volumes/etiquetas.
-- **O que foi feito no front:** adicionada dependencia `qrcode` no `apps/web-console` e criado `RealQR`, que gera SVG QR Code real a partir do valor recebido. `/cliente` usa `bilhete.qr_token`, `/portal` usa `pixCopiaCola` no pagamento PIX e `qr_token/codigo` no bilhete confirmado, `/totem` usa `bilhete.qr_token`, e `FakeQR` virou wrapper compatível sobre `RealQR` para o preview de etiqueta continuar com o mesmo import sem renderizar QR fake.
+- **O que foi feito no front:** adicionada dependencia `qrcode` no `apps/web-console` e criado `RealQR`, que gera SVG QR Code real a partir do valor recebido. `/cliente` usa `bilhete.qr_token`, `/portal` usa `pixCopiaCola` no pagamento PIX e `qr_token/codigo` no bilhete confirmado, `/totem` usa `bilhete.qr_token`, e `FakeQR` virou wrapper compatÃ­vel sobre `RealQR` para o preview de etiqueta continuar com o mesmo import sem renderizar QR fake.
 - **Decisao de escopo:** isso nao altera gateway/BP-e/Bluetooth; apenas torna o QR escaneavel usando tokens reais ja existentes. Pagamento PIX segue stub auditavel ate fornecedor/gateway real.
 - **Verificacao:** `rg "QR fake|grid SVG|ClienteQR|TotemQR|function FakeQR" apps/web-console/src/routes apps/web-console/src/components/ops -g "*.tsx"` nao encontra geradores fake nas rotas; `bun run build` em `apps/web-console` exit 0 com SSR/Nitro.
 - **Proximo passo recomendado:** seguir lacunas auxiliares restantes: busca/assinatura real no despacho de encomenda, filtros AP/AR e stubs auditaveis finais de gateway/totem/balanca/notificacao.
@@ -298,11 +322,11 @@ umero do pedido / venda ficaram explicitamente dinamicos pela primeira nota sele
 
 ## Trabalho 2026-07-03 - Etiqueta com impressao/reimpressao auditavel
 - **Contexto:** `EtiquetaTab` mostrava preview real de volumes, mas imprimir/reimprimir ainda era visual. Como o modelo/protocolo da impressora Bluetooth segue pendente, a decisao foi fechar o contrato auditavel sem fingir driver real.
-- **O que foi feito no banco/backend:** criada a migration `0016_etiqueta_impressao.sql` com tabela `etiqueta_impressao`. `TmsController/TmsRepository` ganharam `GET /api/tms/etiquetas` e `POST /api/tms/volumes/:id/etiquetas`. A API registra impressao/reimpressao com protocolo `ETIQ/RETIQ`, payload canônico da etiqueta, status `stub_enfileirado`, `client_uuid`, usuario solicitante e `audit_evento`. Segunda impressao do mesmo volume bloqueia com 400; reimpressao reaproveita o mesmo UUID.
+- **O que foi feito no banco/backend:** criada a migration `0016_etiqueta_impressao.sql` com tabela `etiqueta_impressao`. `TmsController/TmsRepository` ganharam `GET /api/tms/etiquetas` e `POST /api/tms/volumes/:id/etiquetas`. A API registra impressao/reimpressao com protocolo `ETIQ/RETIQ`, payload canÃ´nico da etiqueta, status `stub_enfileirado`, `client_uuid`, usuario solicitante e `audit_evento`. Segunda impressao do mesmo volume bloqueia com 400; reimpressao reaproveita o mesmo UUID.
 - **O que foi feito no front:** `apps/web-console/src/lib/ajc-api.ts` ganhou `listTmsEtiquetas` e `printTmsEtiqueta`. `EtiquetaTab` carrega a lista real de etiquetas, registra impressao/reimpressao via API e mostra sucesso/erro mantendo o preview aprovado.
 - **Documentacao:** `docs/arquitetura/02-ADR-Backend-Estado-Atual.md` atualizado para 16 migrations e endpoints de etiqueta.
 - **Verificacao:** migration aplicada no WSL; `npm run build --workspace apps/api` exit 0; `npm test --workspace apps/api -- --runInBand` exit 0; `bun run build` exit 0. Smoke HTTP em API temporaria `:3036` registrou `ETIQ-2026-0001`, bloqueou segunda impressao com 400, registrou `RETIQ-2026-0001`, confirmou mesmo volume/UUID e listagem real; registros de smoke removidos e API encerrada com codigo 143.
-- **Proximo passo recomendado:** revisar lacunas restantes de TMS/Prestacao/Cadastros cargo ou partir para integrações externas bloqueadas apenas quando houver fornecedor/credencial/modelo da impressora.
+- **Proximo passo recomendado:** revisar lacunas restantes de TMS/Prestacao/Cadastros cargo ou partir para integraÃ§Ãµes externas bloqueadas apenas quando houver fornecedor/credencial/modelo da impressora.
 
 ## Trabalho 2026-07-03 - Paletes com alocacao real
 - **Contexto:** `PaletesTab` ja listava paletes reais, mas os botoes de cadastrar/alocar/liberar eram apenas visuais. A regra de `palete_viagem` tambem dizia que um palete nao pode estar em duas viagens, mas essa validacao ainda nao estava fechada em servico.
@@ -360,32 +384,32 @@ umero do pedido / venda ficaram explicitamente dinamicos pela primeira nota sele
 
 ## Trabalho 2026-07-02 - Front sem mocks + BP-e stub no back
 
-### Resumo geral (auditoria da transcrição)
-- **Auditoria da documentação feita pela outra IA:** ? **feita corretamente**. Consolidação em `docs/feedback/2026-06-25-validacao-core-telas.md` cobre os pontos centrais (Nova Viagem/Nova Carga do Lucas, BP-e, Veículos/Máquinas no MVP, financeiro pós-MVP, portal online por último, certificado PFX, FAQ 2026, checklist Frota Martins). Pendências externas (gateway PIX, BP-e real, credenciamento SEFAZ, fornecedor fiscal) corretamente sinalizadas como ??. Pontos deixados em aberto aguardando o Lucas (siglas PD/PC, classe/categoria de fornecedores, campos CRM).
-- **Lacunas menores fechadas nesta sessão:** BP-e em 3 níveis documentado em `docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md` §9 e `docs/modulos/02-Vendas-Passagens.md` §C.7; checklist de veículo embutido no app do conferente registrado no SPEC §6; DRE/plano de contas tem estudo real registrado no SPEC §11 para fase posterior.
+### Resumo geral (auditoria da transcriÃ§Ã£o)
+- **Auditoria da documentaÃ§Ã£o feita pela outra IA:** ? **feita corretamente**. ConsolidaÃ§Ã£o em `docs/feedback/2026-06-25-validacao-core-telas.md` cobre os pontos centrais (Nova Viagem/Nova Carga do Lucas, BP-e, VeÃ­culos/MÃ¡quinas no MVP, financeiro pÃ³s-MVP, portal online por Ãºltimo, certificado PFX, FAQ 2026, checklist Frota Martins). PendÃªncias externas (gateway PIX, BP-e real, credenciamento SEFAZ, fornecedor fiscal) corretamente sinalizadas como ??. Pontos deixados em aberto aguardando o Lucas (siglas PD/PC, classe/categoria de fornecedores, campos CRM).
+- **Lacunas menores fechadas nesta sessÃ£o:** BP-e em 3 nÃ­veis documentado em `docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md` Â§9 e `docs/modulos/02-Vendas-Passagens.md` Â§C.7; checklist de veÃ­culo embutido no app do conferente registrado no SPEC Â§6; DRE/plano de contas tem estudo real registrado no SPEC Â§11 para fase posterior.
 
 ### Estado dos componentes
-- **Todos os tabs TMS já usam API real:** `PortariaTab`, `ColetorTab`, `EntregasTab`, `NotasTab`, `PrestacaoTab`, `ControleTab`, `EtiquetaTab`, `PaletesTab`, `CrossDockingTab`, `VeiculosTab` — todos consomem endpoints via `ajc-api.ts`. Zero imports de mocks operacionais.
-- **Apps de campo (`/campo/*`):** portaria, conferencia, recebimento, entregas — todos com `FieldShell` próprio e API real.
-- **Rotas públicas/venda:** `/portal` (busca, pedido, pagamento stub), `/cliente` (minhas viagens), `/pos` (PDV porto com checkbox BP-e), `/totem`, `/embarque` — todos conectados ao backend real nas ações principais.
-- **Rotas internas:** `/app/inicio`, `/app/navegacao` (escalas reais), `/app/tms`, `/app/vendas` (agregados reais), `/app/cadastros` (criação real de fornecedores/colaboradores), `/app/crm` mutável, `/app/encomendas`, `/app/financeiro` (AP/AR leve) — todos funcionais.
+- **Todos os tabs TMS jÃ¡ usam API real:** `PortariaTab`, `ColetorTab`, `EntregasTab`, `NotasTab`, `PrestacaoTab`, `ControleTab`, `EtiquetaTab`, `PaletesTab`, `CrossDockingTab`, `VeiculosTab` ? todos consomem endpoints via `ajc-api.ts`. Zero imports de mocks operacionais.
+- **Apps de campo (`/campo/*`):** portaria, conferencia, recebimento, entregas ? todos com `FieldShell` prÃ³prio e API real.
+- **Rotas pÃºblicas/venda:** `/portal` (busca, pedido, pagamento stub), `/cliente` (minhas viagens), `/pos` (PDV porto com checkbox BP-e), `/totem`, `/embarque` ? todos conectados ao backend real nas aÃ§Ãµes principais.
+- **Rotas internas:** `/app/inicio`, `/app/navegacao` (escalas reais), `/app/tms`, `/app/vendas` (agregados reais), `/app/cadastros` (criaÃ§Ã£o real de fornecedores/colaboradores), `/app/crm` mutÃ¡vel, `/app/encomendas`, `/app/financeiro` (AP/AR leve) ? todos funcionais.
 
-### Backend: BP-e stub auditável
+### Backend: BP-e stub auditÃ¡vel
 - **Campo adicionado:** `CreateBilheteInput.emitirBpe?: boolean` em `apps/api/src/modules/vendas/vendas.types.ts`.
-- **Stub gerado automaticamente:** quando `emitirBpe=true`, `createBilhete` insere registro em `bilhete_documento_fiscal` com status `stub_emitido` e payload descrevendo que o fornecedor/SEFAZ/PFX ainda não estão configurados. Mesma abordagem usada pelo portal em `modules/portal/portal.repository.ts`.
-- **Front já marca o checkbox:** `/pos` passa a flag na observação (“BP-e solicitado no ato”). A integração direta no parâmetro `emitirBpe` será feita em uma próxima fatia se necessário.
+- **Stub gerado automaticamente:** quando `emitirBpe=true`, `createBilhete` insere registro em `bilhete_documento_fiscal` com status `stub_emitido` e payload descrevendo que o fornecedor/SEFAZ/PFX ainda nÃ£o estÃ£o configurados. Mesma abordagem usada pelo portal em `modules/portal/portal.repository.ts`.
+- **Front jÃ¡ marca o checkbox:** `/pos` passa a flag na observaÃ§Ã£o (?BP-e solicitado no ato?). A integraÃ§Ã£o direta no parÃ¢metro `emitirBpe` serÃ¡ feita em uma prÃ³xima fatia se necessÃ¡rio.
 
-### Documentação
-- **ADR 02 criado:** `docs/arquitetura/02-ADR-Backend-Estado-Atual.md` — módulos implementados, migrations, endpoints públicos, como rodar localmente e pendências externas.
-- **AGENTS.md atualizado:** referência ao novo ADR adicionada no mapa de documentação.
+### DocumentaÃ§Ã£o
+- **ADR 02 criado:** `docs/arquitetura/02-ADR-Backend-Estado-Atual.md` ? mÃ³dulos implementados, migrations, endpoints pÃºblicos, como rodar localmente e pendÃªncias externas.
+- **AGENTS.md atualizado:** referÃªncia ao novo ADR adicionada no mapa de documentaÃ§Ã£o.
 
-### Verificações
+### VerificaÃ§Ãµes
 - **Build front:** `bun run build` exit 0 em `apps/web-console`.
 - **Build back:** `npm run build` exit 0 em `apps/api`.
 - **Zero mocks operacionais:** `rg '@/mocks/data' apps/web-console/src` retorna vazio.
 
-### Próxima frente recomendada
-Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*` ? `/pos` ? `/totem` ? `/embarque` ? `/app/cadastros`), implementar gateway PIX/cartão real, destravar BP-e (senha, validade, credenciamento SEFAZ-PA, fornecedor/API), e avançar para o Portal online completo (checkout público com pagamento integrado). Financeiro completo/DRE/Compras ficam para fase posterior conforme conversa com o cliente.
+### PrÃ³xima frente recomendada
+Integrar front?back removendo mocks residuais por mÃ³dulo (prioridade: `/campo/*` ? `/pos` ? `/totem` ? `/embarque` ? `/app/cadastros`), implementar gateway PIX/cartÃ£o real, destravar BP-e (senha, validade, credenciamento SEFAZ-PA, fornecedor/API), e avanÃ§ar para o Portal online completo (checkout pÃºblico com pagamento integrado). Financeiro completo/DRE/Compras ficam para fase posterior conforme conversa com o cliente.
 
 ## Trabalho 2026-07-02 - Front web sem imports de mocks operacionais
 - **Contexto:** depois das fatias de TMS/Encomendas/Vendas, ainda restavam imports de `@/mocks/data` em `/app/cadastros`, `/cliente`, `/portal`, `/pos`, `/totem` e `/embarque`.
@@ -528,20 +552,20 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - **Verificacao:** `bun run build` em `apps/web-console` exit 0.
 - **Proximo passo recomendado:** conectar apps de campo `/campo/*` ao backend TMS real, com chamadas de criacao de portaria, evento de volume/bipe e entrega com protocolo; depois seguir para `/app/vendas`, `/pos`, `/totem` e `/embarque`.
 
-## Trabalho 2026-07-02 — Fechamento das lacunas de documentação da validação + QA final
+## Trabalho 2026-07-02 ? Fechamento das lacunas de documentaÃ§Ã£o da validaÃ§Ã£o + QA final
 
-**Contexto:** retomar após auditoria da transcrição para fechar as 3 lacunas documentais identificadas pela outra IA, revisar módulos desatualizados e fazer QA visual/build do front.
+**Contexto:** retomar apÃ³s auditoria da transcriÃ§Ã£o para fechar as 3 lacunas documentais identificadas pela outra IA, revisar mÃ³dulos desatualizados e fazer QA visual/build do front.
 
 **O que foi feito:**
-1. **Lacuna 1 — BP-e em 3 níveis:** documentado no SPEC (`docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md`) e no módulo Vendas-Passagens (`docs/modulos/02-Vendas-Passagens.md` §C.7). Front já implementa nível 1 (PDV com checkbox emitir/não emitir) em `apps/web-console/src/routes/pos.tsx`; portal emite automático via backend; app do agente fica opcional.
-2. **Lacuna 2 — Checklist de veículo embutido:** registrado no SPEC seção Veículos/Máquinas que o checklist deve viver no app do conferente, não em app separado.
-3. **Lacuna 3 — DRE/plano de contas tem estudo real:** registrado no SPEC seção Financeiro mockado que existe consultoria 2026 para usar na fase posterior.
-4. **Revisão de módulos:** módulo 02-Vendas-Passagens atualizado com os 3 níveis de BP-e; demais módulos revisados contra decisões fechadas.
+1. **Lacuna 1 ? BP-e em 3 nÃ­veis:** documentado no SPEC (`docs/fase-1/01-SPEC-Tarefas-Ajustes-Front-Pos-Validacao.md`) e no mÃ³dulo Vendas-Passagens (`docs/modulos/02-Vendas-Passagens.md` Â§C.7). Front jÃ¡ implementa nÃ­vel 1 (PDV com checkbox emitir/nÃ£o emitir) em `apps/web-console/src/routes/pos.tsx`; portal emite automÃ¡tico via backend; app do agente fica opcional.
+2. **Lacuna 2 ? Checklist de veÃ­culo embutido:** registrado no SPEC seÃ§Ã£o VeÃ­culos/MÃ¡quinas que o checklist deve viver no app do conferente, nÃ£o em app separado.
+3. **Lacuna 3 ? DRE/plano de contas tem estudo real:** registrado no SPEC seÃ§Ã£o Financeiro mockado que existe consultoria 2026 para usar na fase posterior.
+4. **RevisÃ£o de mÃ³dulos:** mÃ³dulo 02-Vendas-Passagens atualizado com os 3 nÃ­veis de BP-e; demais mÃ³dulos revisados contra decisÃµes fechadas.
 5. **QA visual + build:** `bun run build` exit 0; front aprovado mantido intacto.
 
-**Conclusão:** todas as tarefas pendentes (#1–#8) foram concluídas. O front mockado está alinhado com as regras da reunião, a documentação reflete as decisões do cliente e o build passa sem erros.
+**ConclusÃ£o:** todas as tarefas pendentes (#1?#8) foram concluÃ­das. O front mockado estÃ¡ alinhado com as regras da reuniÃ£o, a documentaÃ§Ã£o reflete as decisÃµes do cliente e o build passa sem erros.
 
-**Próximo passo recomendado:** iniciar integração back?contrato?front removendo mocks por módulo quando houver endpoint real equivalente (prioridade: `/app/tms` + `/campo/*`, depois `/app/vendas` + `/pos` + `/totem` + `/embarque`, `/app/cadastros`, caixa/CRM). Portal online entra por último conforme decisão do cliente.
+**PrÃ³ximo passo recomendado:** iniciar integraÃ§Ã£o back?contrato?front removendo mocks por mÃ³dulo quando houver endpoint real equivalente (prioridade: `/app/tms` + `/campo/*`, depois `/app/vendas` + `/pos` + `/totem` + `/embarque`, `/app/cadastros`, caixa/CRM). Portal online entra por Ãºltimo conforme decisÃ£o do cliente.
 - **Contexto:** continuidade da integracao front/back apos `/portal` e `/cliente`; objetivo e remover mocks por modulo sem redesenhar o front aprovado.
 - **O que foi feito:** `apps/web-console/src/lib/ajc-api.ts` ganhou sessao autenticada (`login`, `refresh`, `me`, `logout`) com token em `localStorage`, chamadas protegidas e tipos para viagens/templates/embarcacoes. A tela de login cinematografica passou a chamar `POST /api/auth/login` com login corporativo, salvar a sessao e redirecionar para `/app/inicio`; `/app/*` agora valida a sessao em `GET /api/auth/me`.
 - **Navegacao conectada:** `/app/navegacao` passou a carregar `GET /api/navegacao/viagens`, `GET /api/navegacao/templates-rotas` e `GET /api/cadastros/embarcacoes`; KPIs, calendario, painel operacional, frota, cronograma, capacidade e tabela de embarcacoes deixam de usar `EMBARCACOES`/`VIAGENS` do mock. Escala de colaboradores ainda usa mock porque falta endpoint dedicado de escala/alocacao.
@@ -893,3 +917,12 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*`
 - Legado: cargas antigas criadas automaticamente nao foram apagadas. Elas podem ter movimentacao fisica e devem ser auditadas antes de saneamento assistido.
 - Producao: aplicar a migration 0036, publicar API/front juntos, conceder `navegacao.operar_viagem` ao perfil Gerente da Embarcacao em Cadastros e renovar o login/token dos usuarios afetados.
 - Inspecao visual: o navegador voltou a conectar depois da limpeza, mas o servidor web aberto em `:8081` redirecionou para login e a API local respondeu `Nao foi possivel entrar agora`; `:8080` era uma superficie vazia do host. Sem autenticar, nao foi possivel validar visualmente as tres telas nesta execucao. Nao foi criado dado de teste nem simulada sessao.
+
+## Auditoria 2026-08-05 - viabilidade de BP-e direto com SEFAZ
+
+- O Portal Nacional/SVRS disponibiliza publicamente MOC 1.00b, leiaute, DABPE, Nota Tecnica 2026.002 v1.01 e o pacote oficial de schemas atualizado. O pacote foi baixado temporariamente e conferido; inclui BP-e normal, XMLDSig, consulta, status, cancelamento, nao embarque, alteracao de poltrona, excesso de bagagem e vinculacao/cancelamento de pagamento.
+- O leiaute vigente contempla `modal=3` Aquaviario, servicos longitudinal/travessia, acomodacoes de rede/cabine e dados do responsavel tecnico. A Reforma Tributaria ja aparece nos schemas por grupos IBS/CBS, portanto os valores fiscais nao podem ser inventados pelo ERP.
+- Os WSDLs oficiais de homologacao/producao e os endpoints de recepcao, consulta, status e eventos estao publicados. A tentativa sem certificado recebeu HTTP 403, consistente com a exigencia de certificado cliente/mTLS; a proxima prova tecnica precisa carregar o PFX por secret, sem expor a senha em chat, Git, banco ou log.
+- O PFX da AJC foi localizado fora do repositorio e teve apenas existencia/tamanho/hash conferidos. Subject, issuer, validade, EKU, cadeia e handshake nao foram validados porque a senha nao foi fornecida ao processo de auditoria.
+- Parecer: a integracao SOAP direta e tecnicamente executavel pela equipe, preservando a outbox/worker/MinIO ja implementados para a NS. Entretanto, producao ainda depende de confirmar credenciamento e homologacao da IE/estabelecimento na SEFAZ-PA, autorizador aplicavel, serie exclusiva/proximo numero, dados tributarios ICMS/IBS/CBS, CFOP/codigos operacionais e regras estaduais com contador/SEFAZ.
+- Nenhuma troca do adapter NS foi realizada nesta auditoria. Se aprovada, registrar novo ADR e implementar um provider SEFAZ direto mantendo a interface fiscal e a NS como fallback opcional ate a homologacao real.

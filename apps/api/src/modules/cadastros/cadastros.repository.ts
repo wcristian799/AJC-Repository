@@ -8,6 +8,7 @@ export interface CidadeDto {
   sigla: string;
   nome: string;
   uf: string;
+  codigoIbge: string | null;
   isBase: boolean;
   ativo: boolean;
 }
@@ -16,6 +17,7 @@ export interface SaveCidadeInput {
   sigla?: string;
   nome?: string;
   uf?: string;
+  codigoIbge?: string | null;
   isBase?: boolean;
   ativo?: boolean;
 }
@@ -315,11 +317,12 @@ export class CadastrosRepository {
       sigla: string;
       nome: string;
       uf: string;
+      codigo_ibge: string | null;
       is_base: boolean;
       ativo: boolean;
     }>(
       `
-      SELECT id, sigla, nome, uf, is_base, ativo
+      SELECT id, sigla, nome, uf, codigo_ibge, is_base, ativo
       FROM cidade
       ORDER BY is_base DESC, nome
       `,
@@ -329,6 +332,7 @@ export class CadastrosRepository {
       sigla: row.sigla,
       nome: row.nome,
       uf: row.uf,
+      codigoIbge: row.codigo_ibge,
       isBase: row.is_base,
       ativo: row.ativo,
     }));
@@ -338,14 +342,14 @@ export class CadastrosRepository {
     const normalized = normalizeCidadeInput(input, true);
     const saved = await this.db.tx(async (client) => {
       const result = await client.query<{
-        id: string; sigla: string; nome: string; uf: string; is_base: boolean; ativo: boolean;
+        id: string; sigla: string; nome: string; uf: string; codigo_ibge: string | null; is_base: boolean; ativo: boolean;
       }>(
         `
-        INSERT INTO cidade (sigla, nome, uf, is_base, ativo)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, sigla, nome, uf, is_base, ativo
+        INSERT INTO cidade (sigla, nome, uf, codigo_ibge, is_base, ativo)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, sigla, nome, uf, codigo_ibge, is_base, ativo
         `,
-        [normalized.sigla, normalized.nome, normalized.uf, normalized.isBase, normalized.ativo],
+        [normalized.sigla, normalized.nome, normalized.uf, normalized.codigoIbge, normalized.isBase, normalized.ativo],
       ).catch((error: { code?: string }) => {
         if (error.code === '23505') throw new BadRequestException('Ja existe uma cidade com esta sigla');
         throw error;
@@ -361,8 +365,8 @@ export class CadastrosRepository {
     const sigla = normalizeCidadeSigla(siglaParam);
     return this.db.tx(async (client) => {
       const beforeResult = await client.query<{
-        id: string; sigla: string; nome: string; uf: string; is_base: boolean; ativo: boolean;
-      }>('SELECT id, sigla, nome, uf, is_base, ativo FROM cidade WHERE sigla = $1 FOR UPDATE', [sigla]);
+        id: string; sigla: string; nome: string; uf: string; codigo_ibge: string | null; is_base: boolean; ativo: boolean;
+      }>('SELECT id, sigla, nome, uf, codigo_ibge, is_base, ativo FROM cidade WHERE sigla = $1 FOR UPDATE', [sigla]);
       const before = beforeResult.rows[0];
       if (!before) throw new NotFoundException('Cidade nao encontrada');
       if (input.sigla !== undefined && normalizeCidadeSigla(input.sigla) !== sigla) {
@@ -372,6 +376,7 @@ export class CadastrosRepository {
         sigla,
         nome: input.nome ?? before.nome,
         uf: input.uf ?? before.uf,
+        codigoIbge: input.codigoIbge === undefined ? before.codigo_ibge : input.codigoIbge,
         isBase: input.isBase ?? before.is_base,
         ativo: input.ativo ?? before.ativo,
       }, true);
@@ -379,15 +384,15 @@ export class CadastrosRepository {
         await this.ensureCidadeCanBeDisabled(client, sigla);
       }
       const updatedResult = await client.query<{
-        id: string; sigla: string; nome: string; uf: string; is_base: boolean; ativo: boolean;
+        id: string; sigla: string; nome: string; uf: string; codigo_ibge: string | null; is_base: boolean; ativo: boolean;
       }>(
         `
         UPDATE cidade
-        SET nome = $2, uf = $3, is_base = $4, ativo = $5
+        SET nome = $2, uf = $3, codigo_ibge = $4, is_base = $5, ativo = $6
         WHERE sigla = $1
-        RETURNING id, sigla, nome, uf, is_base, ativo
+        RETURNING id, sigla, nome, uf, codigo_ibge, is_base, ativo
         `,
-        [sigla, normalized.nome, normalized.uf, normalized.isBase, normalized.ativo],
+        [sigla, normalized.nome, normalized.uf, normalized.codigoIbge, normalized.isBase, normalized.ativo],
       );
       const updated = updatedResult.rows[0];
       await this.auditWithClient(client, 'cidade', updated.id, 'atualizar', userId, mapCidade(before), mapCidade(updated));
@@ -1014,6 +1019,7 @@ type CidadeRow = {
   sigla: string;
   nome: string;
   uf: string;
+  codigo_ibge: string | null;
   is_base: boolean;
   ativo: boolean;
 };
@@ -1024,6 +1030,7 @@ function mapCidade(row: CidadeRow): CidadeDto {
     sigla: row.sigla,
     nome: row.nome,
     uf: row.uf,
+    codigoIbge: row.codigo_ibge,
     isBase: row.is_base,
     ativo: row.ativo,
   };
@@ -1041,16 +1048,21 @@ export function normalizeCidadeInput(input: SaveCidadeInput, requireSigla: boole
   const sigla = requireSigla ? normalizeCidadeSigla(input.sigla) : undefined;
   const nome = input.nome?.trim().replace(/\s+/g, ' ') ?? '';
   const uf = input.uf?.trim().toUpperCase() ?? '';
+  const codigoIbge = input.codigoIbge?.replace(/\D/g, '') || null;
   if (nome.length < 2 || nome.length > 120) {
     throw new BadRequestException('Nome da cidade deve ter de 2 a 120 caracteres');
   }
   if (!/^[A-Z]{2}$/.test(uf)) {
     throw new BadRequestException('UF deve conter duas letras');
   }
+  if (codigoIbge !== null && !/^[0-9]{7}$/.test(codigoIbge)) {
+    throw new BadRequestException('Codigo IBGE deve conter sete digitos');
+  }
   return {
     sigla: sigla!,
     nome,
     uf,
+    codigoIbge,
     isBase: input.isBase === true,
     ativo: input.ativo !== false,
   };

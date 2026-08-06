@@ -119,6 +119,7 @@ function bilheteToRow(b: BilheteApi): PassagemRow {
     qr: b.qr_token ?? b.codigo,
     viagemId: b.viagem_id,
     viagemCodigo: b.viagem_codigo,
+    embarcacaoNome: b.embarcacao_nome,
     classe: tipoLabel ?? CLASSE_LABEL[b.classe] ?? b.classe,
     passageiro: b.passageiro_nome ?? b.cliente_nome ?? "Passageiro sem nome",
     documento: b.passageiro_documento ?? "-",
@@ -237,6 +238,7 @@ function Vendas() {
   const [viagens, setViagens] = useState<NavegacaoViagemApi[]>([]);
   const [precosPassagem, setPrecosPassagem] = useState<PrecoPassagemMatrizApi[]>([]);
   const [resumo, setResumo] = useState<VendasResumoApi | null>(null);
+  const [filtros, setFiltros] = useState({ viagemId: "", embarcacaoId: "", dataInicio: "", dataFim: "" });
   const [erro, setErro] = useState<string | null>(null);
   const [novaPassagemOpen, setNovaPassagemOpen] = useState(false);
   const [salvandoPassagem, setSalvandoPassagem] = useState(false);
@@ -335,6 +337,14 @@ function Vendas() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!viagens.length) return;
+    const params = { viagemId: filtros.viagemId || undefined, embarcacaoId: filtros.embarcacaoId || undefined, dataInicio: filtros.dataInicio || undefined, dataFim: filtros.dataFim || undefined };
+    Promise.all([listBilhetes(params), getVendasResumo(params), listGratuidades(params.viagemId ? { viagemId: params.viagemId } : undefined)])
+      .then(([tickets, summary, gratuidades]) => { setBilhetes(tickets); setResumo(summary); setGratuidadesApi(gratuidades); })
+      .catch((error) => setErro(error instanceof Error ? error.message : "Falha ao aplicar filtros de vendas"));
+  }, [filtros, viagens.length]);
 
   async function criarPassagem() {
     const viagem = viagemSelecionada;
@@ -470,6 +480,16 @@ function Vendas() {
         />
       </section>
       {erro && <p className="mt-3 text-xs text-[color:var(--danger)]">{erro}</p>}
+
+      <section className="mt-5 surface-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="champagne-eyebrow">Recorte operacional</p><p className="mt-1 text-sm text-muted-foreground">Os indicadores abaixo usam somente a Viagem / Embarcação e o período selecionados.</p></div><button type="button" className="text-xs text-muted-foreground underline" onClick={() => setFiltros({ viagemId: "", embarcacaoId: "", dataInicio: "", dataFim: "" })}>Limpar filtros</button></div>
+        <div className="mt-3 grid gap-3 md:grid-cols-4">
+          <label className="text-xs text-muted-foreground">Viagem / Embarcação<select className={`${inputCls} mt-1`} value={filtros.viagemId} onChange={(e) => setFiltros((f) => ({ ...f, viagemId: e.target.value }))}><option value="">Todas</option>{viagens.map((v) => <option key={v.id} value={v.id}>{viagemLabel(v)}</option>)}</select></label>
+          <label className="text-xs text-muted-foreground">Embarcação<select className={`${inputCls} mt-1`} value={filtros.embarcacaoId} onChange={(e) => setFiltros((f) => ({ ...f, embarcacaoId: e.target.value }))}><option value="">Todas</option>{[...new Map(viagens.map((v) => [v.embarcacaoId, v])).values()].map((v) => <option key={v.embarcacaoId} value={v.embarcacaoId}>{v.embarcacaoNome}</option>)}</select></label>
+          <label className="text-xs text-muted-foreground">Data inicial<input type="date" className={`${inputCls} mt-1`} value={filtros.dataInicio} onChange={(e) => setFiltros((f) => ({ ...f, dataInicio: e.target.value }))}/></label>
+          <label className="text-xs text-muted-foreground">Data final<input type="date" className={`${inputCls} mt-1`} value={filtros.dataFim} onChange={(e) => setFiltros((f) => ({ ...f, dataFim: e.target.value }))}/></label>
+        </div>
+      </section>
 
       <div className="mt-6 flex flex-wrap items-center gap-1 border-b border-[color:var(--hairline)]">
         {tabs.map(([k, label]) => (
@@ -615,7 +635,7 @@ function Vendas() {
               {
                 key: "viagem",
                 header: "Viagem",
-                render: (r) => <span className="font-mono text-xs">{r.viagemCodigo}</span>,
+                render: (r) => <span className="text-xs"><span className="font-mono">{r.viagemCodigo}</span> / {r.embarcacaoNome}</span>,
               },
               {
                 key: "classe",
@@ -925,16 +945,16 @@ function CortesiasTab() {
     let alive = true;
     async function load() {
       try {
-        const [viagens, cortesiasApi, limiteConfig] = await Promise.all([
+        const [viagens, cortesiasApi] = await Promise.all([
           listNavegacaoViagens(),
           listCortesias(),
-          getConfigValue("limite_cortesia"),
         ]);
+        const limiteConfig = await getConfigValue("limite_cortesia").catch(() => null);
         if (!alive) return;
         const ativas = viagens.filter((v) => v.status !== "concluida" && v.status !== "cancelada");
         setViagensAtivas(ativas);
         setCortesias(cortesiasApi);
-        setLimitePorViagem(parseLimiteCortesia(limiteConfig.valor));
+        setLimitePorViagem(parseLimiteCortesia(limiteConfig?.valor));
         if (ativas[0]) setViagemId((current) => current || ativas[0].id);
       } catch (error) {
         console.error(error);

@@ -401,11 +401,11 @@ export class PortalRepository {
         );
         await client.query(
           `
-          INSERT INTO bilhete_documento_fiscal (bilhete_id, status, provider, payload, emitido_em)
-          VALUES ($1, 'stub_emitido', 'stub', $2::jsonb, now())
+          INSERT INTO bilhete_documento_fiscal (bilhete_id, status, provider, payload, proxima_tentativa_em)
+          VALUES ($1, 'pendente', 'ns', $2::jsonb, now())
           ON CONFLICT (bilhete_id) DO NOTHING
           `,
-          [bilhete.rows[0].id, JSON.stringify({ motivo: 'BP-e stub ate fornecedor/SEFAZ/PFX estarem configurados' })],
+          [bilhete.rows[0].id, JSON.stringify({ origem: 'portal', pedido: pedidoRow.codigo })],
         );
         await client.query(
           `

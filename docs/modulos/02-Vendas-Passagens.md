@@ -215,14 +215,16 @@ Bilhete (após emitido): emitido → validado(embarcado) → usado | cancelado |
 - **Área "Minhas viagens":** bilhetes ativos e passados, **reenvio do QR**, status de embarque, comprovantes, 2ª via.
 - **Recuperação de senha** e **recuperação de bilhete** por e-mail/WhatsApp (cliente perde o e-mail com frequência).
 
-### C.7 Emissão fiscal do bilhete — 🔶 dependência parcial
+### C.7 Emissão fiscal do bilhete — integração implementada; onboarding/homologação pendentes
 - Passagem hidroviária normalmente exige documento fiscal próprio (**BP-e — Bilhete de Passagem eletrônico**), com transmissão à SEFAZ, possível **certificado digital** e **credenciamento**. Cliente informou que **BP-e é obrigatório desde 2019** (validação 2026-06-25).
 - **Regra por canal (3 níveis — decisão do cliente):**
   - **Nível 1 — PDV manual:** operador no porto escolhe emitir ou não emitir BP-e no ato da venda, usando o certificado digital.
   - **Nível 2 — Site/App público (automático-obrigatório):** portal online e área do cliente emitem BP-e automaticamente após pagamento confirmado.
   - **Nível 3 — App do agente (opcional):** conferente/porteiro pode emitir BP-e via app de campo se necessário, mas é opcional (não bloqueia operação).
-- **Status:** certificado digital PFX da AJC recebido em 29/jun/2026 (`docs/feedback/2026-06-29-certificado-digital-ajc-pfx.md`). Ainda confirmar senha do PFX, validade/cadeia/uso, credenciamento SEFAZ-PA e se há API/fornecedor fiscal.
-- **Arquitetura preparada:** o ponto de emissão fiscal é um **passo plugável** após `pago` (antes ou junto de `emitido`). Se a confirmação atrasar, o portal pode entregar o **QR de embarque** no MVP e a emissão fiscal pluga depois sem retrabalho do fluxo.
+- **Fornecedor escolhido:** NS BP-e API. A AJC já emite BP-e em outro sistema; credenciamento foi confirmado pelo dono.
+- **Implementação:** migration 0037, outbox no PostgreSQL, fila pg-boss, emissão/status/download/cancelamento/contingência, webhook Basic Auth, XML/DABPE privados no MinIO e configuração fiscal versionada em Cadastros.
+- **PFX:** fica no cofre/painel da NS. Senha, token e credenciais de webhook nunca entram no Git/banco/front.
+- **Pendência externa:** contratar/habilitar a conta NS, subir o PFX, obter token, definir série exclusiva/próximo número, preencher códigos fiscais/tributação e homologar antes de produção. Runbook: `docs/deploy/NS-BPe-Onboarding.md`.
 
 ### C.8 Antifraude e segurança (mínimos do MVP)
 - O **portal é endpoint público na internet** — exige cuidados que os canais internos não exigem:
@@ -240,3 +242,8 @@ Bilhete (após emitido): emitido → validado(embarcado) → usado | cancelado |
 ### C.10 Impacto no modelo de dados (a refletir na Fase 0)
 - Novas entidades/ajustes: **Pedido** (compra com estados de C.3), **Reserva** (vaga + `expira_em`), **Pagamento** (referência ao gateway, status, valor, webhook), **ContaCliente/credenciais** (login do portal), e o gancho de **DocumentoFiscal** (C.7, opcional no MVP conforme confirmação).
 - A capacidade por viagem/classe precisa de representação que suporte decremento atômico (C.4).
+### Cliente de passagem no PDV
+
+O cliente de passagem é um cadastro próprio de Vendas e não reutiliza o cliente corporativo do CRM/TMS. O registro mínimo contém nome, CPF, data de nascimento, telefone opcional e sexo. Cada bilhete mantém um snapshot desses dados para preservar o manifesto e os relatórios mesmo após atualização cadastral.
+
+Os painéis de Passagens, Canais, Ocupação por classe e Relatório regulatório aceitam o mesmo recorte por viagem, embarcação e período da saída. Na interface, a viagem deve ser apresentada junto da embarcação e da data/hora para evitar seleção ambígua.

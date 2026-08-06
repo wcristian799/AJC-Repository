@@ -37,13 +37,14 @@ import {
   abrirCaixa,
   createCaixaMovimento,
   createPdvVenda,
+  createClientePassagem,
   getMeAjc,
   getPdvConfig,
   listBilhetes,
   listCaixaMovimentos,
   listCaixas,
   listCidades,
-  listClientes,
+  listClientesPassagem,
   listCortesias,
   listNavegacaoViagens,
   listPdvVendas,
@@ -52,7 +53,7 @@ import {
   type CaixaApi,
   type CaixaMovimentoApi,
   type CidadeApi,
-  type ClienteApi,
+  type ClientePassagemApi,
   type CortesiaApi,
   type NavegacaoViagemApi,
   type PdvConfigApi,
@@ -91,6 +92,10 @@ type BasketItem = {
   type: "pdv" | "cortesia" | "gratuidade";
   passengerName: string;
   passengerDocument: string;
+  passengerBirthDate: string;
+  passengerPhone: string;
+  passengerSex: string;
+  passageClientId?: string;
   courtesyCode?: string;
   freeType?: "idoso" | "pcd" | "crianca" | "outro";
   note?: string;
@@ -121,15 +126,17 @@ function PosScreen() {
   const [cities, setCities] = useState<CidadeApi[]>([]);
   const [trips, setTrips] = useState<NavegacaoViagemApi[]>([]);
   const [prices, setPrices] = useState<PrecoItemApi[]>([]);
-  const [clients, setClients] = useState<ClienteApi[]>([]);
+  const [clients, setClients] = useState<ClientePassagemApi[]>([]);
   const [tickets, setTickets] = useState<Awaited<ReturnType<typeof listBilhetes>>>([]);
   const [cash, setCash] = useState<CaixaApi | null>(null);
   const [tripId, setTripId] = useState("");
+  const [tripPickerOpen, setTripPickerOpen] = useState(false);
+  const [tripSearch, setTripSearch] = useState("");
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [basket, setBasket] = useState<BasketItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [selectedClient, setSelectedClient] = useState<ClienteApi | null>(null);
+  const [selectedClient, setSelectedClient] = useState<ClientePassagemApi | null>(null);
   const [clientSearch, setClientSearch] = useState("");
   const [clientOpen, setClientOpen] = useState(false);
   const [payments, setPayments] = useState<PaymentLine[]>([]);
@@ -171,6 +178,7 @@ function PosScreen() {
     total === 0
       ? payments.length === 0
       : pending === 0 && (informed === total || (informed > total && changeAllowed));
+  const passengersValid = basket.every((item) => Boolean(item.passengerName.trim() && item.passengerDocument.replace(/\D/g, "").length === 11 && item.passengerBirthDate && item.passengerSex));
   const selectedItem = basket.find((item) => item.localId === selectedItemId) ?? null;
   const activePayments = rules?.formasPagamento.filter((item) => item.ativo) ?? [];
   const cashToday = cash ? cash.valor_abertura + cash.entradas_dia - cash.saidas_dia : 0;
@@ -200,7 +208,7 @@ function PosScreen() {
           listCidades(),
           listNavegacaoViagens(),
           listPrecos({ tipo: "passagem" }),
-          listClientes(),
+          listClientesPassagem(),
           listCaixas(),
         ]);
       setUser(me);
@@ -251,7 +259,11 @@ function PosScreen() {
       fullValue: product.value,
       type: "pdv",
       passengerName: selectedClient?.nome ?? "",
-      passengerDocument: selectedClient?.cpfCnpj ?? "",
+      passengerDocument: selectedClient?.cpf ?? "",
+      passengerBirthDate: selectedClient?.data_nascimento?.slice(0, 10) ?? "",
+      passengerPhone: selectedClient?.telefone ?? "",
+      passengerSex: selectedClient?.sexo ?? "",
+      passageClientId: selectedClient?.id,
     };
     setBasket((current) => [...current, item]);
     setSelectedItemId(item.localId);
@@ -310,7 +322,6 @@ function PosScreen() {
         viagemId: trip.id,
         origemSigla: origin,
         destinoSigla: destination,
-        clienteId: selectedClient?.id,
         canal: rules?.canalPadrao,
         emitirBpe,
         itens: basket.map((item) => ({
@@ -318,6 +329,10 @@ function PosScreen() {
           itemPrecoId: item.itemPrecoId,
           passageiroNome: item.passengerName || undefined,
           passageiroDocumento: item.passengerDocument || undefined,
+          clientePassagemId: item.passageClientId,
+          passageiroDataNascimento: item.passengerBirthDate || undefined,
+          passageiroTelefone: item.passengerPhone || undefined,
+          passageiroSexo: item.passengerSex || undefined,
           tipo: item.type,
           cortesiaCodigo: item.courtesyCode,
           gratuidadeTipo: item.freeType,
@@ -422,11 +437,12 @@ function PosScreen() {
                 </div>
                 <div className="mt-5 grid gap-3 md:grid-cols-[1.4fr_1fr_1fr]">
                   <Field label="Viagem">
+                    <button type="button" disabled={basket.length > 0} onClick={() => setTripPickerOpen(true)} className="field-control mb-2 flex items-center justify-between text-left"><span className="truncate">{trip ? `${trip.codigo ?? "Viagem"} / ${trip.embarcacaoNome} · ${dateTime(trip.dataHoraSaida)}` : "Selecionar viagem / embarcação"}</span><Search className="h-4 w-4 shrink-0" /></button>
                     <select
                       value={tripId}
                       disabled={basket.length > 0}
                       onChange={(event) => setTripId(event.target.value)}
-                      className="field-control"
+                      className="sr-only"
                     >
                       {trips.map((item) => (
                         <option key={item.id} value={item.id}>
@@ -661,7 +677,7 @@ function PosScreen() {
                 >
                   <span className="truncate">
                     {selectedClient
-                      ? `${selectedClient.codigo} · ${selectedClient.nome}`
+                      ? `${selectedClient.nome} · ${selectedClient.cpf ?? "sem CPF"}`
                       : "Venda avulsa"}
                   </span>
                   <ChevronDown className="h-4 w-4" />
@@ -692,7 +708,7 @@ function PosScreen() {
                       {clients
                         .filter((client) =>
                           normalize(
-                            `${client.codigo} ${client.nome} ${client.cpfCnpj ?? ""}`,
+                            `${client.nome} ${client.cpf ?? ""}`,
                           ).includes(normalize(clientSearch)),
                         )
                         .slice(0, 30)
@@ -706,14 +722,18 @@ function PosScreen() {
                               if (selectedItem)
                                 updateBasket(selectedItem.localId, {
                                   passengerName: client.nome,
-                                  passengerDocument: client.cpfCnpj ?? "",
+                                  passengerDocument: client.cpf ?? "",
+                                  passengerBirthDate: client.data_nascimento?.slice(0, 10) ?? "",
+                                  passengerPhone: client.telefone ?? "",
+                                  passengerSex: client.sexo ?? "",
+                                  passageClientId: client.id,
                                 });
                             }}
                             className="w-full rounded-lg p-2 text-left hover:bg-[color:var(--accent)]"
                           >
                             <span className="block text-sm">{client.nome}</span>
                             <span className="font-mono text-[10px] text-muted-foreground">
-                              {client.codigo} · {client.cpfCnpj || "sem documento"}
+                              {client.cpf || "sem CPF"} · {client.data_nascimento?.slice(0, 10)}
                             </span>
                           </button>
                         ))}
@@ -733,7 +753,7 @@ function PosScreen() {
                       }
                     />
                   </Field>
-                  <Field label="CPF ou documento">
+                  <Field label="CPF (obrigatório)">
                     <input
                       className="field-control"
                       value={selectedItem.passengerDocument}
@@ -744,6 +764,12 @@ function PosScreen() {
                       }
                     />
                   </Field>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Data de nascimento"><input type="date" className="field-control" value={selectedItem.passengerBirthDate} onChange={(event) => updateBasket(selectedItem.localId, { passengerBirthDate: event.target.value })}/></Field>
+                    <Field label="Sexo"><select className="field-control" value={selectedItem.passengerSex} onChange={(event) => updateBasket(selectedItem.localId, { passengerSex: event.target.value })}><option value="">Selecione</option><option value="feminino">Feminino</option><option value="masculino">Masculino</option><option value="outro">Outro</option><option value="nao_informado">Não informado</option></select></Field>
+                  </div>
+                  <Field label="Telefone (opcional)"><input className="field-control" value={selectedItem.passengerPhone} onChange={(event) => updateBasket(selectedItem.localId, { passengerPhone: event.target.value })}/></Field>
+                  {!selectedItem.passageClientId && selectedItem.passengerName && selectedItem.passengerBirthDate && selectedItem.passengerSex && <button type="button" className="pos-tertiary" onClick={async () => { try { const client = await createClientePassagem({ nome: selectedItem.passengerName, cpf: selectedItem.passengerDocument || undefined, dataNascimento: selectedItem.passengerBirthDate, telefone: selectedItem.passengerPhone || undefined, sexo: selectedItem.passengerSex }); setClients((rows) => [client, ...rows.filter((row) => row.id !== client.id)]); updateBasket(selectedItem.localId, { passageClientId: client.id }); setSelectedClient(client); } catch (cause) { setError(message(cause)); } }}>Salvar cliente de passagem</button>}
                   <Field label="Observação">
                     <input
                       className="field-control"
@@ -943,7 +969,7 @@ function PosScreen() {
               <button
                 type="button"
                 onClick={completeSale}
-                disabled={!basket.length || !paymentsValid || !cash || saving}
+                disabled={!basket.length || !paymentsValid || !passengersValid || !cash || saving}
                 className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--champagne)] px-4 font-semibold text-[color:var(--ink)] transition hover:brightness-105 active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {saving ? (
@@ -965,6 +991,7 @@ function PosScreen() {
               >
                 Cancelar atendimento
               </button>
+              {basket.length > 0 && !passengersValid && <p className="mt-2 text-xs text-[color:var(--warning)]">Preencha nome, CPF, nascimento e sexo de cada passageiro antes de receber.</p>}
             </div>
           </div>
           <p className="mt-3 text-center text-[10px] text-muted-foreground">
@@ -974,6 +1001,7 @@ function PosScreen() {
       </div>
 
       <AnimatePresence>
+        {tripPickerOpen && <Modal title="Selecionar viagem / embarcação" subtitle="Busque por código, rota, data, status ou embarcação." onClose={() => setTripPickerOpen(false)} wide><div className="flex items-center gap-2 rounded-lg bg-[color:var(--muted)] px-3"><Search className="h-4 w-4"/><input autoFocus className="h-11 w-full bg-transparent outline-none" value={tripSearch} onChange={(e) => setTripSearch(e.target.value)} placeholder="Buscar viagem / embarcação"/></div><div className="mt-3 max-h-[55vh] space-y-2 overflow-y-auto">{trips.filter((item) => normalize(`${item.codigo} ${item.embarcacaoNome} ${item.origemSigla} ${item.destinoSigla} ${item.dataHoraSaida} ${item.status}`).includes(normalize(tripSearch))).map((item) => <button key={item.id} type="button" onClick={() => { setTripId(item.id); setTripPickerOpen(false); setTripSearch(""); }} className={`w-full rounded-xl p-4 text-left ring-1 ${item.id === tripId ? "bg-[color:var(--surface-tint)] ring-[color:var(--brand)]" : "ring-[color:var(--hairline)]"}`}><p className="font-mono text-sm">{item.codigo ?? "Viagem"} / {item.embarcacaoNome}</p><p className="mt-1 text-xs text-muted-foreground">{item.origemSigla} → {item.destinoSigla ?? ""} · {dateTime(item.dataHoraSaida)} · {item.status}</p></button>)}{!trips.length && <EmptyPanel title="Nenhuma viagem disponível" detail="Cadastre e publique uma viagem antes de vender."/>}</div></Modal>}
         {modal === "cash" && (
           <CashModal
             rules={rules}
@@ -1012,7 +1040,11 @@ function PosScreen() {
                 fullValue: product.value,
                 type: "cortesia",
                 passengerName: selectedClient?.nome ?? "",
-                passengerDocument: selectedClient?.cpfCnpj ?? "",
+                passengerDocument: selectedClient?.cpf ?? "",
+                passengerBirthDate: selectedClient?.data_nascimento?.slice(0, 10) ?? "",
+                passengerPhone: selectedClient?.telefone ?? "",
+                passengerSex: selectedClient?.sexo ?? "",
+                passageClientId: selectedClient?.id,
                 courtesyCode: courtesy.codigo,
                 note: courtesy.observacoes ?? courtesy.motivo ?? undefined,
               };
@@ -1037,7 +1069,11 @@ function PosScreen() {
                 fullValue: product.value,
                 type: "gratuidade",
                 passengerName: selectedClient?.nome ?? "",
-                passengerDocument: selectedClient?.cpfCnpj ?? "",
+                passengerDocument: selectedClient?.cpf ?? "",
+                passengerBirthDate: selectedClient?.data_nascimento?.slice(0, 10) ?? "",
+                passengerPhone: selectedClient?.telefone ?? "",
+                passengerSex: selectedClient?.sexo ?? "",
+                passageClientId: selectedClient?.id,
                 freeType,
               };
               setBasket((current) => [...current, item]);

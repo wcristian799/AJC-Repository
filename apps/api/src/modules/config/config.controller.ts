@@ -22,6 +22,7 @@ import { validateTmsPrestacaoConfig } from "../tms/tms-prestacao-config.validato
 import { validateEncomendasConfig } from "../encomendas/encomendas-config.validator";
 import { validatePdvConfig } from "../vendas/vendas-pdv.validator";
 import { validateVeiculosOrigensConfig } from "../veiculos/veiculos-config.validator";
+import { validateBpeConfig } from "../fiscal/fiscal-config.validator";
 
 interface PublishConfigBody {
   valor?: unknown;
@@ -70,6 +71,9 @@ export class ConfigController {
     if (chave.trim() === "vendas_pdv_operacao" && !user.permissions.includes("vendas.configurar")) {
       throw new ForbiddenException("Permissao insuficiente para configurar o PDV");
     }
+    if (chave.trim() === "vendas_bpe_integracao" && !user.permissions.includes("fiscal.configurar")) {
+      throw new ForbiddenException("Permissao insuficiente para configurar BP-e");
+    }
     if (chave.trim() === "navegacao_rotas_horarios") {
       validateNavegacaoRoutesConfig(body.valor);
     }
@@ -93,6 +97,9 @@ export class ConfigController {
     }
     if (chave.trim() === "veiculos_origens_cadastro") {
       validateVeiculosOrigensConfig(body.valor);
+    }
+    if (chave.trim() === "vendas_bpe_integracao") {
+      validateBpeConfig(body.valor);
     }
     return this.repository.publish(chave.trim(), body.valor, user.sub);
   }

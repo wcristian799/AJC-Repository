@@ -2,14 +2,23 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomBytes, randomUUID } from 'node:crypto';
 import { DatabaseService } from '../../database/database.service';
 import { AuthTokenPayload } from '../auth/auth.types';
-import { CreateBilheteInput, CreateCortesiaInput, CreatePdvVendaInput, ValidarBilheteInput } from './vendas.types';
+import { CreateBilheteInput, CreateCortesiaInput, CreatePdvVendaInput, SaveClientePassagemInput, ValidarBilheteInput } from './vendas.types';
 import { PdvConfig, reconcilePdvPayments, roundMoney, validatePdvConfig } from './vendas-pdv.validator';
 
 @Injectable()
 export class VendasRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  async resumo() {
+  async resumo(filters: { viagemId?: string; embarcacaoId?: string; dataInicio?: string; dataFim?: string } = {}) {
+    const params: unknown[] = [];
+    const tripWhere: string[] = ["v.status <> 'cancelada'"];
+    const add = (sql: string, value: unknown) => { params.push(value); tripWhere.push(sql.replace('?', `$${params.length}`)); };
+    if (filters.viagemId) add('v.id = ?', filters.viagemId);
+    if (filters.embarcacaoId) add('v.embarcacao_id = ?', filters.embarcacaoId);
+    if (filters.dataInicio) add('v.data_hora_saida >= ?::date', filters.dataInicio);
+    if (filters.dataFim) add('v.data_hora_saida < (?::date + interval \'1 day\')', filters.dataFim);
+    const tripWhereSql = tripWhere.join(' AND ');
+    const bilheteWhereSql = `b.status <> 'cancelado' AND ${tripWhereSql}`;
     const canais = await this.db.query<{
       canal: string;
       bilhetes: string;
@@ -23,11 +32,11 @@ export class VendasRepository {
         COALESCE(sum(b.preco_pago), 0)::text AS receita,
         bool_or(COALESCE(NULLIF(b.canal, ''), b.tipo::text) IN ('portal', 'online', 'app')) AS online
       FROM bilhete b
-      WHERE b.status <> 'cancelado'
-        AND b.criado_em >= date_trunc('day', now())
+      JOIN viagem v ON v.id = b.viagem_id
+      WHERE ${bilheteWhereSql}
       GROUP BY COALESCE(NULLIF(b.canal, ''), b.tipo::text)
       ORDER BY receita DESC, bilhetes DESC
-      `,
+      `, params,
     );
 
     const ocupacao = await this.db.query<{
@@ -49,15 +58,14 @@ export class VendasRepository {
           ) AS capacidade
         FROM viagem v
         CROSS JOIN LATERAL jsonb_each(COALESCE(v.capacidade_pax_disponivel, '{}'::jsonb))
-        WHERE v.status IN ('planejada', 'em_curso')
+        WHERE v.status IN ('planejada', 'em_curso') AND ${tripWhereSql}
         GROUP BY key
       ),
       vendidos AS (
         SELECT b.classe::text AS classe, count(*) AS ocupados, COALESCE(sum(b.preco_pago), 0) AS receita
         FROM bilhete b
         JOIN viagem v ON v.id = b.viagem_id
-        WHERE b.status <> 'cancelado'
-          AND v.status IN ('planejada', 'em_curso')
+        WHERE ${bilheteWhereSql}
         GROUP BY b.classe::text
       )
       SELECT
@@ -68,7 +76,7 @@ export class VendasRepository {
       FROM capacidades c
       FULL JOIN vendidos v ON v.classe = c.classe
       ORDER BY COALESCE(c.capacidade, 0) DESC, COALESCE(v.ocupados, 0) DESC
-      `,
+      `, params,
     );
 
     const agentes = await this.db.query<{
@@ -125,16 +133,23 @@ export class VendasRepository {
     };
   }
 
-  async listBilhetes(viagemId?: string) {
+  async listBilhetes(filters: { viagemId?: string; embarcacaoId?: string; dataInicio?: string; dataFim?: string } = {}) {
     const params: unknown[] = [];
-    const filter = viagemId ? 'WHERE b.viagem_id = $1' : '';
-    if (viagemId) params.push(viagemId);
+    const where: string[] = [];
+    const add = (sql: string, value: unknown) => { params.push(value); where.push(sql.replace('?', `$${params.length}`)); };
+    if (filters.viagemId) add('v.id = ?', filters.viagemId);
+    if (filters.embarcacaoId) add('v.embarcacao_id = ?', filters.embarcacaoId);
+    if (filters.dataInicio) add('v.data_hora_saida >= ?::date', filters.dataInicio);
+    if (filters.dataFim) add('v.data_hora_saida < (?::date + interval \'1 day\')', filters.dataFim);
+    const filter = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const result = await this.db.query(
       `
       SELECT b.id, b.codigo, b.qr_token, b.viagem_id, v.codigo AS viagem_codigo,
              v.origem_sigla, v.destino_sigla, v.data_hora_saida,
              e.nome AS embarcacao_nome, b.cliente_id, c.nome AS cliente_nome,
-             b.passageiro_nome, b.passageiro_documento, b.classe::text, b.subtipo,
+             b.cliente_passagem_id, cp.nome AS cliente_passagem_nome,
+             b.passageiro_nome, b.passageiro_documento, b.passageiro_data_nascimento,
+             b.passageiro_telefone, b.passageiro_sexo, b.classe::text, b.subtipo,
              b.tipo::text, b.canal, b.assento, b.preco_pago, b.status::text,
              COALESCE(b.origem_sigla, v.origem_sigla) AS bilhete_origem_sigla,
              COALESCE(b.destino_sigla, v.destino_sigla) AS bilhete_destino_sigla,
@@ -148,6 +163,7 @@ export class VendasRepository {
       JOIN viagem v ON v.id = b.viagem_id
       JOIN embarcacao e ON e.id = v.embarcacao_id
       LEFT JOIN cliente c ON c.id = b.cliente_id
+      LEFT JOIN cliente_passagem cp ON cp.id = b.cliente_passagem_id
       LEFT JOIN caixa_movimento cm ON cm.id = b.caixa_movimento_id
       ${filter}
       ORDER BY b.criado_em DESC
@@ -156,6 +172,34 @@ export class VendasRepository {
       params,
     );
     return result.rows.map((row) => ({ ...row, preco_pago: row.preco_pago === null ? null : Number(row.preco_pago) }));
+  }
+
+  async listClientesPassagem(busca?: string) {
+    const term = busca?.trim() ? `%${busca.trim()}%` : null;
+    const result = await this.db.query(
+      `SELECT id,nome,cpf,data_nascimento,telefone,sexo,ativo,criado_em,atualizado_em
+       FROM cliente_passagem
+       WHERE ativo=true AND ($1::text IS NULL OR nome ILIKE $1 OR regexp_replace(COALESCE(cpf,''),'\\D','','g') LIKE regexp_replace($1,'\\D','','g'))
+       ORDER BY nome LIMIT 100`, [term],
+    );
+    return result.rows;
+  }
+
+  async createClientePassagem(input: SaveClientePassagemInput, userId: string) {
+    const nome = input.nome?.trim();
+    const cpf = input.cpf ? input.cpf.replace(/\D/g, '') : null;
+    if (!nome) throw new BadRequestException('Nome do cliente de passagem obrigatorio');
+    if (!cpf || cpf.length !== 11) throw new BadRequestException('CPF do cliente de passagem obrigatorio e deve ter 11 digitos');
+    if (!input.dataNascimento || Number.isNaN(Date.parse(input.dataNascimento))) throw new BadRequestException('Data de nascimento obrigatoria');
+    if (!input.sexo?.trim()) throw new BadRequestException('Sexo obrigatorio');
+    const row = await this.db.one(
+      `INSERT INTO cliente_passagem (nome,cpf,data_nascimento,telefone,sexo,criado_por,atualizado_por)
+       VALUES ($1,$2,$3::date,$4,$5,$6,$6)
+       ON CONFLICT (cpf) WHERE cpf IS NOT NULL AND ativo DO UPDATE SET nome=EXCLUDED.nome,data_nascimento=EXCLUDED.data_nascimento,telefone=EXCLUDED.telefone,sexo=EXCLUDED.sexo,atualizado_por=$6,atualizado_em=now()
+       RETURNING id,nome,cpf,data_nascimento,telefone,sexo,ativo,criado_em,atualizado_em`,
+      [nome, cpf, input.dataNascimento, input.telefone?.trim() || null, input.sexo.trim(), userId],
+    );
+    return row;
   }
 
   async findBilhete(idOrQr: string) {
@@ -299,11 +343,11 @@ export class VendasRepository {
       if (input.emitirBpe === true) {
         await client.query(
           `
-          INSERT INTO bilhete_documento_fiscal (bilhete_id, status, servico, payload, emitido_em)
-          VALUES ($1, 'stub_emitido', 'stub', $2::jsonb, now())
+          INSERT INTO bilhete_documento_fiscal (bilhete_id, status, provider, payload, proxima_tentativa_em)
+          VALUES ($1, 'pendente', 'ns', $2::jsonb, now())
           ON CONFLICT (bilhete_id) DO NOTHING
           `,
-          [id, JSON.stringify({ motivo: 'BP-e stub pelo PDV - fornecedor/SEFAZ/PFX ainda nao configurados' })],
+          [id, JSON.stringify({ origem: 'venda_bilhete', solicitadoPor: userId })],
         );
       }
       return id;
@@ -324,7 +368,17 @@ export class VendasRepository {
     );
     if (!row) throw new BadRequestException('Configuracao do PDV nao publicada');
     validatePdvConfig(row.valor);
-    return { id: row.id, versao: row.versao, valor: row.valor };
+    const bpe = await this.db.one<{ habilitada: boolean }>(
+      `SELECT COALESCE((cv.valor->>'habilitada')::boolean,false) AS habilitada
+       FROM config_chave cc JOIN config_versao cv ON cv.chave_id=cc.id AND cv.ativo=true
+       WHERE cc.chave='vendas_bpe_integracao' AND cc.ativo=true LIMIT 1`,
+    );
+    const value = row.valor as PdvConfig;
+    return {
+      id: row.id,
+      versao: row.versao,
+      valor: { ...value, fiscal: { ...value.fiscal, integracaoAtiva: bpe?.habilitada === true } },
+    };
   }
 
   async listPdvSales(caixaId?: string) {
@@ -409,6 +463,13 @@ export class VendasRepository {
       const pricedItems: Array<{ input: CreatePdvVendaInput['itens'][number]; itemPriceId: string | null; tablePrice: number; charged: number; type: 'pdv' | 'cortesia' | 'gratuidade' }> = [];
       for (const item of input.itens) {
         const type = item.tipo ?? 'pdv';
+        if (!item.passageiroNome?.trim() || !item.passageiroDocumento?.replace(/\D/g, '') || !item.passageiroDataNascimento || !item.passageiroSexo?.trim()) {
+          throw new BadRequestException('Cada passageiro precisa de nome, CPF, data de nascimento e sexo');
+        }
+        if (item.clientePassagemId) {
+          const passageClient = await client.query('SELECT id FROM cliente_passagem WHERE id=$1 AND ativo=true', [item.clientePassagemId]);
+          if (!passageClient.rows[0]) throw new BadRequestException('Cliente de passagem nao encontrado ou inativo');
+        }
         if (!config.classes.some((entry) => entry.codigo === item.classe && entry.ativo)) throw new BadRequestException(`Classe indisponivel: ${item.classe}`);
         const priceResult = await client.query<{ id: string; valor: string }>(
           `SELECT ip.id, ip.valor FROM item_preco ip
@@ -455,9 +516,9 @@ export class VendasRepository {
         const code = `BIL-${new Date().getFullYear()}-${randomBytes(5).toString('hex').toUpperCase()}`;
         const qr = await this.nextQrToken(code);
         const ticket = await client.query<{ id: string }>(
-          `INSERT INTO bilhete (codigo,viagem_id,cliente_id,passageiro_nome,passageiro_documento,classe,tipo,canal,item_preco_id,preco_pago,qr_token,observacoes,origem_sigla,destino_sigla,venda_pos_id,client_uuid,criado_por)
-           VALUES ($1,$2,$3,$4,$5,$6::classe_passagem,$7::tipo_bilhete,$8,$9,$10,$11,$12,$13,$14,$15,$16::uuid,$17) RETURNING id`,
-          [code, input.viagemId, input.clienteId ?? null, item.input.passageiroNome?.trim() || null, item.input.passageiroDocumento?.trim() || null, item.input.classe, item.type, input.canal ?? config.canalPadrao, item.itemPriceId, item.charged, qr, item.input.observacoes ?? null, input.origemSigla, input.destinoSigla, id, randomUUID(), userId],
+          `INSERT INTO bilhete (codigo,viagem_id,cliente_id,cliente_passagem_id,passageiro_nome,passageiro_documento,passageiro_data_nascimento,passageiro_telefone,passageiro_sexo,classe,tipo,canal,item_preco_id,preco_pago,qr_token,observacoes,origem_sigla,destino_sigla,venda_pos_id,client_uuid,criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8,$9,$10::classe_passagem,$11::tipo_bilhete,$12,$13,$14,$15,$16,$17,$18,$19,$20::uuid,$21) RETURNING id`,
+          [code, input.viagemId, null, item.input.clientePassagemId ?? null, item.input.passageiroNome?.trim() || null, item.input.passageiroDocumento?.trim() || null, item.input.passageiroDataNascimento ?? null, item.input.passageiroTelefone?.trim() || null, item.input.passageiroSexo?.trim() || null, item.input.classe, item.type, input.canal ?? config.canalPadrao, item.itemPriceId, item.charged, qr, item.input.observacoes ?? null, input.origemSigla, input.destinoSigla, id, randomUUID(), userId],
         );
         const ticketId = ticket.rows[0].id;
         ticketIds.push(ticketId);
@@ -470,7 +531,11 @@ export class VendasRepository {
           if (!consumed.rows[0]) throw new BadRequestException(`Cortesia ${item.input.cortesiaCodigo} invalida ou ja utilizada`);
         }
         if (input.emitirBpe) {
-          await client.query(`INSERT INTO bilhete_documento_fiscal (bilhete_id,status,servico,payload,emitido_em) VALUES ($1,$2,$3,$4::jsonb,now()) ON CONFLICT (bilhete_id) DO NOTHING`, [ticketId, config.fiscal.integracaoAtiva ? 'pendente' : 'stub_emitido', config.fiscal.integracaoAtiva ? 'fiscal' : 'stub', JSON.stringify({ configVersao: configRow.versao, motivo: config.fiscal.integracaoAtiva ? null : 'Integracao fiscal ainda nao ativada em Cadastros' })]);
+          await client.query(
+            `INSERT INTO bilhete_documento_fiscal (bilhete_id,status,provider,payload,proxima_tentativa_em)
+             VALUES ($1,'pendente','ns',$2::jsonb,now()) ON CONFLICT (bilhete_id) DO NOTHING`,
+            [ticketId, JSON.stringify({ origem: 'pdv', vendaPosId: id, configPdvVersao: configRow.versao })],
+          );
         }
       }
       let firstMovementId: string | null = null;
@@ -548,7 +613,7 @@ export class VendasRepository {
   }
 
   async manifesto(viagemId: string) {
-    const bilhetes = await this.listBilhetes(viagemId);
+    const bilhetes = await this.listBilhetes({ viagemId });
     const resumo = bilhetes.reduce<Record<string, { total: number; receita: number }>>((acc, bilhete) => {
       const key = bilhete.tipo === 'cortesia' || bilhete.tipo === 'gratuidade' || bilhete.tipo === 'contrato' ? bilhete.tipo : 'paga';
       acc[key] ??= { total: 0, receita: 0 };

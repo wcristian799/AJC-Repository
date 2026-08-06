@@ -150,6 +150,7 @@ export class EncomendasRepository {
     const config = activeConfig.valor;
     const size = config.tamanhos.find((item) => item.ativo && item.codigo === input.tamanhoCodigo.toUpperCase());
     if (!size) throw new BadRequestException('Tamanho nao esta ativo na configuracao publicada');
+    if (input.pesoTotal > config.limitePesoEncomenda) throw new BadRequestException(`Acima de ${config.limitePesoEncomenda} kg deve ser tratado como carga, nao como encomenda`);
     if (input.pesoTotal > size.pesoMaxKg) throw new BadRequestException(`Peso excede o limite configurado de ${size.pesoMaxKg} kg para ${size.codigo}`);
     const price = await this.price(input, config.limiteValorFixo);
     const charged = input.valorCobrado === undefined ? price.valorTabela : Number(input.valorCobrado);

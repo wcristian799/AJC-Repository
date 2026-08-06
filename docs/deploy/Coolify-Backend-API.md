@@ -46,15 +46,20 @@ Obrigatorias:
 - `OBJECT_STORAGE_ACCESS_KEY=...`
 - `OBJECT_STORAGE_SECRET_KEY=...`
 - `OBJECT_STORAGE_REGION=us-east-1`
+- `BPE_MODE=ns`
+- `BPE_NS_BASE_URL=https://bpe.ns.eti.br/v1`
+- `BPE_NS_TOKEN=...`
+- `BPE_WEBHOOK_USER=...`
+- `BPE_WEBHOOK_PASSWORD=...`
 
 `OBJECT_STORAGE_ACCESS_KEY` e `OBJECT_STORAGE_SECRET_KEY` podem representar um usuario dedicado do MinIO. Se estiverem vazias ou tiverem perdido validade, a API tenta as credenciais `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` da mesma stack. Isso evita divergencia entre o container MinIO e a API; em producao, prefira manter o usuario dedicado valido e reservar o fallback root para recuperacao operacional.
 
 O healthcheck do container usa o comando oficial `mc ready local`. `api` e `worker` aguardam o MinIO iniciar, mas nao ficam bloqueados por `service_healthy`: indisponibilidade temporaria do storage degrada somente uploads, sem impedir o restante do ERP/TMS de subir.
 
-Enquanto nao houver fornecedor/credenciais reais:
+Enquanto nao houver credenciais reais das demais integracoes:
 
 - `PAYMENT_GATEWAY_MODE=stub`
-- `BPE_MODE=stub`
+- BP-e permanece `BPE_MODE=ns`, mas desabilitado na configuracao versionada ate o onboarding/homologacao.
 - `WHATSAPP_MODE=stub`
 - `BLUETOOTH_PRINT_MODE=stub`
 
@@ -107,7 +112,9 @@ Comando:
 node apps/api/dist/apps/api/src/worker.js
 ```
 
-Ele usa a mesma `DATABASE_URL` e inicializa o schema `pgboss`. As integracoes externas reais ainda continuam em stub ate existirem fornecedores/credenciais.
+Ele usa a mesma `DATABASE_URL` e inicializa o schema `pgboss`. O worker processa a outbox real de BP-e pela fila `fiscal-bpe-emitir`. Sem token ou com a configuracao desabilitada, nenhuma chamada externa e feita.
+
+Onboarding completo: `docs/deploy/NS-BPe-Onboarding.md`.
 
 ## Healthcheck
 

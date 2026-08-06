@@ -3,6 +3,10 @@ export interface CreateBilheteInput {
   clienteId?: string;
   passageiroNome?: string;
   passageiroDocumento?: string;
+  clientePassagemId?: string;
+  passageiroDataNascimento?: string;
+  passageiroTelefone?: string;
+  passageiroSexo?: string;
   classe: string;
   subtipo?: string;
   tipo?: 'online' | 'pdv' | 'totem' | 'contrato' | 'cortesia' | 'gratuidade';
@@ -32,6 +36,18 @@ export interface CreatePdvVendaItemInput {
   gratuidadeTipo?: 'idoso' | 'pcd' | 'crianca' | 'outro';
   documentoUrl?: string;
   observacoes?: string;
+  clientePassagemId?: string;
+  passageiroDataNascimento?: string;
+  passageiroTelefone?: string;
+  passageiroSexo?: string;
+}
+
+export interface SaveClientePassagemInput {
+  nome: string;
+  cpf?: string;
+  dataNascimento?: string;
+  telefone?: string;
+  sexo?: string;
 }
 
 export interface CreatePdvVendaInput {

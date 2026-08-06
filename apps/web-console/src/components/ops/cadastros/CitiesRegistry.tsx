@@ -14,6 +14,7 @@ const EMPTY_DRAFT: SaveCidadeInput = {
   sigla: "",
   nome: "",
   uf: "",
+  codigoIbge: "",
   isBase: false,
   ativo: true,
 };
@@ -51,7 +52,7 @@ export function CitiesRegistry({
     return sorted.filter((city) => {
       if (filter === "ativas" && !city.ativo) return false;
       if (filter === "inativas" && city.ativo) return false;
-      return !needle || normalize(`${city.nome} ${city.sigla} ${city.uf}`).includes(needle);
+      return !needle || normalize(`${city.nome} ${city.sigla} ${city.uf} ${city.codigoIbge ?? ""}`).includes(needle);
     });
   }, [filter, search, sorted]);
 
@@ -71,6 +72,7 @@ export function CitiesRegistry({
       sigla: city.sigla,
       nome: city.nome,
       uf: city.uf,
+      codigoIbge: city.codigoIbge ?? "",
       isBase: city.isBase,
       ativo: city.ativo,
     });
@@ -102,11 +104,16 @@ export function CitiesRegistry({
       setMessage({ tone: "danger", text: "Informe a UF com duas letras, por exemplo PA." });
       return;
     }
+    const codigoIbge = draft.codigoIbge?.replace(/\D/g, "") || null;
+    if (codigoIbge !== null && !/^[0-9]{7}$/.test(codigoIbge)) {
+      setMessage({ tone: "danger", text: "O código IBGE deve ter exatamente 7 dígitos." });
+      return;
+    }
 
     setSaving(true);
     setMessage(null);
     try {
-      const payload = { ...draft, sigla, nome, uf };
+      const payload = { ...draft, sigla, nome, uf, codigoIbge };
       const saved = editingSigla
         ? await updateCidade(editingSigla, payload)
         : await createCidade(payload);
@@ -171,7 +178,7 @@ export function CitiesRegistry({
             </button>
           </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-[160px_minmax(260px,1fr)_120px_180px]">
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-[140px_minmax(240px,1fr)_100px_170px_180px]">
             <Field label="Sigla operacional" hint={editingSigla ? "Imutável" : "2 a 4 caracteres"}>
               <input
                 value={draft.sigla ?? ""}
@@ -191,6 +198,16 @@ export function CitiesRegistry({
                 maxLength={2}
                 onChange={(event) => setDraft({ ...draft, uf: event.target.value.toUpperCase().replace(/[^A-Z]/g, "") })}
                 placeholder="PA"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Código IBGE" hint="Obrigatório para BP-e">
+              <input
+                value={draft.codigoIbge ?? ""}
+                inputMode="numeric"
+                maxLength={7}
+                onChange={(event) => setDraft({ ...draft, codigoIbge: event.target.value.replace(/\D/g, "") })}
+                placeholder="1501402"
                 autoComplete="off"
               />
             </Field>
@@ -231,7 +248,7 @@ export function CitiesRegistry({
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por cidade, sigla ou UF…"
+              placeholder="Buscar por cidade, sigla, UF ou código IBGE…"
               className="field pl-10"
             />
           </label>
@@ -249,21 +266,24 @@ export function CitiesRegistry({
           </div>
         </div>
 
-        <div className="hidden grid-cols-[110px_minmax(220px,1fr)_90px_130px_100px] gap-3 border-b border-[color:var(--hairline)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground md:grid">
-          <span>Sigla</span><span>Cidade</span><span>UF</span><span>Situação</span><span className="text-right">Ação</span>
+        <div className="hidden grid-cols-[90px_minmax(190px,1fr)_70px_120px_120px_100px] gap-3 border-b border-[color:var(--hairline)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground md:grid">
+          <span>Sigla</span><span>Cidade</span><span>UF</span><span>Código IBGE</span><span>Situação</span><span className="text-right">Ação</span>
         </div>
         <div className="divide-y divide-[color:var(--hairline)]">
           {visible.map((city) => (
-            <div key={city.sigla} className="grid gap-3 px-4 py-4 transition-colors hover:bg-[color:var(--muted)]/45 md:grid-cols-[110px_minmax(220px,1fr)_90px_130px_100px] md:items-center">
+            <div key={city.sigla} className="grid gap-3 px-4 py-4 transition-colors hover:bg-[color:var(--muted)]/45 md:grid-cols-[90px_minmax(190px,1fr)_70px_120px_120px_100px] md:items-center">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-semibold text-foreground">{city.sigla}</span>
                 {city.isBase && <Building2 className="h-3.5 w-3.5 text-[color:var(--champagne)]" aria-label="Cidade-base" />}
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{city.nome}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground md:hidden">{city.uf} · {city.isBase ? "Cidade-base" : "Cidade operacional"}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground md:hidden">{city.uf} · IBGE {city.codigoIbge ?? "não informado"} · {city.isBase ? "Cidade-base" : "Cidade operacional"}</p>
               </div>
               <span className="hidden text-sm text-muted-foreground md:block">{city.uf}</span>
+              <span className={`hidden font-mono text-xs md:block ${city.codigoIbge ? "text-foreground" : "text-[color:var(--warning)]"}`}>
+                {city.codigoIbge ?? "Pendente"}
+              </span>
               <StatusChip tone={city.ativo ? "success" : "neutral"}>{city.ativo ? "Ativa" : "Inativa"}</StatusChip>
               <button type="button" onClick={() => openEdit(city)} className="inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-xs font-medium text-foreground/85 ring-1 ring-[color:var(--hairline)] transition-colors hover:bg-[color:var(--accent)]" aria-label={`Editar ${city.nome}`}>
                 <Edit3 className="h-3.5 w-3.5" /> Editar

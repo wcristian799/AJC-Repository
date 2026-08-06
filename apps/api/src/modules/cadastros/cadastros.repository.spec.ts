@@ -7,12 +7,14 @@ describe("cadastro de cidades", () => {
       sigla: "  mcp ",
       nome: "  Melgaco   Centro  ",
       uf: "pa",
+      codigoIbge: " 1504402 ",
       isBase: false,
       ativo: true,
     }, true)).toEqual({
       sigla: "MCP",
       nome: "Melgaco Centro",
       uf: "PA",
+      codigoIbge: "1504402",
       isBase: false,
       ativo: true,
     });
@@ -25,6 +27,11 @@ describe("cadastro de cidades", () => {
   it("rejeita UF invalida", () => {
     expect(() => normalizeCidadeInput({ sigla: "MCP", nome: "Melgaco", uf: "PARA" }, true))
       .toThrow("UF deve conter duas letras");
+  });
+
+  it("rejeita codigo IBGE incompleto", () => {
+    expect(() => normalizeCidadeInput({ sigla: "MCP", nome: "Melgaco", uf: "PA", codigoIbge: "150" }, true))
+      .toThrow("Codigo IBGE deve conter sete digitos");
   });
 });
 
