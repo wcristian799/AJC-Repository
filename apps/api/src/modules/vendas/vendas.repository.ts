@@ -463,6 +463,7 @@ export class VendasRepository {
       const pricedItems: Array<{ input: CreatePdvVendaInput['itens'][number]; itemPriceId: string | null; tablePrice: number; charged: number; type: 'pdv' | 'cortesia' | 'gratuidade' }> = [];
       for (const item of input.itens) {
         const type = item.tipo ?? 'pdv';
+        if (!item.clientePassagemId) throw new BadRequestException('Cadastre e selecione o cliente de passagem antes de concluir a venda');
         if (!item.passageiroNome?.trim() || !item.passageiroDocumento?.replace(/\D/g, '') || !item.passageiroDataNascimento || !item.passageiroSexo?.trim()) {
           throw new BadRequestException('Cada passageiro precisa de nome, CPF, data de nascimento e sexo');
         }

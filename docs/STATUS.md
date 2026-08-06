@@ -2,6 +2,8 @@
 
 ## Trabalho 2026-08-06 - Ajustes de Vendas, PDV e Encomendas
 
+- Regra adicional do cliente: o PDV não permite venda avulsa. Toda operação precisa selecionar ou cadastrar um `cliente_passagem`; a API bloqueia qualquer item sem vínculo persistido, e a interface só habilita o recebimento após vincular todos os bilhetes.
+
 - Vendas agora filtra no backend por Viagem / Embarcação e período da viagem. O mesmo recorte alimenta Passagens, Canais de venda, Ocupação por classe e Relatório regulatório.
 - O PDV deixou de reutilizar o cliente corporativo do CRM. A migration 0038 cria `cliente_passagem`, com nome, CPF, nascimento, telefone opcional e sexo, e persiste snapshots no bilhete.
 - A seleção de Viagem / Embarcação do PDV ganhou modal pesquisável com código, embarcação, rota, data/hora e status.

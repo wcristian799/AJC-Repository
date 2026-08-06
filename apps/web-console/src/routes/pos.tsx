@@ -178,7 +178,7 @@ function PosScreen() {
     total === 0
       ? payments.length === 0
       : pending === 0 && (informed === total || (informed > total && changeAllowed));
-  const passengersValid = basket.every((item) => Boolean(item.passengerName.trim() && item.passengerDocument.replace(/\D/g, "").length === 11 && item.passengerBirthDate && item.passengerSex));
+  const passengersValid = basket.every((item) => Boolean(item.passageClientId && item.passengerName.trim() && item.passengerDocument.replace(/\D/g, "").length === 11 && item.passengerBirthDate && item.passengerSex));
   const selectedItem = basket.find((item) => item.localId === selectedItemId) ?? null;
   const activePayments = rules?.formasPagamento.filter((item) => item.ativo) ?? [];
   const cashToday = cash ? cash.valor_abertura + cash.entradas_dia - cash.saidas_dia : 0;
@@ -668,7 +668,7 @@ function PosScreen() {
               <h2 className="mt-1 font-display text-xl">Cliente e passageiro</h2>
               <div className="relative mt-4">
                 <label className="text-xs text-muted-foreground">
-                  Cliente cadastrado ou venda avulsa
+                  Cliente de passagem obrigatório em toda viagem
                 </label>
                 <button
                   type="button"
@@ -678,7 +678,7 @@ function PosScreen() {
                   <span className="truncate">
                     {selectedClient
                       ? `${selectedClient.nome} · ${selectedClient.cpf ?? "sem CPF"}`
-                      : "Venda avulsa"}
+                      : "Selecione ou cadastre o cliente de passagem"}
                   </span>
                   <ChevronDown className="h-4 w-4" />
                 </button>
@@ -697,13 +697,10 @@ function PosScreen() {
                     <div className="mt-2 max-h-52 overflow-y-auto">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedClient(null);
-                          setClientOpen(false);
-                        }}
-                        className="w-full rounded-lg p-2 text-left text-sm hover:bg-[color:var(--accent)]"
+                        onClick={() => setClientOpen(false)}
+                        className="w-full rounded-lg p-2 text-left text-xs text-muted-foreground hover:bg-[color:var(--accent)]"
                       >
-                        Venda avulsa
+                        Fechar busca
                       </button>
                       {clients
                         .filter((client) =>
@@ -744,7 +741,7 @@ function PosScreen() {
               {selectedItem ? (
                 <div className="mt-4 space-y-3 border-t border-[color:var(--hairline)] pt-4">
                   <p className="text-xs font-semibold">Passageiro do item selecionado</p>
-                  <Field label="Nome completo (opcional na venda avulsa)">
+                  <Field label="Nome completo (obrigatório)">
                     <input
                       className="field-control"
                       value={selectedItem.passengerName}
@@ -769,7 +766,7 @@ function PosScreen() {
                     <Field label="Sexo"><select className="field-control" value={selectedItem.passengerSex} onChange={(event) => updateBasket(selectedItem.localId, { passengerSex: event.target.value })}><option value="">Selecione</option><option value="feminino">Feminino</option><option value="masculino">Masculino</option><option value="outro">Outro</option><option value="nao_informado">Não informado</option></select></Field>
                   </div>
                   <Field label="Telefone (opcional)"><input className="field-control" value={selectedItem.passengerPhone} onChange={(event) => updateBasket(selectedItem.localId, { passengerPhone: event.target.value })}/></Field>
-                  {!selectedItem.passageClientId && selectedItem.passengerName && selectedItem.passengerBirthDate && selectedItem.passengerSex && <button type="button" className="pos-tertiary" onClick={async () => { try { const client = await createClientePassagem({ nome: selectedItem.passengerName, cpf: selectedItem.passengerDocument || undefined, dataNascimento: selectedItem.passengerBirthDate, telefone: selectedItem.passengerPhone || undefined, sexo: selectedItem.passengerSex }); setClients((rows) => [client, ...rows.filter((row) => row.id !== client.id)]); updateBasket(selectedItem.localId, { passageClientId: client.id }); setSelectedClient(client); } catch (cause) { setError(message(cause)); } }}>Salvar cliente de passagem</button>}
+                  {!selectedItem.passageClientId && selectedItem.passengerName && selectedItem.passengerBirthDate && selectedItem.passengerSex && <button type="button" className="pos-tertiary" onClick={async () => { try { const client = await createClientePassagem({ nome: selectedItem.passengerName, cpf: selectedItem.passengerDocument || undefined, dataNascimento: selectedItem.passengerBirthDate, telefone: selectedItem.passengerPhone || undefined, sexo: selectedItem.passengerSex }); setClients((rows) => [client, ...rows.filter((row) => row.id !== client.id)]); updateBasket(selectedItem.localId, { passageClientId: client.id }); setSelectedClient(client); } catch (cause) { setError(message(cause)); } }}>Cadastrar e vincular cliente</button>}
                   <Field label="Observação">
                     <input
                       className="field-control"
@@ -991,7 +988,7 @@ function PosScreen() {
               >
                 Cancelar atendimento
               </button>
-              {basket.length > 0 && !passengersValid && <p className="mt-2 text-xs text-[color:var(--warning)]">Preencha nome, CPF, nascimento e sexo de cada passageiro antes de receber.</p>}
+              {basket.length > 0 && !passengersValid && <p className="mt-2 text-xs text-[color:var(--warning)]">Cadastre e vincule um cliente de passagem com nome, CPF, nascimento e sexo para cada bilhete.</p>}
             </div>
           </div>
           <p className="mt-3 text-center text-[10px] text-muted-foreground">
