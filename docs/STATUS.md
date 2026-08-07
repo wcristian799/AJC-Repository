@@ -1009,3 +1009,8 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 - **Falha de build na Vercel:** Rollup não resolveu `@tanstack/query-core` quando importado transitivamente por `@tanstack/react-query` no workspace isolado.
 - **Correção:** `@tanstack/query-core@5.101.0` foi declarado diretamente no frontend e o lockfile regenerado.
 - **Verificação:** build SSR Vite 7 e import da função compilada passaram localmente.
+
+## Trabalho 2026-08-07 - Fechamento do incidente SSR na Vercel
+- **Publicação validada:** o deployment `8efb71b` compilou e iniciou a função SSR sem `__exportAll`.
+- **Produção validada:** `https://pegasus.amazonasfb.com.br/`, `https://pegasus.amazonasfb.com.br/campo` e `https://ajcmvp.vercel.app/` responderam HTTP 200.
+- **Runtime final:** Node 24.x na Vercel (Node 20 foi revertido por estar descontinuado na plataforma); o conserto efetivo é Vite 7/Rollup + `@tanstack/query-core` declarado diretamente.
