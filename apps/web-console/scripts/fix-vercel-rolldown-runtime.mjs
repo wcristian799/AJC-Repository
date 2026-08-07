@@ -2,7 +2,8 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const functionsRoot = resolve(".vercel/output/functions");
-const helper = `var __exportAll = (all, no_symbols) => {
+function helperFor(name) {
+  return `var ${name} = (all, no_symbols) => {
   const target = {};
   for (const name in all) Object.defineProperty(target, name, {
     get: all[name],
@@ -11,6 +12,7 @@ const helper = `var __exportAll = (all, no_symbols) => {
   if (!no_symbols) Object.defineProperty(target, Symbol.toStringTag, { value: "Module" });
   return target;
 };`;
+}
 
 async function listModules(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -28,16 +30,20 @@ for (const pathname of await listModules(functionsRoot)) {
   const source = await readFile(pathname, "utf8");
   let changed = false;
   const output = source.replace(
-    /import \{([^}]+)\} from "([^"]*\/_runtime\.mjs)";/g,
+    /import \{([^}]+)\} from "([^"]+)";/g,
     (statement, rawSpecifiers, runtimePath) => {
       const specifiers = rawSpecifiers.split(",").map((item) => item.trim());
-      if (!specifiers.includes("r as __exportAll")) return statement;
+      const exportAllSpecifiers = specifiers.filter((item) => /^r as __exportAll(?:\$\d+)?$/.test(item));
+      if (exportAllSpecifiers.length === 0) return statement;
       changed = true;
-      const remaining = specifiers.filter((item) => item !== "r as __exportAll");
+      const remaining = specifiers.filter((item) => !exportAllSpecifiers.includes(item));
       const runtimeImport = remaining.length
         ? `import { ${remaining.join(", ")} } from "${runtimePath}";\n`
         : "";
-      return `${runtimeImport}${helper}`;
+      const localHelpers = exportAllSpecifiers
+        .map((item) => helperFor(item.replace(/^r as /, "")))
+        .join("\n");
+      return `${runtimeImport}${localHelpers}`;
     },
   );
   if (!changed) continue;
