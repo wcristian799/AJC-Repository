@@ -51,8 +51,8 @@ for (const pathname of await listModules(functionsRoot)) {
   patched += 1;
 }
 
-if (patched === 0) {
-  throw new Error("Nenhum import do helper __exportAll foi encontrado no bundle Vercel");
-}
-
-console.log(`[vercel-ssr] helper __exportAll isolado em ${patched} chunks`);
+console.log(
+  patched > 0
+    ? `[vercel-ssr] helper __exportAll isolado em ${patched} chunks`
+    : "[vercel-ssr] nenhum helper Rolldown encontrado; bundle Rollup preservado",
+);

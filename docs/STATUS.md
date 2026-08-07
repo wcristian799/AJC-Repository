@@ -999,3 +999,8 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 - **Causa raiz do erro `__exportAll`:** o lockfile continha famílias simultâneas de `@tanstack/react-router`/`router-core` (a versão direta e a versão interna exigida pelo React Start). O artefato SSR podia combinar helper de uma família com runtime de outra.
 - **Correção:** versões diretas alinhadas às dependências internas do `@tanstack/react-start@1.168.34`: `@tanstack/react-router@1.170.18` e `@tanstack/router-plugin@1.168.23`. O `bun.lock` foi regenerado, removendo a duplicação incompatível.
 - **Verificação:** `bun install`, `bun run build:vercel` e import da função SSR compilada passaram localmente.
+
+## Trabalho 2026-08-07 - Correção do bundler SSR Rolldown
+- **Causa confirmada:** `__exportAll` é helper emitido pelo Rolldown do Vite 8. O erro de runtime era produzido no bundle SSR, não nas telas ou nos apps de campo.
+- **Correção:** `apps/web-console` passa a usar `vite@7.1.12`, cujo pipeline SSR usa Rollup. Mantém TanStack Start, Nitro, renderização SSR e a Function Node da Vercel; apenas troca o bundler defeituoso.
+- **Verificação:** build Vite 7 concluído, sem qualquer helper `__exportAll` no output; import da função SSR compilada retornou `VERCEL_FUNCTION_IMPORT_OK`.
