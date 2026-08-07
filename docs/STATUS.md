@@ -973,3 +973,7 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 - O seed foi corrigido para preservar referências de preço de vendas POS. Migration+seed passam juntos em banco preenchido.
 - QA final: migration 41/41, teste transacional confirmou um único AR de R$ 6.120,00 após dois eventos de embarque na mesma carga, backend build, 15 suítes/50 testes Jest, front SSR/Vercel build, TypeScript/build móvel e sincronização Android verdes. Smoke autenticado validou catálogo/configurações/contextos/Portaria/checklists/CRM; os sete aplicativos e Cadastros foram inspecionados em 390×844 sem overflow de página, erro interno ou fallback demonstrativo. A API AJC usada no QA foi a instância atualizada do WSL em `:3010`; a porta Windows `:3000` pertence a outro projeto e não deve ser usada pelo AJC.
 - Produção: aplicar 0041, rebuildar API/worker, publicar as cinco configurações, configurar perfis/contextos, validar MinIO, renovar tokens e definir `AJC_CAMPO_URL` antes da assinatura Android. Documento: `docs/feedback/2026-08-07-aplicativos-campo-etapas-14-17-20.md`.
+# Hotfix Vercel SSR 2026-08-07 (lock deterministico)
+
+- O lock isolado de `apps/web-console`, usado pela Root Directory da Vercel, estava divergente da arvore local e gerava `TypeError: __exportAll is not a function` em runtime apesar do build verde.
+- O lock foi regenerado como projeto standalone e o deploy agora exige `bun install --frozen-lockfile`.
