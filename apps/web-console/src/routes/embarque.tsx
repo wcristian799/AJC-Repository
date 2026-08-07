@@ -1,7 +1,6 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
   CheckCircle2,
   XCircle,
@@ -92,34 +91,51 @@ function QrCameraScanner({ onDetected }: { onDetected: (value: string) => void }
     const video = videoRef.current;
     if (!video) return;
     let disposed = false;
-    let controls: IScannerControls | undefined;
-    const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 220 });
+    let stream: MediaStream | undefined;
+    let frame = 0;
 
-    void reader
-      .decodeFromConstraints(
-        { audio: false, video: { facingMode: { ideal: "environment" } } },
-        video,
-        (result, _error, scannerControls) => {
-          controls = scannerControls;
-          if (disposed || !result) return;
-          disposed = true;
-          scannerControls.stop();
-          onDetectedRef.current(result.getText());
-        },
-      )
-      .then((scannerControls) => {
-        controls = scannerControls;
-        if (disposed) scannerControls.stop();
-        else setCameraState("ready");
-      })
-      .catch(() => {
+    type DetectorResult = { rawValue?: string };
+    type Detector = { detect: (source: HTMLVideoElement) => Promise<DetectorResult[]> };
+    type DetectorConstructor = new (options?: { formats?: string[] }) => Detector;
+
+    void (async () => {
+      try {
+        const DetectorApi = (window as Window & { BarcodeDetector?: DetectorConstructor }).BarcodeDetector;
+        if (!DetectorApi || !navigator.mediaDevices?.getUserMedia) throw new Error("BarcodeDetector indisponível");
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: "environment" } },
+        });
+        if (disposed) return;
+        video.srcObject = stream;
+        await video.play();
+        setCameraState("ready");
+        const detector = new DetectorApi({ formats: ["qr_code"] });
+        const scan = async () => {
+          if (disposed) return;
+          try {
+            const result = (await detector.detect(video)).find((item) => item.rawValue);
+            if (result?.rawValue) {
+              disposed = true;
+              onDetectedRef.current(result.rawValue);
+              return;
+            }
+          } catch {
+            // Quadros sem foco/iluminação suficiente são normais durante a leitura.
+          }
+          frame = requestAnimationFrame(() => void scan());
+        };
+        frame = requestAnimationFrame(() => void scan());
+      } catch {
         if (!disposed) setCameraState("denied");
-      });
+      }
+    })();
 
     return () => {
       disposed = true;
-      controls?.stop();
-      reader.reset();
+      cancelAnimationFrame(frame);
+      stream?.getTracks().forEach((track) => track.stop());
+      video.srcObject = null;
     };
   }, []);
 

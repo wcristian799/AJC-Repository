@@ -1,5 +1,11 @@
 # STATUS — Diário vivo do projeto AJC
 
+## Hotfix 2026-08-07 - SSR Vercel após leitor QR
+
+- O deploy `c491658` passou no build, mas toda rota SSR retornou 500 na Vercel com `TypeError: __exportAll is not a function`. A causa foi o empacotamento ESM/CJS de `@zxing/browser` dentro da função Nitro, mesmo quando o import era dinâmico.
+- O leitor de embarque deixou de depender de ZXing e agora usa `BarcodeDetector` + `getUserMedia` nativos do Chromium/WebView, com busca manual real como contingência quando o aparelho não oferece o detector ou nega câmera.
+- O pacote e os locks foram saneados. Build cliente/SSR/Nitro/Vercel passou, `@zxing` não aparece mais no artefato do servidor e a importação direta de `.vercel/output/functions/__server.func/index.mjs` retornou `SSR_MODULE_OK`.
+
 ## Levantamento 2026-08-07 - Aplicativos das Etapas 14, 15, 16, 17 e 20
 
 - O Word vigente e as implementações atuais foram cruzados em `docs/feedback/2026-08-07-levantamento-aplicativos-etapas-14-17-20.md`.
