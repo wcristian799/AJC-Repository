@@ -977,3 +977,4 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 
 - O lock isolado de `apps/web-console`, usado pela Root Directory da Vercel, estava divergente da arvore local e gerava `TypeError: __exportAll is not a function` em runtime apesar do build verde.
 - O lock foi regenerado como projeto standalone e o deploy agora exige `bun install --frozen-lockfile`.
+- O primeiro deploy ainda restaurou a arvore antiga do cache da Vercel e repetiu exatamente o bundle `server-Bo4wBqd-2.mjs` de 164,5 kB. A instalacao passou a usar tambem `--force --no-cache`; a reproducao standalone do lock novo gera `server-Cs7FcId7.mjs` de 58,05 kB.
