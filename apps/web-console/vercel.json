@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "tanstack-start",
+  "framework": null,
   "installCommand": "bun install --frozen-lockfile --force --no-cache",
   "buildCommand": "rm -rf node_modules/.nitro .vercel/output && bun run build:vercel && echo '[vercel-ssr] artefato corrigido'"
 }

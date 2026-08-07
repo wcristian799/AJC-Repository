@@ -989,3 +989,8 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 - **Correção:** `apps/web-console/scripts/fix-vercel-rolldown-runtime.mjs` agora intercepta qualquer import ESM que exporte `r as __exportAll` ou aliases numerados, mantendo os demais specifiers e injetando implementação local no chunk consumidor.
 - **Verificação:** `bun run build:vercel` exit 0; nenhum import inválido permaneceu em `.vercel/output/functions`; importação da função SSR compilada passou (`VERCEL_FUNCTION_IMPORT_OK`).
 - **Próximo passo:** aguardar deployment automático do commit e validar o domínio de produção; se a Vercel ainda mostrar 500, abrir os Runtime Logs do deployment novo (não reutilizar deployments antigos).
+
+## Trabalho 2026-08-07 - Publicação SSR direta na Vercel
+- **Diagnóstico adicional:** apesar de o build local gerar e importar a função SSR corretamente, a função publicada pela Vercel tinha hash/conteúdo diferente, indicando que o adaptador automático de framework estava reprocessando o output do Nitro.
+- **Correção:** `apps/web-console/vercel.json` deixa de declarar o framework `tanstack-start`; a Vercel deve consumir diretamente o Build Output API (`.vercel/output`) produzido pelo build SSR do Nitro. SSR, rotas e função Node permanecem ativos.
+- **Verificação local:** `bun run build:vercel` e import de `.vercel/output/functions/__server.func/index.mjs` concluídos com sucesso.
