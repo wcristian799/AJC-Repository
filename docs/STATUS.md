@@ -994,3 +994,8 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 - **Diagnóstico adicional:** apesar de o build local gerar e importar a função SSR corretamente, a função publicada pela Vercel tinha hash/conteúdo diferente, indicando que o adaptador automático de framework estava reprocessando o output do Nitro.
 - **Correção:** `apps/web-console/vercel.json` deixa de declarar o framework `tanstack-start`; a Vercel deve consumir diretamente o Build Output API (`.vercel/output`) produzido pelo build SSR do Nitro. SSR, rotas e função Node permanecem ativos.
 - **Verificação local:** `bun run build:vercel` e import de `.vercel/output/functions/__server.func/index.mjs` concluídos com sucesso.
+
+## Trabalho 2026-08-07 - Alinhamento da árvore TanStack para SSR
+- **Causa raiz do erro `__exportAll`:** o lockfile continha famílias simultâneas de `@tanstack/react-router`/`router-core` (a versão direta e a versão interna exigida pelo React Start). O artefato SSR podia combinar helper de uma família com runtime de outra.
+- **Correção:** versões diretas alinhadas às dependências internas do `@tanstack/react-start@1.168.34`: `@tanstack/react-router@1.170.18` e `@tanstack/router-plugin@1.168.23`. O `bun.lock` foi regenerado, removendo a duplicação incompatível.
+- **Verificação:** `bun install`, `bun run build:vercel` e import da função SSR compilada passaram localmente.
