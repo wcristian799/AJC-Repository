@@ -1,5 +1,14 @@
 # STATUS — Diário vivo do projeto AJC
 
+## Levantamento 2026-08-07 - Etapa 10: Relatório comercial no TMS
+
+- Fonte vigente revisada: a Etapa 10 do documento de validação de 09/jul exige relatório de vendas com preço e volume no TMS e acompanhamento conjunto de vendas, volumes, preços e margens. Detalhe e consolidado precisam usar exatamente a mesma base e os mesmos filtros.
+- A Etapa 10 ainda não está concluída. O Controle por viagem B.11 já agrega volumes e valores de carga, mas é operacional e não consolida todas as receitas comerciais, preço médio, custos atribuídos e margem.
+- Fontes reais mapeadas: `bilhete.preco_pago` para passagens, `carga.valor_cobrado` para carga/encomenda e `envio_veiculo.valor_frete` para veículos/máquinas; unidades vêm de bilhetes, volumes e envios. Canais e snapshots de tabela já existem nos contratos de venda.
+- Margem deve usar despesas/títulos a pagar de `financeiro_titulo` vinculados à viagem e classificados como custo direto pela configuração. Não somar novamente itens da prestação de contas, evitando dupla contagem. Quando a viagem não possuir custos classificados, a margem será apresentada como não apurável/incompleta, sem assumir custo zero.
+- Proposta: nova aba `Relatório comercial` em `/app/tms`, backend agregado próprio, filtros por período/viagem/embarcação/trecho/produto/canal/agente/cliente/classe, KPIs e detalhamento coerentes, CSV/PDF, RBAC específico e configuração versionada `tms_relatorio_comercial` em Cadastros.
+- Próximo passo: após aprovação do parecer, executar a fatia vertical completa com migration 0041, backend, front, Cadastros, documentação, testes, smoke e inspeção visual.
+
 ## Trabalho 2026-08-06 - Ajustes de Vendas, PDV e Encomendas
 
 - Regra adicional do cliente: o PDV não permite venda avulsa. Toda operação precisa selecionar ou cadastrar um `cliente_passagem`; a API bloqueia qualquer item sem vínculo persistido, e a interface só habilita o recebimento após vincular todos os bilhetes.
