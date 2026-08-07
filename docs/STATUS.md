@@ -1004,3 +1004,8 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 - **Causa confirmada:** `__exportAll` é helper emitido pelo Rolldown do Vite 8. O erro de runtime era produzido no bundle SSR, não nas telas ou nos apps de campo.
 - **Correção:** `apps/web-console` passa a usar `vite@7.1.12`, cujo pipeline SSR usa Rollup. Mantém TanStack Start, Nitro, renderização SSR e a Function Node da Vercel; apenas troca o bundler defeituoso.
 - **Verificação:** build Vite 7 concluído, sem qualquer helper `__exportAll` no output; import da função SSR compilada retornou `VERCEL_FUNCTION_IMPORT_OK`.
+
+## Trabalho 2026-08-07 - Dependência explícita do TanStack Query
+- **Falha de build na Vercel:** Rollup não resolveu `@tanstack/query-core` quando importado transitivamente por `@tanstack/react-query` no workspace isolado.
+- **Correção:** `@tanstack/query-core@5.101.0` foi declarado diretamente no frontend e o lockfile regenerado.
+- **Verificação:** build SSR Vite 7 e import da função compilada passaram localmente.
