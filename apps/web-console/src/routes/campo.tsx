@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { getMeAjc, getStoredAuth, setStoredAuth } from "@/lib/ajc-api";
-import { requiredFieldPermission } from "@/lib/field-apps";
+import { requiredFieldPermissions } from "@/lib/field-apps";
 
 export const Route = createFileRoute("/campo")({
   component: CampoAccessGate,
@@ -18,9 +18,9 @@ function CampoAccessGate() {
     if (!stored) { void navigate({ to:"/campo/login", replace:true }); return; }
     getMeAjc().then((user) => {
       setStoredAuth({ ...stored, user });
-      const required = requiredFieldPermission(pathname);
+      const required = requiredFieldPermissions(pathname);
       const hasAny = user.permissions.some((permission) => permission.startsWith("campo."));
-      setState(hasAny && (!required || user.permissions.includes(required)) ? "allowed" : "denied");
+      setState(hasAny && (required.length===0 || required.some(permission=>user.permissions.includes(permission))) ? "allowed" : "denied");
     }).catch(() => { setStoredAuth(null); void navigate({ to:"/campo/login", replace:true }); });
   }, [navigate, pathname]);
 

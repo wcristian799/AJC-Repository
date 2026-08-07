@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { ChevronRight, LogOut, Radio } from "lucide-react";
 import { BrandMark } from "@/components/ops/BrandMark";
-import { getStoredAuth, logoutAjc } from "@/lib/ajc-api";
-import { authorizedFieldApps, type FieldAppDefinition } from "@/lib/field-apps";
+import { getStoredAuth, listCampoAplicativos, logoutAjc } from "@/lib/ajc-api";
+import { fieldAppFromApi, type FieldAppDefinition } from "@/lib/field-apps";
 
 export const Route = createFileRoute("/campo/")({
   head: () => ({ meta: [{ title: "Aplicativos de campo · AJC" }] }),
@@ -18,8 +18,8 @@ function CampoHub() {
   const [operator, setOperator] = useState("Operador");
   useEffect(() => {
     const auth = getStoredAuth();
-    setApps(authorizedFieldApps(auth?.user.permissions ?? []));
     setOperator(auth?.user.nome ?? "Operador");
+    listCampoAplicativos().then(rows=>setApps(rows.map(fieldAppFromApi))).catch(()=>setApps([]));
   }, []);
   return <div className="relative min-h-screen overflow-hidden bg-background">
     <div className="pointer-events-none absolute -top-48 left-1/2 h-96 w-[36rem] -translate-x-1/2 rounded-full bg-[color:var(--brand)] opacity-10 blur-3xl" />
@@ -41,7 +41,7 @@ function CampoHub() {
 function AppCard({app,index}:{app:FieldAppDefinition;index:number}) {
   const Icon=app.icon;
   return <motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:index*.05,duration:.4,ease:easeOut}}>
-    <Link to={app.to} className="surface-card brand-rail brand-rail-left group flex min-h-28 items-center gap-4 p-5 ring-1 ring-[color:var(--hairline)] hover:ring-[color:var(--hairline-brand)]">
+    <Link to={app.to} className="surface-card group flex min-h-28 items-center gap-4 p-5 ring-1 ring-[color:var(--hairline)] hover:ring-[color:var(--hairline-brand)]">
       <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[color:color-mix(in_oklab,var(--brand)_12%,transparent)] text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)]"><Icon className="h-7 w-7" strokeWidth={1.6}/></span>
       <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><strong className="truncate font-display text-lg font-normal">{app.name}</strong><small className="font-mono text-[9px] text-muted-foreground">{app.spec}</small></span><span className="mt-1 block text-xs text-muted-foreground">{app.description}</span></span>
       <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1"/>

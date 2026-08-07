@@ -8,7 +8,9 @@ import {
   createTmsEntrega,
   listTmsVolumes,
   uploadTmsEntregaEvidencia,
+  resolveCampoEntrega,
   type TmsVolumeApi,
+  type CampoEntregaTargetApi,
 } from "@/lib/ajc-api";
 
 /** B.9 - Bipe final e comprovante de entrega com prova legal real. */
@@ -16,6 +18,7 @@ export function EntregasTab() {
   const [volumes, setVolumes] = useState<TmsVolumeApi[]>([]);
   const [scan, setScan] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [target,setTarget] = useState<CampoEntregaTargetApi|null>(null);
   const [recebedorNome, setRecebedorNome] = useState("");
   const [recebedorDoc, setRecebedorDoc] = useState("");
   const [recebedorAvulso, setRecebedorAvulso] = useState(false);
@@ -58,21 +61,24 @@ export function EntregasTab() {
     };
   }, []);
 
-  function confirmarBipe() {
+  async function confirmarBipe() {
     const value = scan.trim().toLowerCase();
     if (!value) return;
-    const volume = volumes.find(
-      (item) =>
-        item.status === "embarcado" &&
-        (item.uuid.toLowerCase() === value || item.id.toLowerCase() === value),
-    );
-    if (!volume) {
+    try {
+      const resolved=await resolveCampoEntrega(value);
+      setTarget(resolved);
+      if(resolved.tipo==="veiculo_maquina"){setSelectedId(null);setError("Veículo ou máquina exige checklist de entrega no app de Conferente da Navegação.");return;}
+      let available=volumes;
+      if(!available.some(v=>resolved.volume_ids.includes(v.id))) available=await listTmsVolumes();
+      setVolumes(available);
+      const volume=available.find(item=>resolved.volume_ids.includes(item.id)&&item.status==="embarcado");
+      if(!volume) throw new Error("O item não possui volume embarcado elegível para entrega.");
+      setSelectedId(volume.id);setError(null);
+    } catch (e) {
       setSelectedId(null);
-      setError("Volume nao encontrado ou ainda nao esta embarcado.");
-      return;
+      setTarget(null);
+      setError(e instanceof Error?e.message:"Código não encontrado ou não elegível para entrega.");
     }
-    setSelectedId(volume.id);
-    setError(null);
   }
 
   async function confirmarEntrega() {
@@ -88,6 +94,9 @@ export function EntregasTab() {
       const entrega = await createTmsEntrega({
         cidadeSigla: volumeAlvo.cidade_destino_sigla,
         volumeIds: [volumeAlvo.id],
+        tipoOperacao: target?.tipo === "carga" || target?.tipo === "encomenda" || target?.tipo === "palete" ? target.tipo : "volume",
+        paleteId: target?.tipo === "palete" ? target.id : undefined,
+        dispositivo: typeof navigator !== "undefined" ? navigator.userAgent.slice(0,150) : undefined,
         recebedorNome: recebedorNome.trim(),
         recebedorDoc: recebedorDoc.trim(),
         recebedorAvulso,
@@ -121,6 +130,7 @@ export function EntregasTab() {
     setDone(false);
     setScan("");
     setSelectedId(null);
+    setTarget(null);
     setRecebedorNome("");
     setRecebedorDoc("");
     setRecebedorAvulso(false);

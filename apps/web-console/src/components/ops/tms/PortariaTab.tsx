@@ -1,185 +1,32 @@
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { LogIn, LogOut, Camera, Truck } from "lucide-react";
-import { StatusChip, OfflineBanner } from "@/components/ops/primitives";
-import { PhoneFrame, CaptureTile } from "./PhoneFrame";
-import { AjcApiError, createTmsPortaria, listTmsPortaria, type TmsPortariaApi } from "@/lib/ajc-api";
+import { useEffect, useMemo, useState } from "react";
+import { Camera, CheckCircle2, DoorOpen, LogOut, RefreshCw, Search, Truck, X } from "lucide-react";
+import { AjcApiError, createCampoPortaria, exitCampoPortaria, getCampoPortariaConfig, listCampoEmpresas, listCampoPortaria, listTmsLocaisOperacionais, uploadCampoPortaria, type CampoEmpresaApi, type CampoPortariaApi, type TmsLocalOperacionalApi } from "@/lib/ajc-api";
 
-/** B.1 - App Portaria: registro real de entrada no patio. */
+type Mode = "patio" | "entrada" | "saida";
+
 export function PortariaTab() {
-  return <SimuladorPortaria />;
+  const [mode,setMode]=useState<Mode>("patio");
+  const [rows,setRows]=useState<CampoPortariaApi[]>([]);
+  const [locals,setLocals]=useState<TmsLocalOperacionalApi[]>([]);
+  const [companies,setCompanies]=useState<CampoEmpresaApi[]>([]);
+  const [config,setConfig]=useState<{fotoEntrada:string;fotoSaida:string;pollingSegundos:number}>({fotoEntrada:"opcional",fotoSaida:"opcional",pollingSegundos:20});
+  const [query,setQuery]=useState(""); const [plate,setPlate]=useState(""); const [company,setCompany]=useState(""); const [companyId,setCompanyId]=useState(""); const [companyType,setCompanyType]=useState<"cliente"|"fornecedor">("cliente"); const [driver,setDriver]=useState(""); const [localId,setLocalId]=useState(""); const [photo,setPhoto]=useState<File|null>(null); const [selected,setSelected]=useState<CampoPortariaApi|null>(null); const [busy,setBusy]=useState(false); const [message,setMessage]=useState<string|null>(null);
+  const patio=useMemo(()=>rows.filter(x=>!x.saida_em),[rows]);
+  async function load(){setMessage(null);try{const [data,loc,cfg]=await Promise.all([listCampoPortaria({busca:query,situacao:"todas",porPagina:"100"}),listTmsLocaisOperacionais(),getCampoPortariaConfig()]);setRows(data.items);setLocals(loc.filter(x=>x.tipo==="porto"||x.tipo==="patio"));setConfig(cfg.valor);}catch(e){setMessage(e instanceof Error?e.message:"Falha ao carregar a portaria");}}
+  useEffect(()=>{void load();},[]);
+  useEffect(()=>{const t=window.setInterval(()=>void load(),Math.max(10,config.pollingSegundos)*1000);return()=>window.clearInterval(t);},[config.pollingSegundos,query]);
+  async function searchCompany(value:string){setCompany(value);setCompanyId("");if(value.trim().length>=2){try{setCompanies(await listCampoEmpresas(value));}catch{setCompanies([]);}}else setCompanies([]);}
+  async function submit(){if(!plate||!company||!localId)return setMessage("Placa, empresa e local operacional são obrigatórios.");setBusy(true);setMessage(null);try{let evidence:{url:string;hash:string}|undefined;if(photo)evidence=await uploadCampoPortaria(photo);await createCampoPortaria({placa:plate,empresaNome:company,empresaId:companyId||undefined,empresaTipo:companyId?companyType:undefined,motoristaNome:driver,localOperacionalId:localId,fotoUrl:evidence?.url,fotoHash:evidence?.hash,clientUuid:crypto.randomUUID()});setMode("patio");setPlate("");setCompany("");setDriver("");setPhoto(null);await load();setMessage("Entrada registrada e auditada.");}catch(e){setMessage(e instanceof AjcApiError?e.message:"Não foi possível registrar a entrada.");}finally{setBusy(false);}}
+  async function submitExit(){if(!selected)return;setBusy(true);setMessage(null);try{await exitCampoPortaria(selected.id,{clientUuid:crypto.randomUUID()});setSelected(null);setMode("patio");await load();setMessage("Saída registrada e auditada.");}catch(e){setMessage(e instanceof Error?e.message:"Não foi possível registrar a saída.");}finally{setBusy(false);}}
+  return <div className="space-y-5">
+    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="champagne-eyebrow">Portaria · operação real</p><h1 className="mt-1 font-display text-3xl">Controle do pátio</h1><p className="mt-2 text-sm text-muted-foreground">Cada entrada e saída tem placa, empresa, local, horário e trilha de auditoria.</p></div><button onClick={()=>void load()} className="inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm ring-1 ring-[color:var(--hairline)]"><RefreshCw className="h-4 w-4"/>Atualizar</button></header>
+    {message&&<div className="flex items-start justify-between gap-3 rounded-xl border border-[color:var(--hairline-brand)] bg-[color:color-mix(in_oklab,var(--brand)_8%,transparent)] p-3 text-sm">{message}<button onClick={()=>setMessage(null)} aria-label="Fechar"><X className="h-4 w-4"/></button></div>}
+    <div className="grid grid-cols-3 gap-3"><Metric label="No pátio" value={patio.length}/><Metric label="Registros" value={rows.length}/><Metric label="Foto entrada" value={config.fotoEntrada}/></div>
+    <div className="flex gap-2 overflow-x-auto pb-1"><Tab active={mode==="patio"} onClick={()=>setMode("patio")} icon={Truck}>Pátio</Tab><Tab active={mode==="entrada"} onClick={()=>setMode("entrada")} icon={DoorOpen}>Registrar entrada</Tab><Tab active={mode==="saida"} onClick={()=>setMode("saida")} icon={LogOut}>Registrar saída</Tab></div>
+    {mode==="patio"&&<section className="surface-card p-4"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar placa, empresa ou motorista" className="field w-full pl-9"/></div><div className="mt-4 space-y-2">{rows.map(row=><button key={row.id} onClick={()=>{setSelected(row);setMode("saida")}} className="flex w-full items-center justify-between gap-3 rounded-xl p-3 text-left ring-1 ring-[color:var(--hairline)] hover:ring-[color:var(--hairline-brand)]"><span><strong className="font-mono">{row.placa}</strong><span className="ml-3 text-sm">{row.empresa_nome||row.empresa}</span><small className="mt-1 block text-xs text-muted-foreground">{row.local_nome||"Local não informado"} · {new Date(row.entrada_em).toLocaleString("pt-BR")}</small></span><span className={`rounded-full px-2 py-1 text-[10px] ${row.saida_em?"bg-muted text-muted-foreground":"bg-[color:color-mix(in_oklab,var(--success)_12%,transparent)] text-[color:var(--success)]"}`}>{row.saida_em?"saiu":"no pátio"}</span></button>)}{rows.length===0&&<p className="py-8 text-center text-sm text-muted-foreground">Nenhum registro encontrado.</p>}</div></section>}
+    {mode==="entrada"&&<section className="surface-card p-4"><div className="grid gap-3 sm:grid-cols-2"><label className="field-label">Placa<input className="field mt-1 font-mono uppercase" value={plate} onChange={e=>setPlate(e.target.value.toUpperCase())} placeholder="ABC-1D23"/></label><label className="field-label">Motorista (opcional)<input className="field mt-1" value={driver} onChange={e=>setDriver(e.target.value)} placeholder="Nome completo"/></label><label className="field-label sm:col-span-2">Empresa<input className="field mt-1" value={company} onChange={e=>void searchCompany(e.target.value)} placeholder="Digite para buscar cliente ou fornecedor"/>{companies.length>0&&<div className="mt-1 max-h-40 overflow-auto rounded-lg border border-[color:var(--hairline)] bg-[color:var(--surface-elev)]">{companies.map(item=><button key={`${item.tipo}-${item.id}`} onClick={()=>{setCompany(item.nome);setCompanyId(item.id);setCompanyType(item.tipo);setCompanies([])}} className="block w-full px-3 py-2 text-left text-sm hover:bg-[color:var(--muted)]">{item.nome}<small className="ml-2 text-xs text-muted-foreground">{item.tipo}</small></button>)}</div>}</label><label className="field-label">Local operacional<select className="field mt-1" value={localId} onChange={e=>setLocalId(e.target.value)}><option value="">Selecione porto/pátio</option>{locals.map(l=><option key={l.id} value={l.id}>{l.nome} · {l.cidade_sigla}</option>)}</select></label><label className="field-label">Foto de entrada {config.fotoEntrada==="obrigatoria"?"(obrigatória)":"(opcional)"}<input className="field mt-1" type="file" accept="image/*" capture="environment" onChange={e=>setPhoto(e.target.files?.[0]||null)}/></label></div><button disabled={busy} onClick={()=>void submit()} className="mt-4 h-12 w-full rounded-xl bg-[color:var(--brand)] font-semibold text-white disabled:opacity-50">{busy?"Registrando…":"Confirmar entrada"}</button></section>}
+    {mode==="saida"&&<section className="surface-card p-4"><h2 className="font-display text-xl">Saída do pátio</h2><p className="mt-1 text-sm text-muted-foreground">Selecione um veículo ainda no pátio. A operação não pode ser repetida.</p><select className="field mt-4 w-full" value={selected?.id||""} onChange={e=>setSelected(rows.find(x=>x.id===e.target.value)||null)}><option value="">Selecionar veículo</option>{patio.map(row=><option key={row.id} value={row.id}>{row.placa} · {row.empresa_nome||row.empresa}</option>)}</select><button disabled={!selected||busy} onClick={()=>void submitExit()} className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--brand)] font-semibold text-white disabled:opacity-50"><CheckCircle2 className="h-5 w-5"/>{busy?"Registrando…":"Confirmar saída"}</button></section>}
+  </div>;
 }
-
-function SimuladorPortaria() {
-  const [screen, setScreen] = useState<"home" | "entrada" | "ok">("home");
-  const [placa, setPlaca] = useState("");
-  const [empresa, setEmpresa] = useState("");
-  const [patio, setPatio] = useState<TmsPortariaApi[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const placaInvalida = placa.length > 0 && !/^[A-Z]{3}-?\d[A-Z0-9]\d{2}$/.test(placa.toUpperCase());
-
-  useEffect(() => {
-    let active = true;
-    listTmsPortaria()
-      .then((rows) => {
-        if (active) setPatio(rows);
-      })
-      .catch((err) => {
-        if (active) setError(err instanceof AjcApiError ? err.message : "Nao foi possivel carregar a portaria.");
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function confirmarEntrada() {
-    if (placa.length === 0 || placaInvalida || empresa.length === 0) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const registro = await createTmsPortaria({
-        placa,
-        empresa,
-        tipo: "veiculo_carga",
-        fotoUrl: "field://portaria/foto-recomendada",
-        clientUuid: crypto.randomUUID(),
-      });
-      setPatio((rows) => [registro, ...rows]);
-      setScreen("ok");
-    } catch (err) {
-      setError(err instanceof AjcApiError ? err.message : "Nao foi possivel registrar a entrada.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const patioView = patio.map((p) => ({
-    placa: p.placa ?? "—",
-    empresa: p.empresa,
-    entrada: formatHour(p.entrada_em),
-  }));
-
-  return (
-    <PhoneFrame framed={false} online={!error} pending={error ? 1 : 0} clock={currentClock()}>
-      <AnimatePresence mode="wait">
-        {screen === "home" && (
-          <motion.div key="home" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="flex h-[calc(100%-44px)] flex-col p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--brand)]">App Portaria</p>
-            <h3 className="mt-1 font-display text-2xl">Porto de Belem</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Porteiro: Raimundo Nonato · turno manha</p>
-
-            <OfflineBanner pending={error ? 1 : 0} />
-
-            <div className="mt-4 rounded-2xl bg-[color:var(--muted)] p-3 ring-1 ring-[color:var(--hairline)]">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground"><Truck className="h-4 w-4 text-[color:var(--brand)]" /> Veiculos no patio</span>
-                <StatusChip tone="brand" size="xs">{patioView.length} agora</StatusChip>
-              </div>
-              <div className="mt-2 space-y-1">
-                {patioView.slice(0, 2).map((p) => (
-                  <div key={`${p.placa}-${p.entrada}`} className="flex items-center justify-between rounded-md bg-[color:var(--card)] px-2 py-1.5 text-[11px] ring-1 ring-[color:var(--hairline)]">
-                    <span className="font-mono text-foreground">{p.placa}</span>
-                    <span className="truncate text-muted-foreground">{p.empresa}</span>
-                    <span className="font-mono text-[color:var(--brand)]">{p.entrada}</span>
-                  </div>
-                ))}
-                {patioView.length === 0 && <p className="px-2 py-1.5 text-[11px] text-muted-foreground">Nenhum registro carregado.</p>}
-              </div>
-            </div>
-
-            {error && <p className="mt-3 rounded-lg bg-[color:color-mix(in_oklab,var(--danger)_10%,transparent)] px-3 py-2 text-[11px] text-[color:var(--danger)]">{error}</p>}
-
-            <div className="mt-6 grid gap-3">
-              <button
-                onClick={() => { setScreen("entrada"); setPlaca(""); setEmpresa(""); setError(null); }}
-                className="flex h-24 flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-br from-[color:var(--brand)] to-[color:var(--brand-soft)] text-primary-foreground shadow-[0_18px_40px_-12px_color-mix(in_oklab,var(--brand)_70%,transparent)] active:scale-[0.98]"
-              >
-                <LogIn className="h-7 w-7" />
-                <span className="text-base font-semibold">Registrar entrada</span>
-              </button>
-              <button className="surface-card flex h-24 flex-col items-center justify-center gap-2 text-foreground active:scale-[0.98]">
-                <LogOut className="h-7 w-7 text-[color:var(--brand)]" />
-                <span className="text-base font-semibold">Registrar saida</span>
-                <span className="text-[10px] text-muted-foreground">saida operacional entra no proximo endpoint</span>
-              </button>
-            </div>
-
-            <div className="mt-auto rounded-xl border border-dashed border-[color:var(--hairline)] p-3 text-[10px] text-muted-foreground">
-              <p className="font-medium text-foreground">Relatorio de entrada</p>
-              <p className="mt-1">Data, horario, placa e empresa sao carimbados pelo backend.</p>
-            </div>
-          </motion.div>
-        )}
-
-        {screen === "entrada" && (
-          <motion.div key="entrada" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex h-[calc(100%-44px)] flex-col p-5">
-            <button onClick={() => setScreen("home")} className="self-start text-xs text-muted-foreground">‹ Voltar</button>
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[color:var(--brand)]">Nova entrada</p>
-
-            <div className="mt-3 rounded-xl bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--brand)] ring-1 ring-[color:var(--hairline-brand)]">
-              Tipo fixo nesta versao: veiculo de carga. Pessoa e veiculo para transporte dependem de regra operacional futura.
-            </div>
-
-            <div className="mt-4">
-              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Placa</label>
-              <input
-                value={placa}
-                onChange={(e) => setPlaca(e.target.value.toUpperCase())}
-                placeholder="ABC-1D23"
-                className={`mt-1 h-11 w-full rounded-lg bg-[color:var(--muted)] px-3 font-mono text-sm uppercase tracking-wider text-foreground ring-1 focus:outline-none ${
-                  placaInvalida ? "ring-[color:var(--danger)]" : "ring-[color:var(--hairline)] focus:ring-[color:var(--ring)]"
-                }`}
-              />
-              {placaInvalida && <p className="mt-1 text-[10px] text-[color:var(--danger)]">Formato de placa invalido (ex.: ABC-1D23).</p>}
-            </div>
-
-            <div className="mt-3">
-              <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Empresa</label>
-              <input
-                value={empresa}
-                onChange={(e) => setEmpresa(e.target.value)}
-                placeholder="Autocomplete · digite ou cadastre"
-                className="mt-1 h-11 w-full rounded-lg bg-[color:var(--muted)] px-3 text-sm text-foreground ring-1 ring-[color:var(--hairline)] focus:outline-none focus:ring-[color:var(--ring)]"
-              />
-            </div>
-
-            <div className="mt-4">
-              <CaptureTile icon={Camera} label="Foto (recomendada)" />
-            </div>
-
-            {error && <p className="mt-3 rounded-lg bg-[color:color-mix(in_oklab,var(--danger)_10%,transparent)] px-3 py-2 text-[11px] text-[color:var(--danger)]">{error}</p>}
-
-            <button
-              onClick={confirmarEntrada}
-              disabled={saving || placa.length === 0 || placaInvalida || empresa.length === 0}
-              className="mt-auto h-14 rounded-2xl bg-gradient-to-br from-[color:var(--brand)] to-[color:var(--brand-soft)] text-sm font-semibold text-primary-foreground shadow-[0_18px_40px_-12px_color-mix(in_oklab,var(--brand)_70%,transparent)] disabled:opacity-50"
-            >
-              {saving ? "Registrando..." : "Confirmar entrada"}
-            </button>
-          </motion.div>
-        )}
-
-        {screen === "ok" && (
-          <motion.div key="ok" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex h-[calc(100%-44px)] flex-col items-center justify-center p-6 text-center">
-            <div className="grid h-20 w-20 place-items-center rounded-full bg-[color:color-mix(in_oklab,var(--success)_16%,transparent)] text-[color:var(--success)]">
-              <LogIn className="h-9 w-9" />
-            </div>
-            <h3 className="mt-4 font-display text-xl">Entrada registrada</h3>
-            <p className="mt-1 text-xs text-muted-foreground">{empresa || "Visitante"} agora consta no patio.</p>
-            <div className="mt-3"><StatusChip tone="success">sincronizado no backend</StatusChip></div>
-            <button onClick={() => setScreen("home")} className="mt-6 text-sm text-[color:var(--brand)]">Voltar ao inicio</button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </PhoneFrame>
-  );
-}
-
-function formatHour(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
-}
-
-function currentClock() {
-  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date());
-}
+function Metric({label,value}:{label:string;value:number|string}){return <div className="surface-card p-3"><p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p><strong className="mt-1 block text-lg">{value}</strong></div>}
+function Tab({active,onClick,icon:Icon,children}:{active:boolean;onClick:()=>void;icon:typeof Truck;children:string}){return <button onClick={onClick} className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm ${active?"bg-[color:var(--brand)] text-white":"ring-1 ring-[color:var(--hairline)]"}`}><Icon className="h-4 w-4"/>{children}</button>}

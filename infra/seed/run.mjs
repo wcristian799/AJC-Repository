@@ -381,6 +381,7 @@ async function seedPassagemPrices(adminId) {
     tabelaId = inserted.rows[0].id;
   }
   await client.query('UPDATE bilhete SET item_preco_id = NULL WHERE item_preco_id IN (SELECT id FROM item_preco WHERE tabela_id = $1)', [tabelaId]);
+  await client.query('UPDATE venda_pos_item SET item_preco_id = NULL WHERE item_preco_id IN (SELECT id FROM item_preco WHERE tabela_id = $1)', [tabelaId]);
   await client.query('DELETE FROM item_preco WHERE tabela_id = $1', [tabelaId]);
   for (const [destino, items] of passagemPrices) {
     for (const [classe, subtipo, valor] of items) {
@@ -416,6 +417,7 @@ async function seedEncomendaPrices(adminId) {
     );
     tabelaId = inserted.rows[0].id;
   }
+  await client.query('UPDATE venda_pos_item SET item_preco_id = NULL WHERE item_preco_id IN (SELECT id FROM item_preco WHERE tabela_id = $1)', [tabelaId]);
   await client.query('DELETE FROM item_preco WHERE tabela_id = $1', [tabelaId]);
   for (const [destino, values] of encomendaPrices) {
     for (const tamanho of ['P', 'M', 'G']) {

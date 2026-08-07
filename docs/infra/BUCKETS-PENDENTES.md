@@ -20,11 +20,11 @@
 |---|---|---|---|
 | `documentos-fiscais` | ativo | TMS / Encomendas | NF-e, NFC-e, DC e anexos fiscais. MinIO privado, referencia `s3://`, SHA-256 e upload temporario auditavel. |
 | `encomendas-evidencias` | ativo | Encomendas | Foto do volume, NF/DC e assinatura da declaracao. MinIO privado, referencia `s3://`, MIME validado, limite de 12 MB, SHA-256 e vinculo auditavel ao despacho. |
-| `portaria-fotos` | pendente | TMS | Fotos de registro de portaria (`registro_portaria.foto_url`) |
+| `portaria-fotos` | ativo | TMS | Fotos de registro de portaria (`registro_portaria.foto_url`/saída). MinIO privado, MIME validado, limite de 12 MB e SHA-256. |
 | `recebimento-fotos` | ativo | TMS | Evidencias fotograficas da conferencia fisica. MinIO privado, MIME de imagem validado, limite de 12 MB, SHA-256 e referencia `s3://` armazenados na conferencia. Quando o aparelho esta offline, o blob fica no IndexedDB ate a sincronizacao autenticada. |
 | `entregas-comprovantes` | ativo | TMS | Assinatura e duas fotos obrigatorias da entrega. MinIO privado, MIME de imagem validado, limite de 12 MB, SHA-256 e referencia `s3://` persistida no comprovante antes da mudanca para `entregue`. |
 | `prestacoes-anexos` | pendente | TMS | PDFs e comprovantes anexos da prestacao de contas (`prestacao_contas.anexos`) |
-| `veiculos-fotos-checklist` | pendente | Veiculos/Maquinas | Fotos por etapa/checklist (`envio_veiculo_foto.foto_url`) |
+| `veiculos-fotos-checklist` | ativo | Veiculos/Maquinas | Fotos por etapa/checklist (`envio_veiculo_foto.foto_url`). MinIO privado, MIME validado, limite de 12 MB e SHA-256. |
 | `vendas-gratuidades-documentos` | pendente | Vendas | Comprovantes/documentos de gratuidade (`gratuidade.documento_url`) |
 | `bpe-documentos` | ativo | Fiscal / Vendas | XML autorizado, DABPE PDF e XML de cancelamento. MinIO privado, SHA-256 persistido e download apenas por URL assinada temporaria. |
 

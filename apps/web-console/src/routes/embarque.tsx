@@ -1,8 +1,8 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
-  QrCode,
   CheckCircle2,
   XCircle,
   ScanLine,
@@ -78,6 +78,77 @@ type ValidacaoPendente = {
 
 const EMBARQUE_QUEUE_KEY = "ajc.embarque.validacoes.v1";
 const EMBARQUE_DEVICE_ID_KEY = "ajc.embarque.device.v1";
+
+function QrCameraScanner({ onDetected }: { onDetected: (value: string) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const onDetectedRef = useRef(onDetected);
+  const [cameraState, setCameraState] = useState<"starting" | "ready" | "denied">("starting");
+
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+  }, [onDetected]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    let disposed = false;
+    let controls: IScannerControls | undefined;
+    const reader = new BrowserQRCodeReader(undefined, { delayBetweenScanAttempts: 220 });
+
+    void reader
+      .decodeFromConstraints(
+        { audio: false, video: { facingMode: { ideal: "environment" } } },
+        video,
+        (result, _error, scannerControls) => {
+          controls = scannerControls;
+          if (disposed || !result) return;
+          disposed = true;
+          scannerControls.stop();
+          onDetectedRef.current(result.getText());
+        },
+      )
+      .then((scannerControls) => {
+        controls = scannerControls;
+        if (disposed) scannerControls.stop();
+        else setCameraState("ready");
+      })
+      .catch(() => {
+        if (!disposed) setCameraState("denied");
+      });
+
+    return () => {
+      disposed = true;
+      controls?.stop();
+      reader.reset();
+    };
+  }, []);
+
+  return (
+    <div className="absolute inset-0 bg-black">
+      <video
+        ref={videoRef}
+        className="h-full w-full object-cover"
+        muted
+        playsInline
+        aria-label="Câmera para leitura do QR do bilhete"
+      />
+      <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/20">
+        <div className="relative h-44 w-44 rounded-3xl border border-white/70 shadow-[0_0_0_999px_rgba(0,0,0,.28)]">
+          <motion.span
+            className="absolute inset-x-3 h-0.5 bg-[color:var(--brand)] shadow-[0_0_12px_var(--brand)]"
+            animate={{ top: [14, 156, 14] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </div>
+      </div>
+      <div className="absolute inset-x-3 bottom-3 rounded-xl bg-black/75 px-3 py-2 text-center text-xs text-white backdrop-blur">
+        {cameraState === "starting" && "Abrindo a câmera…"}
+        {cameraState === "ready" && "Aponte para o QR do bilhete"}
+        {cameraState === "denied" && "Câmera indisponível. Use a busca manual abaixo."}
+      </div>
+    </div>
+  );
+}
 
 function bilheteToEmbarque(b: BilheteApi, rules?: PdvConfigApi["valor"]): EmbarqueBilhete {
   const classConfig = rules?.classes.find((item) => item.codigo === b.classe);
@@ -241,6 +312,16 @@ function Embarque() {
       console.error(error);
       setResultado({ tipo: "invalido", qr: bilhete.qr });
     }
+  }
+
+  function processarQrLido(value: string) {
+    const qr = value.trim();
+    const bilhete = listaEmbarque.find((item) => item.qr === qr);
+    if (!bilhete) {
+      setResultado({ tipo: "invalido", qr });
+      return;
+    }
+    void validar(bilhete);
   }
 
   async function sincronizarFila() {
@@ -427,17 +508,9 @@ function Embarque() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="flex flex-col items-center gap-3"
+                        className="absolute inset-0"
                       >
-                        <div className="relative">
-                          <QrCode className="h-24 w-24 text-muted-foreground" strokeWidth={1.2} />
-                          <motion.span
-                            className="absolute inset-x-0 h-0.5 bg-[color:var(--brand)] shadow-[0_0_10px_var(--brand)]"
-                            animate={{ top: ["6%", "94%", "6%"] }}
-                            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-                          />
-                        </div>
-                        <p className="text-sm text-muted-foreground">Aponte para o QR do bilhete</p>
+                        <QrCameraScanner onDetected={processarQrLido} />
                       </motion.div>
                     )}
 

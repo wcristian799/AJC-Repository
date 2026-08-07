@@ -116,6 +116,28 @@ export async function getMeAjc() {
   return request<AuthUserApi>("/auth/me", { auth: true });
 }
 
+export type CampoAplicativoApi = { codigo:string; nome:string; descricao:string; rota:string; ordem:number; ativo:boolean; permissoes:string[] };
+export type CampoPortariaApi = { id:string; placa:string; empresa:string; empresa_nome?:string; entrada_em:string; saida_em:string|null; local_nome?:string; motorista_nome?:string; foto_url?:string|null; saida_foto_url?:string|null };
+export type CampoPortariaListApi = { items:CampoPortariaApi[]; resumo:{no_patio:number; entradas_periodo:number; saidas_periodo:number}; paginacao:{pagina:number;porPagina:number;total:number;paginas:number}; config:{pollingSegundos:number;fotoEntrada:string;fotoSaida:string} };
+export type CampoEmpresaApi = { tipo:"cliente"|"fornecedor"; id:string; nome:string; documento:string|null; cidade_sigla:string|null };
+export function listCampoAplicativos() { return request<CampoAplicativoApi[]>("/campo/aplicativos",{auth:true}); }
+export function listCampoCatalogo() { return request<CampoAplicativoApi[]>("/campo/catalogo",{auth:true}); }
+export function updateCampoCatalogo(codigo:string,input:{nome:string;descricao:string;ordem:number;ativo:boolean}) { return request<CampoAplicativoApi>(`/campo/catalogo/${codigo}`,{method:"PATCH",body:JSON.stringify(input),auth:true}); }
+export function listCampoPortaria(params:Record<string,string|undefined> = {}) { const q=new URLSearchParams(); Object.entries(params).forEach(([k,v])=>v&&q.set(k,v)); return request<CampoPortariaListApi>(`/campo/portaria${q.size?`?${q}`:""}`,{auth:true}); }
+export function listCampoEmpresas(busca?:string) { return request<CampoEmpresaApi[]>(`/campo/portaria/empresas${busca?`?busca=${encodeURIComponent(busca)}`:""}`,{auth:true}); }
+export function getCampoPortariaConfig() { return request<{chave:string;versao:number;valor:{fotoEntrada:string;fotoSaida:string;pollingSegundos:number;bloquearPlacaDuplicada:boolean}}>("/campo/portaria/configuracao",{auth:true}); }
+export async function uploadCampoPortaria(file:File) { const form=new FormData();form.append("arquivo",file);return request<{url:string;hash:string;bucket:string}>("/campo/portaria/evidencias",{method:"POST",body:form,auth:true}); }
+export function createCampoPortaria(input:{placa:string;empresaNome:string;empresaTipo?:"cliente"|"fornecedor";empresaId?:string;motoristaNome?:string;localOperacionalId:string;fotoUrl?:string;fotoHash?:string;clientUuid:string}) { return request<CampoPortariaApi>("/campo/portaria",{method:"POST",body:JSON.stringify(input),auth:true}); }
+export function exitCampoPortaria(id:string,input:{fotoUrl?:string;fotoHash?:string;clientUuid:string}) { return request<CampoPortariaApi>(`/campo/portaria/${id}/saida`,{method:"POST",body:JSON.stringify(input),auth:true}); }
+export type CampoEntregaTargetApi={tipo:"volume"|"carga"|"encomenda"|"palete"|"veiculo_maquina";id:string;codigo:string;referencia:string;cidade_destino_sigla:string;viagem_id:string|null;status:string;volume_ids:string[];placa?:string;modelo?:string};
+export function resolveCampoEntrega(codigo:string){return request<CampoEntregaTargetApi>(`/campo/entregas/resolver/${encodeURIComponent(codigo)}`,{auth:true});}
+export function getCampoVehicleChecklistConfig(){return request<{chave:string;versao:number;valor:Record<string,unknown>}>("/campo/veiculos/checklists/configuracao",{auth:true});}
+export async function uploadCampoVehicle(file:File){const form=new FormData();form.append("arquivo",file);return request<{url:string;hash:string;bucket:string}>("/campo/veiculos/evidencias",{method:"POST",body:form,auth:true});}
+export function saveCampoVehicleChecklist(id:string,input:Record<string,unknown>){return request<Record<string,unknown>>(`/campo/veiculos/${id}/checklists`,{method:"POST",body:JSON.stringify(input),auth:true});}
+export function listCrmPedidosEnvio(params?:{clienteId?:string;status?:string;busca?:string}) { const q=new URLSearchParams();Object.entries(params??{}).forEach(([k,v])=>v&&q.set(k,v));return request<Record<string,unknown>[]>(`/crm/pedidos-envio${q.size?`?${q}`:""}`,{auth:true}); }
+export function createCrmPedidoEnvio(input:Record<string,unknown>) { return request<Record<string,unknown>>("/crm/pedidos-envio",{method:"POST",body:JSON.stringify(input),auth:true}); }
+export function updateCrmPedidoEnvio(id:string,input:Record<string,unknown>) { return request<Record<string,unknown>>(`/crm/pedidos-envio/${id}`,{method:"PATCH",body:JSON.stringify(input),auth:true}); }
+
 export async function logoutAjc() {
   try {
     await request<{ ok: true }>("/auth/logout", { method: "POST", auth: true });

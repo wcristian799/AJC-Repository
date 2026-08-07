@@ -52,6 +52,9 @@ export interface EntregaInput {
   foto1Hash?: string;
   foto2Hash?: string;
   clientUuid?: string;
+  tipoOperacao?: "volume" | "carga" | "encomenda" | "palete";
+  paleteId?: string;
+  dispositivo?: string;
 }
 
 export interface SaveDeclaracaoConteudoInput {

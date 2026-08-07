@@ -18,6 +18,8 @@ type UploadedFile = {
 export class TmsEvidenceService {
   private readonly receivingBucket = "recebimento-fotos";
   private readonly deliveryBucket = "entregas-comprovantes";
+  private readonly portariaBucket = "portaria-fotos";
+  private readonly vehicleBucket = "veiculos-fotos-checklist";
 
   async upload(file: UploadedFile) {
     return this.uploadToBucket(file, this.receivingBucket, "recebimento");
@@ -25,6 +27,14 @@ export class TmsEvidenceService {
 
   async uploadDelivery(file: UploadedFile) {
     return this.uploadToBucket(file, this.deliveryBucket, "entrega");
+  }
+
+  async uploadPortaria(file: UploadedFile) {
+    return this.uploadToBucket(file, this.portariaBucket, "portaria");
+  }
+
+  async uploadVehicle(file: UploadedFile) {
+    return this.uploadToBucket(file, this.vehicleBucket, "veiculos");
   }
 
   private async uploadToBucket(file: UploadedFile, bucket: string, context: string) {

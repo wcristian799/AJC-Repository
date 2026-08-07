@@ -1077,9 +1077,9 @@ export class TmsRepository {
         INSERT INTO entrega_comprovante (
           viagem_id, cidade_sigla, recebedor_nome, recebedor_doc, recebedor_avulso,
           justificativa, assinatura_url, assinatura_hash, foto1_url, foto2_url,
-          foto1_hash, foto2_hash, protocolo, entregue_por_conferente_id, client_uuid
+          foto1_hash, foto2_hash, protocolo, entregue_por_conferente_id, client_uuid, tipo_operacao, dispositivo
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id
         `,
         [
@@ -1098,8 +1098,13 @@ export class TmsRepository {
           protocolo,
           userId,
           input.clientUuid ?? null,
+          input.tipoOperacao ?? 'volume',
+          input.dispositivo ?? null,
         ],
       );
+      if (input.tipoOperacao === 'palete' && input.paleteId) {
+        await client.query('INSERT INTO entrega_palete(entrega_id,palete_id) VALUES ($1,$2)', [inserted.rows[0].id,input.paleteId]);
+      }
       for (const volumeId of uniqueVolumeIds) {
         await client.query('INSERT INTO entrega_volume (entrega_id, volume_id) VALUES ($1, $2)', [inserted.rows[0].id, volumeId]);
         await client.query('UPDATE volume SET status = $2::status_volume WHERE id = $1', [volumeId, 'entregue']);

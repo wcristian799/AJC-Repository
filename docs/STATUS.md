@@ -1,5 +1,14 @@
 # STATUS — Diário vivo do projeto AJC
 
+## Levantamento 2026-08-07 - Aplicativos das Etapas 14, 15, 16, 17 e 20
+
+- O Word vigente e as implementações atuais foram cruzados em `docs/feedback/2026-08-07-levantamento-aplicativos-etapas-14-17-20.md`.
+- Parecer: as etapas de aplicativos ainda não estão integralmente concluídas. `/campo` possui login/RBAC e núcleos reais de conferência, embarque, prestação, entrega, PDV e validação, mas Portaria ainda contém dados/ações demonstrativas, Entrega não cobre veículo/palete, o scanner do Bilheteiro não abre câmera e Encomendas/CRM Comercial não existem como superfícies de campo.
+- O hub atual não corresponde ao mapa final do cliente: Encomendas e CRM estão ausentes; PDV e Bilheteiro estão separados; Entregas aparece como app isolado. O alvo recomendado é um único aplicativo instalável `AJC Campo` com sete espaços por permissão: Porteiro, Encomendas, Conferente Porto, Conferente Navegação, Gerente Embarcação, CRM Comercial e Bilheteria Digital.
+- Arquitetura recomendada: `apps/campo-mobile` em Ionic/Capacitor compartilhando casos de uso com `/campo`, catálogo de apps vindo do backend, contexto por escala/local/viagem, sessão segura, scanner/câmera nativos, SQLite/PowerSync e auditoria/idempotência. Não empacotar o painel `/app/*` e não usar somente um WebView remoto.
+- A Etapa 20 será tratada como mapa integrador das demais, com Entregas como módulo compartilhado. CRM precisará de `pedido_envio` separado para não criar carga física antes de NF/DC e formação operacional.
+- Próximo passo: validar o parecer e executar primeiro a fundação comum; depois conduzir em paralelo Portaria, Conferentes, Entregas, Bilheteria e os espaços faltantes de Encomendas/CRM/Gerente, encerrando com homologação em Android real.
+
 ## Levantamento 2026-08-07 - Etapa 10: Relatório comercial no TMS
 
 - Fonte vigente revisada: a Etapa 10 do documento de validação de 09/jul exige relatório de vendas com preço e volume no TMS e acompanhamento conjunto de vendas, volumes, preços e margens. Detalhe e consolidado precisam usar exatamente a mesma base e os mesmos filtros.
@@ -116,9 +125,9 @@
 ## Trabalho 2026-07-07 - Governanca de buckets e MinIO no VPS
 - Contexto: os fluxos de upload do MVP estavam aparecendo antes da definicao formal de object storage, o que abria espaco para cada tela inventar provider/bucket diferente.
 - O que foi feito: criado docs/infra/BUCKETS-PENDENTES.md como inventario canonico de buckets; AGENTS.md agora obriga registrar qualquer novo upload/blob nesse arquivo; NotasTab passou a apontar para esse inventario no proprio texto operacional.
-- Hospedagem decidida para o MVP: MinIO self-hosted no mesmo VPS/Coolify da stack AJC, por ser leve e S3-compatible. docker-compose.coolify.yml agora sobe minio, e pps/api/.env.coolify.example + docs/deploy/Coolify-Backend-API.md documentam as variaveis/servico.
+- Hospedagem decidida para o MVP: MinIO self-hosted no mesmo VPS/Coolify da stack AJC, por ser leve e S3-compatible. docker-compose.coolify.yml agora sobe minio, e apps/api/.env.coolify.example + docs/deploy/Coolify-Backend-API.md documentam as variaveis/servico.
 - Buckets pendentes mapeados nesta rodada: documentos fiscais, assinaturas de DC, fotos de portaria/recebimento, comprovantes de entrega, anexos de prestacao, fotos de veiculos e documentos de gratuidade.
-- Verificacao: un remove @supabase/supabase-js revertido com sucesso; builds do front/api serao mantidos como validacao desta rodada.
+- Verificacao: bun remove @supabase/supabase-js revertido com sucesso; builds do front/api serao mantidos como validacao desta rodada.
 ## Trabalho 2026-07-07 - Destinatario e upload na NF/DC manual
 - Contexto: o formulario de `Lancamento manual de NF/DC` em `/app/tms` ainda tinha apenas nome do destinatario e nao permitia anexar a nota fiscal, embora a validacao do cliente exija nome/CPF-CNPJ/telefone e documento fiscal junto.
 - O que foi feito: `NotasTab` agora coleta nome, CPF/CNPJ e telefone do destinatario, aceita upload de PDF/XML/JPG/PNG ate 10 MB, calcula SHA-256 no navegador e envia `arquivoUrl`/`arquivoHash` para `POST /api/tms/documentos/manual`; NF-e/NFC-e exige anexo para salvar.
@@ -145,32 +154,29 @@
 - O que foi feito: TmsRepository.listDocumentos/findDocumento agora calcula volumes por volume, nao por carga.total_volumes, e detecta se os campos avulsos da 0019 existem antes de usa-los. A listagem volta a funcionar em banco sem 0019; o POST /api/tms/documentos/manual devolve erro claro enquanto a 0019 estiver pendente.
 - Verificacao: npm run build --workspace apps/api exit 0.
 ## Trabalho 2026-07-04 - Lancamento manual NF/DC sem vinculo de viagem/carga
-- Contexto: o fluxo de Lancar manual em NotasTab estava incorreto porque criava carga + documento + volumes e exigia iagem, quando a operacao correta e permitir NF/DC avulsa sem vinculo com viagem ou carga, mantendo numero, valor, peso e volumes preenchiveis.
-- O que foi feito: criada a migration  019_documento_manual_avulso.sql para guardar origem/destino, peso, volumes e destinatario direto em documento_fiscal; o backend ganhou POST /api/tms/documentos/manual, que persiste documento manual sem carga_id/iagem_id; e o front NotasTab passou a usar esse endpoint, removendo a obrigatoriedade de viagem e trocando o badge para documento avulso sem carga/viagem.
-- Verificacao: 
-pm run build --workspace apps/api e un run build em pps/web-console devem ficar verdes apos esta rodada.
+- Contexto: o fluxo de Lancar manual em NotasTab estava incorreto porque criava carga + documento + volumes e exigia viagem, quando a operacao correta e permitir NF/DC avulsa sem vinculo com viagem ou carga, mantendo numero, valor, peso e volumes preenchiveis.
+- O que foi feito: criada a migration 0019_documento_manual_avulso.sql para guardar origem/destino, peso, volumes e destinatario direto em documento_fiscal; o backend ganhou POST /api/tms/documentos/manual, que persiste documento manual sem carga_id/viagem_id; e o front NotasTab passou a usar esse endpoint, removendo a obrigatoriedade de viagem e trocando o badge para documento avulso sem carga/viagem.
+- Verificacao: npm run build --workspace apps/api e bun run build em apps/web-console devem ficar verdes apos esta rodada.
 ## Trabalho 2026-07-04 - Nova Carga derivada da NF/DC selecionada
 - Contexto: o formulario de Nova Carga ainda exibia e aceitava edicao manual de Documento, Numero NF/DC, Peso total, Volumes e Valor NF/DC, embora a regra operacional correta seja derivar essas informacoes das NF/DC escolhidas no modal.
-- O que foi feito: removidos esses campos da UI em pps/web-console/src/routes/app.tms.tsx; o payload agora deriva 
-umeroDocumento da primeira NF/DC selecionada, consolida alorDeclarado e pesoTotal a partir das NF/DC escolhidas e calcula 	otalVolumes pela quantidade selecionada. A exibicao de Primeira NF/DC do pedido e o 
-umero do pedido / venda ficaram explicitamente dinamicos pela primeira nota selecionada.
-- Verificacao: un run build em pps/web-console exit 0.
+- O que foi feito: removidos esses campos da UI em apps/web-console/src/routes/app.tms.tsx; o payload agora deriva numeroDocumento da primeira NF/DC selecionada, consolida valorDeclarado e pesoTotal a partir das NF/DC escolhidas e calcula totalVolumes pela quantidade selecionada. A exibicao de Primeira NF/DC do pedido e o numero do pedido / venda ficaram explicitamente dinamicos pela primeira nota selecionada.
+- Verificacao: bun run build em apps/web-console exit 0.
 ## Trabalho 2026-07-04 - Remocao do badge Campos Lucas na Nova Carga
 - Contexto: o formulario de Nova Carga ainda exibia o badge campos Lucas (30/jun) no cabecalho, mas essa marcacao ja nao deve aparecer na tela.
-- O que foi feito: removido o badge do cabecalho de Nova carga em pps/web-console/src/routes/app.tms.tsx, sem alterar o restante do formulario.
-- Verificacao: un run build em pps/web-console exit 0.
+- O que foi feito: removido o badge do cabecalho de Nova carga em apps/web-console/src/routes/app.tms.tsx, sem alterar o restante do formulario.
+- Verificacao: bun run build em apps/web-console exit 0.
 ## Trabalho 2026-07-04 - Correcao de Recebimento na Nova Carga
 - Contexto: o formulario de Nova Carga tinha sido ajustado com o rotulo Agente, mas a regra correta da tela aprovada e manter o campo como Recebimento e trocar apenas a opcao Direto para Agente.
-- O que foi feito: pps/web-console/src/routes/app.tms.tsx voltou o label do select para Recebimento, preservando Porto/balsa, e renomeou a opcao direto exibida no dropdown para Agente.
-- Verificacao: un run build em pps/web-console exit 0.
+- O que foi feito: apps/web-console/src/routes/app.tms.tsx voltou o label do select para Recebimento, preservando Porto/balsa, e renomeou a opcao direto exibida no dropdown para Agente.
+- Verificacao: bun run build em apps/web-console exit 0.
 ## Trabalho 2026-07-04 - Cor do dropdown de cliente na Nova Carga
 - Contexto: o dropdown de busca de cliente em /app/tms estava abrindo sem contraste suficiente com o restante do modal, destoando do Crimson Prestige e dificultando a leitura visual da lista.
-- O que foi feito: ClienteSearchField em pps/web-console/src/routes/app.tms.tsx agora usa --surface-elev como fundo da lista, borda em --hairline-brand e hover com mistura suave de --brand, mantendo a cor dentro do design system oficial sem criar token novo.
-- Verificacao: un run build em pps/web-console exit 0.
+- O que foi feito: ClienteSearchField em apps/web-console/src/routes/app.tms.tsx agora usa --surface-elev como fundo da lista, borda em --hairline-brand e hover com mistura suave de --brand, mantendo a cor dentro do design system oficial sem criar token novo.
+- Verificacao: bun run build em apps/web-console exit 0.
 ## Trabalho 2026-07-04 - Nova Carga com modal de NF/DC
 - Contexto: o fluxo aprovado foi refinado para priorizar cliente no topo, abrir o dropdown apenas durante a busca e mover a selecao de NF/DC para modal, em vez de lista inline no formulario.
 - O que foi feito: /app/tms agora mostra cliente primeiro, abre resultados apenas quando ha digitacao, usa um acionador de NF/DC que abre modal por cliente selecionado, resume as notas escolhidas no formulario e preserva o numero do pedido pela primeira NF/DC selecionada. O campo Recebimento foi mantido e a opcao operacional do dropdown foi ajustada para Agente.
-- Verificacao: un run build em pps/web-console exit 0.
+- Verificacao: bun run build em apps/web-console exit 0.
 
 ## Trabalho 2026-07-04 - Nova Carga por cliente e NF/DC
 - Contexto: o dono confirmou a regra operacional do TMS: primeiro selecionar o cliente por busca interna, depois selecionar uma ou mais NF/DC conectadas a esse cliente; o numero do pedido/venda deve ser gerado como CODIGO_CLIENTE + tipo/numero da primeira nota selecionada, exemplo 10-nfe-122.
@@ -947,3 +953,17 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 - QA final: migration local 40/40; 15 suites/50 testes Jest verdes; build Nest verde; build TanStack/Vite/Nitro/Vercel verde; smoke autenticado em WSL com health 200, listagens financeiras 200, resumo 200 e DRE 200. Durante o smoke foi corrigido um erro SQL real da DRE (GROUP BY incompleto) e a baixa recebeu protecao de idempotencia contra reenvio offline.
 - Inspecao visual pelo navegador integrado permaneceu bloqueada pelo proprio runtime (falha ao encontrar os assets do plugin); nao foi classificada como QA visual concluida e nao houve dado mockado criado para contornar o bloqueio.
 - Producao: aplicar a migration 0040 pelo runner antes de publicar a API; revisar/conceder as permissoes financeiras aos perfis reais em Cadastros; publicar plano de contas, centros, categorias e modo DRE homologados pela AJC; renovar tokens dos usuarios afetados.
+
+## Entrega 2026-08-07 - Aplicativos de campo (Etapas 14, 15, 16, 17 e 20)
+
+- Migration `0041_aplicativos_campo_operacionais.sql` cria catálogo dos sete aplicativos, contextos por usuário/local/viagem, dispositivos, Portaria definitiva, checklists de veículos, entrega multimodal, pedidos comerciais e vínculos NF/DC do recebível automático.
+- `/api/campo` publica catálogo por RBAC, contexto, dispositivo, configurações, Portaria completa, resolução multimodal e checklists. `/campo` não usa mais catálogo local nem dados fixos de operador/porto/turno.
+- Rotas finais: Porteiro, Encomendas, Conferente Porto, Conferente Navegação, Gerente Embarcação, CRM Comercial e Bilheteria Digital. A Bilheteria reúne PDV e validação com leitura QR real pela câmera e contingência manual; Entregas é módulo compartilhado; Etapa 20 é o mapa integrador.
+- `pedido_envio` separa intenção comercial de carga física. Criar pedido no CRM não cria carga, volume ou viagem.
+- Primeiro bipe `embarcado` gera exatamente um Conta a Receber por carga usando `carga.valor_cobrado`, liga cliente/carga/viagem e todas as NF/DC, não duplica por volume/reenvio e bloqueia frete sem valor conforme `tms_contas_receber_embarque`.
+- Cadastros ganhou editor versionado para `campo_operacao`, `campo_portaria`, `campo_entregas`, `veiculos_checklists` e `tms_contas_receber_embarque`.
+- `apps/campo-mobile` é o contêiner Capacitor único; TypeScript/build verdes e projeto Android/plugins sincronizados. `/app/*` não faz parte do aplicativo.
+- Buckets `portaria-fotos` e `veiculos-fotos-checklist` foram ligados ao MinIO com MIME/12 MB/SHA-256 e registrados como ativos.
+- O seed foi corrigido para preservar referências de preço de vendas POS. Migration+seed passam juntos em banco preenchido.
+- QA final: migration 41/41, teste transacional confirmou um único AR de R$ 6.120,00 após dois eventos de embarque na mesma carga, backend build, 15 suítes/50 testes Jest, front SSR/Vercel build, TypeScript/build móvel e sincronização Android verdes. Smoke autenticado validou catálogo/configurações/contextos/Portaria/checklists/CRM; os sete aplicativos e Cadastros foram inspecionados em 390×844 sem overflow de página, erro interno ou fallback demonstrativo. A API AJC usada no QA foi a instância atualizada do WSL em `:3010`; a porta Windows `:3000` pertence a outro projeto e não deve ser usada pelo AJC.
+- Produção: aplicar 0041, rebuildar API/worker, publicar as cinco configurações, configurar perfis/contextos, validar MinIO, renovar tokens e definir `AJC_CAMPO_URL` antes da assinatura Android. Documento: `docs/feedback/2026-08-07-aplicativos-campo-etapas-14-17-20.md`.

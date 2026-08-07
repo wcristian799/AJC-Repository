@@ -21,10 +21,14 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CampoIndexRouteImport } from './routes/campo.index'
 import { Route as CampoRecebimentoRouteImport } from './routes/campo.recebimento'
 import { Route as CampoPortariaRouteImport } from './routes/campo.portaria'
+import { Route as CampoNavegacaoRouteImport } from './routes/campo.navegacao'
 import { Route as CampoLoginRouteImport } from './routes/campo.login'
 import { Route as CampoGerenteRouteImport } from './routes/campo.gerente'
 import { Route as CampoEntregasRouteImport } from './routes/campo.entregas'
+import { Route as CampoEncomendasRouteImport } from './routes/campo.encomendas'
+import { Route as CampoCrmRouteImport } from './routes/campo.crm'
 import { Route as CampoConferenciaRouteImport } from './routes/campo.conferencia'
+import { Route as CampoBilheteriaRouteImport } from './routes/campo.bilheteria'
 import { Route as AppVendasRouteImport } from './routes/app.vendas'
 import { Route as AppTmsRouteImport } from './routes/app.tms'
 import { Route as AppNavegacaoRouteImport } from './routes/app.navegacao'
@@ -94,6 +98,11 @@ const CampoPortariaRoute = CampoPortariaRouteImport.update({
   path: '/portaria',
   getParentRoute: () => CampoRoute,
 } as any)
+const CampoNavegacaoRoute = CampoNavegacaoRouteImport.update({
+  id: '/navegacao',
+  path: '/navegacao',
+  getParentRoute: () => CampoRoute,
+} as any)
 const CampoLoginRoute = CampoLoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -109,9 +118,24 @@ const CampoEntregasRoute = CampoEntregasRouteImport.update({
   path: '/entregas',
   getParentRoute: () => CampoRoute,
 } as any)
+const CampoEncomendasRoute = CampoEncomendasRouteImport.update({
+  id: '/encomendas',
+  path: '/encomendas',
+  getParentRoute: () => CampoRoute,
+} as any)
+const CampoCrmRoute = CampoCrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
+  getParentRoute: () => CampoRoute,
+} as any)
 const CampoConferenciaRoute = CampoConferenciaRouteImport.update({
   id: '/conferencia',
   path: '/conferencia',
+  getParentRoute: () => CampoRoute,
+} as any)
+const CampoBilheteriaRoute = CampoBilheteriaRouteImport.update({
+  id: '/bilheteria',
+  path: '/bilheteria',
   getParentRoute: () => CampoRoute,
 } as any)
 const AppVendasRoute = AppVendasRouteImport.update({
@@ -173,10 +197,14 @@ export interface FileRoutesByFullPath {
   '/app/navegacao': typeof AppNavegacaoRoute
   '/app/tms': typeof AppTmsRoute
   '/app/vendas': typeof AppVendasRoute
+  '/campo/bilheteria': typeof CampoBilheteriaRoute
   '/campo/conferencia': typeof CampoConferenciaRoute
+  '/campo/crm': typeof CampoCrmRoute
+  '/campo/encomendas': typeof CampoEncomendasRoute
   '/campo/entregas': typeof CampoEntregasRoute
   '/campo/gerente': typeof CampoGerenteRoute
   '/campo/login': typeof CampoLoginRoute
+  '/campo/navegacao': typeof CampoNavegacaoRoute
   '/campo/portaria': typeof CampoPortariaRoute
   '/campo/recebimento': typeof CampoRecebimentoRoute
   '/campo/': typeof CampoIndexRoute
@@ -198,10 +226,14 @@ export interface FileRoutesByTo {
   '/app/navegacao': typeof AppNavegacaoRoute
   '/app/tms': typeof AppTmsRoute
   '/app/vendas': typeof AppVendasRoute
+  '/campo/bilheteria': typeof CampoBilheteriaRoute
   '/campo/conferencia': typeof CampoConferenciaRoute
+  '/campo/crm': typeof CampoCrmRoute
+  '/campo/encomendas': typeof CampoEncomendasRoute
   '/campo/entregas': typeof CampoEntregasRoute
   '/campo/gerente': typeof CampoGerenteRoute
   '/campo/login': typeof CampoLoginRoute
+  '/campo/navegacao': typeof CampoNavegacaoRoute
   '/campo/portaria': typeof CampoPortariaRoute
   '/campo/recebimento': typeof CampoRecebimentoRoute
   '/campo': typeof CampoIndexRoute
@@ -225,10 +257,14 @@ export interface FileRoutesById {
   '/app/navegacao': typeof AppNavegacaoRoute
   '/app/tms': typeof AppTmsRoute
   '/app/vendas': typeof AppVendasRoute
+  '/campo/bilheteria': typeof CampoBilheteriaRoute
   '/campo/conferencia': typeof CampoConferenciaRoute
+  '/campo/crm': typeof CampoCrmRoute
+  '/campo/encomendas': typeof CampoEncomendasRoute
   '/campo/entregas': typeof CampoEntregasRoute
   '/campo/gerente': typeof CampoGerenteRoute
   '/campo/login': typeof CampoLoginRoute
+  '/campo/navegacao': typeof CampoNavegacaoRoute
   '/campo/portaria': typeof CampoPortariaRoute
   '/campo/recebimento': typeof CampoRecebimentoRoute
   '/campo/': typeof CampoIndexRoute
@@ -253,10 +289,14 @@ export interface FileRouteTypes {
     | '/app/navegacao'
     | '/app/tms'
     | '/app/vendas'
+    | '/campo/bilheteria'
     | '/campo/conferencia'
+    | '/campo/crm'
+    | '/campo/encomendas'
     | '/campo/entregas'
     | '/campo/gerente'
     | '/campo/login'
+    | '/campo/navegacao'
     | '/campo/portaria'
     | '/campo/recebimento'
     | '/campo/'
@@ -278,10 +318,14 @@ export interface FileRouteTypes {
     | '/app/navegacao'
     | '/app/tms'
     | '/app/vendas'
+    | '/campo/bilheteria'
     | '/campo/conferencia'
+    | '/campo/crm'
+    | '/campo/encomendas'
     | '/campo/entregas'
     | '/campo/gerente'
     | '/campo/login'
+    | '/campo/navegacao'
     | '/campo/portaria'
     | '/campo/recebimento'
     | '/campo'
@@ -304,10 +348,14 @@ export interface FileRouteTypes {
     | '/app/navegacao'
     | '/app/tms'
     | '/app/vendas'
+    | '/campo/bilheteria'
     | '/campo/conferencia'
+    | '/campo/crm'
+    | '/campo/encomendas'
     | '/campo/entregas'
     | '/campo/gerente'
     | '/campo/login'
+    | '/campo/navegacao'
     | '/campo/portaria'
     | '/campo/recebimento'
     | '/campo/'
@@ -411,6 +459,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CampoPortariaRouteImport
       parentRoute: typeof CampoRoute
     }
+    '/campo/navegacao': {
+      id: '/campo/navegacao'
+      path: '/navegacao'
+      fullPath: '/campo/navegacao'
+      preLoaderRoute: typeof CampoNavegacaoRouteImport
+      parentRoute: typeof CampoRoute
+    }
     '/campo/login': {
       id: '/campo/login'
       path: '/login'
@@ -432,11 +487,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CampoEntregasRouteImport
       parentRoute: typeof CampoRoute
     }
+    '/campo/encomendas': {
+      id: '/campo/encomendas'
+      path: '/encomendas'
+      fullPath: '/campo/encomendas'
+      preLoaderRoute: typeof CampoEncomendasRouteImport
+      parentRoute: typeof CampoRoute
+    }
+    '/campo/crm': {
+      id: '/campo/crm'
+      path: '/crm'
+      fullPath: '/campo/crm'
+      preLoaderRoute: typeof CampoCrmRouteImport
+      parentRoute: typeof CampoRoute
+    }
     '/campo/conferencia': {
       id: '/campo/conferencia'
       path: '/conferencia'
       fullPath: '/campo/conferencia'
       preLoaderRoute: typeof CampoConferenciaRouteImport
+      parentRoute: typeof CampoRoute
+    }
+    '/campo/bilheteria': {
+      id: '/campo/bilheteria'
+      path: '/bilheteria'
+      fullPath: '/campo/bilheteria'
+      preLoaderRoute: typeof CampoBilheteriaRouteImport
       parentRoute: typeof CampoRoute
     }
     '/app/vendas': {
@@ -523,20 +599,28 @@ const AppRouteChildren: AppRouteChildren = {
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 interface CampoRouteChildren {
+  CampoBilheteriaRoute: typeof CampoBilheteriaRoute
   CampoConferenciaRoute: typeof CampoConferenciaRoute
+  CampoCrmRoute: typeof CampoCrmRoute
+  CampoEncomendasRoute: typeof CampoEncomendasRoute
   CampoEntregasRoute: typeof CampoEntregasRoute
   CampoGerenteRoute: typeof CampoGerenteRoute
   CampoLoginRoute: typeof CampoLoginRoute
+  CampoNavegacaoRoute: typeof CampoNavegacaoRoute
   CampoPortariaRoute: typeof CampoPortariaRoute
   CampoRecebimentoRoute: typeof CampoRecebimentoRoute
   CampoIndexRoute: typeof CampoIndexRoute
 }
 
 const CampoRouteChildren: CampoRouteChildren = {
+  CampoBilheteriaRoute: CampoBilheteriaRoute,
   CampoConferenciaRoute: CampoConferenciaRoute,
+  CampoCrmRoute: CampoCrmRoute,
+  CampoEncomendasRoute: CampoEncomendasRoute,
   CampoEntregasRoute: CampoEntregasRoute,
   CampoGerenteRoute: CampoGerenteRoute,
   CampoLoginRoute: CampoLoginRoute,
+  CampoNavegacaoRoute: CampoNavegacaoRoute,
   CampoPortariaRoute: CampoPortariaRoute,
   CampoRecebimentoRoute: CampoRecebimentoRoute,
   CampoIndexRoute: CampoIndexRoute,

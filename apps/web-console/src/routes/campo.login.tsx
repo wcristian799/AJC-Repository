@@ -2,8 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { LockKeyhole, LogIn, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/ops/BrandMark";
-import { getStoredAuth, loginAjc, logoutAjc } from "@/lib/ajc-api";
-import { authorizedFieldApps } from "@/lib/field-apps";
+import { getStoredAuth, listCampoAplicativos, loginAjc, logoutAjc } from "@/lib/ajc-api";
 
 export const Route = createFileRoute("/campo/login")({
   head: () => ({ meta:[{title:"Acesso aos aplicativos · AJC"}] }),
@@ -18,8 +17,8 @@ function FieldLogin() {
   async function submit(event:FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const session = await loginAjc({login,password,dispositivo:"field-app"});
-      const apps = authorizedFieldApps(session.user.permissions);
+      await loginAjc({login,password,dispositivo:"ajc-campo"});
+      const apps = await listCampoAplicativos();
       if (!apps.length) { await logoutAjc(); setError("Sua funcao nao possui acesso a aplicativos de campo."); return; }
       await navigate({to:apps.length === 1 ? apps[0].to : "/campo"});
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Nao foi possivel entrar agora."); }

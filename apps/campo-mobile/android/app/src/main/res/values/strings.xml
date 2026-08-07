@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AJC Campo</string>
+    <string name="title_activity_main">AJC Campo</string>
+    <string name="package_name">com.ajctransportes.campo</string>
+    <string name="custom_url_scheme">com.ajctransportes.campo</string>
+</resources>

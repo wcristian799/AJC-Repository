@@ -33,6 +33,8 @@ coverage/
 apps/**/android/
 apps/**/ios/
 apps/**/.capacitor/
+!apps/campo-mobile/android/
+!apps/campo-mobile/android/**
 *.apk
 *.aab
 

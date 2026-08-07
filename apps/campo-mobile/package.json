@@ -1,0 +1,26 @@
+{
+  "name": "@ajc/campo-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Contêiner Capacitor do AJC Campo — somente superfícies /campo",
+  "scripts": {
+    "build": "vite build",
+    "cap:sync": "npm run build && cap sync",
+    "android": "npm run cap:sync && cap open android",
+    "ios": "npm run cap:sync && cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.1.0",
+    "@capacitor/camera": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/device": "^7.0.2",
+    "@capacitor/network": "^7.0.2",
+    "@capacitor/preferences": "^7.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "typescript": "^5.4.5",
+    "vite": "^8.1.2"
+  }
+}

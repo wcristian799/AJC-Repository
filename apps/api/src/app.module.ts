@@ -4,6 +4,7 @@ import { HealthController } from './health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { CadastrosModule } from './modules/cadastros/cadastros.module';
 import { CaixaModule } from './modules/caixa/caixa.module';
+import { CampoModule } from './modules/campo/campo.module';
 import { ConfigModule } from './modules/config/config.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { EncomendasModule } from './modules/encomendas/encomendas.module';
@@ -38,6 +39,7 @@ import { VendasModule } from './modules/vendas/vendas.module';
     FiscalModule,
     VendasModule,
     CaixaModule,
+    CampoModule,
     CrmModule,
     OperacaoModule,
     PortalModule,

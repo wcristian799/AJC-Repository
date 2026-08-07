@@ -18,6 +18,6 @@ import { TmsEvidenceService } from "./tms-evidence.service";
     TmsDocumentService,
     TmsEvidenceService,
   ],
-  exports: [TmsRepository],
+  exports: [TmsRepository, TmsEvidenceService],
 })
 export class TmsModule {}
