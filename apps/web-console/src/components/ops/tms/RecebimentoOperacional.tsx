@@ -82,9 +82,11 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
   const [destination, setDestination] = useState("");
   const [type, setType] = useState<UnitType | "">(direct ? "AVULSA" : "");
   const [palletId, setPalletId] = useState("");
+  const [palletCode, setPalletCode] = useState("");
   const [documents, setDocuments] = useState<TmsConferenciaDocumentoApi[]>([]);
   const [documentSearch, setDocumentSearch] = useState("");
   const [selectedDocument, setSelectedDocument] = useState<TmsConferenciaDocumentoApi | null>(null);
+  const [selectedDocuments, setSelectedDocuments] = useState<TmsConferenciaDocumentoApi[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [justification, setJustification] = useState("");
   const [scan, setScan] = useState("");
@@ -219,6 +221,30 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
       setLoading(false);
     }
   }
+  async function scanPallet() {
+    const code = palletCode.trim();
+    if (!code) return setError("Leia ou digite o código impresso no palete.");
+    setError(null);
+    try {
+      const response = await listTmsPaletes({ busca: code, porPagina: 10 });
+      const normalized = code.toLowerCase();
+      const pallet = response.items.find((row) => row.codigo.toLowerCase() === normalized) ?? response.items[0];
+      if (!pallet) throw new Error("Palete não encontrado.");
+      if (!pallet.ativo) throw new Error(`${pallet.codigo} está inativo.`);
+      if (pallet.local_operacional_id && pallet.local_operacional_id !== locationId && !direct)
+        throw new Error(`${pallet.codigo} pertence a outro local operacional.`);
+      if (pallet.tipo_unitizacao && pallet.tipo_unitizacao !== type)
+        throw new Error(`${pallet.codigo} já está classificado como ${pallet.tipo_unitizacao}. Escolha o mesmo tipo de unitização.`);
+      if (pallet.status !== "livre" && !(pallet.viagem_id === tripId && pallet.cidade_destino_sigla === destination))
+        throw new Error(`${pallet.codigo} já está ${pallet.status} em outro contexto.`);
+      setPallets((current) => [pallet, ...current.filter((row) => row.id !== pallet.id)]);
+      setPalletId(pallet.id);
+      setPalletCode("");
+      setMessage(`Palete ${pallet.codigo} selecionado por leitura.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível localizar o palete.");
+    }
+  }
   async function addDocument() {
     if (!conference || !selectedDocument) return;
     const payload = {
@@ -254,6 +280,34 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
     } finally {
       setLoading(false);
     }
+  }
+  async function addDocumentsBatch() {
+    if (!conference || selectedDocuments.length < 2) return addDocument();
+    setLoading(true); setError(null);
+    try {
+      for (const doc of selectedDocuments) {
+        const payload={documentoFiscalId:doc.id,quantidadeInformada:Math.max(1,doc.quantidade_restante),clientUuid:crypto.randomUUID()};
+        if (online) setConference(await addTmsConferenciaItem(conference.id,payload));
+        else {
+          if (!config?.offline.habilitado) throw new Error("Operação offline desativada na configuração publicada.");
+          queueReceivingOperation({id:crypto.randomUUID(),kind:"item",conferenceId:conference.id,payload,createdAt:new Date().toISOString()},config.offline.maximoPendencias);
+        }
+      }
+      setPending(listReceivingQueue().length); setSelectedDocuments([]); setSelectedDocument(null); setMessage(`${selectedDocuments.length} NF/DC adicionada(s) à composição.`);
+    } catch (cause) { setError(cause instanceof Error?cause.message:"Não foi possível adicionar as NF/DC selecionadas."); }
+    finally { setLoading(false); }
+  }
+  function toggleDocument(doc: TmsConferenciaDocumentoApi) {
+    setSelectedDocument(doc);
+    setQuantity(Math.max(1, doc.quantidade_restante));
+    setSelectedDocuments((current) => {
+      if (current.some((item) => item.id === doc.id)) return current.filter((item) => item.id !== doc.id);
+      if (["MP", "PD"].includes(type) && current.some((item) => item.carga_id !== doc.carga_id)) {
+        setError(`${type} aceita várias NF/DC apenas da mesma carga. Para misturar cargas, abra uma composição PC.`);
+        return current;
+      }
+      return [...current, doc];
+    });
   }
   async function generateLabel(target: {
     tipo: "palete" | "volume";
@@ -435,7 +489,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
                   .filter((row) => row.status !== "concluida")
                   .map((row) => (
                     <option key={row.id} value={row.id}>
-                      {row.codigo} · {row.origemSigla} → {row.destinoSigla}
+                      {row.codigo} · {row.embarcacaoNome ?? "Embarcação não informada"} · {row.origemSigla} → {row.destinoSigla}
                     </option>
                   ))}
               </select>
@@ -508,14 +562,20 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
             </div>
           </div>
           {type && type !== "AVULSA" && (
-            <label className="mt-5 block">
-              <FieldLabel>Palete disponível neste local</FieldLabel>
+            <div className="mt-5">
+              <FieldLabel>Palete físico</FieldLabel>
+              <p className="mt-1 text-xs text-muted-foreground">Bipe o código do palete ou escolha um palete compatível. Isso identifica o equipamento; não é baixa de mercadoria.</p>
+              <div className="mt-2 flex gap-2">
+                <input value={palletCode} onChange={(e)=>setPalletCode(e.target.value)} onKeyDown={(e)=>{if(e.key==="Enter") void scanPallet();}} className="field-control font-mono" placeholder="Bipar código do palete" />
+                <button onClick={()=>void scanPallet()} className="grid min-w-12 place-items-center rounded-md bg-[color:var(--brand)] text-white" aria-label="Ler palete"><ScanLine className="h-5 w-5" /></button>
+              </div>
               <select
+                aria-label="Selecionar palete disponível"
                 value={palletId}
                 onChange={(e) => setPalletId(e.target.value)}
-                className="field-control"
+                className="field-control mt-2"
               >
-                <option value="">Selecionar ou bipar código</option>
+                <option value="">Selecionar palete compatível</option>
                 {availablePallets.map((row) => (
                   <option key={row.id} value={row.id}>
                     {row.codigo} ·{" "}
@@ -530,7 +590,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
                   Nenhum palete compatível neste local. Cadastre ou corrija a localização no painel.
                 </p>
               )}
-            </label>
+            </div>
           )}
           <PrimaryButton
             onClick={() => void start()}
@@ -627,14 +687,13 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
             <button
               key={doc.id}
               onClick={() => {
-                setSelectedDocument(doc);
-                setQuantity(Math.max(1, doc.quantidade_restante));
+                toggleDocument(doc);
               }}
-              className={`flex w-full justify-between gap-3 border-b border-[color:var(--hairline)] p-3 text-left last:border-0 ${selectedDocument?.id === doc.id ? "bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)]" : "bg-[color:var(--muted)]"}`}
+              className={`flex w-full justify-between gap-3 border-b border-[color:var(--hairline)] p-3 text-left last:border-0 ${selectedDocuments.some((item) => item.id === doc.id) ? "bg-[color:color-mix(in_oklab,var(--brand)_10%,transparent)]" : "bg-[color:var(--muted)]"}`}
             >
               <span>
                 <b className="block text-sm">
-                  {doc.tipo}-{doc.numero}
+                  <span className="mr-2 inline-grid h-4 w-4 place-items-center rounded border border-[color:var(--hairline-strong)] text-[10px]">{selectedDocuments.some((item) => item.id === doc.id) ? "✓" : ""}</span>{doc.tipo}-{doc.numero}
                 </b>
                 <small className="text-muted-foreground">
                   {doc.cliente_codigo} · {doc.cliente_nome}
@@ -646,6 +705,7 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
             </button>
           ))}
         </div>
+        {selectedDocuments.length > 1 && <p className="mt-2 text-xs text-muted-foreground">{selectedDocuments.length} NF/DC selecionada(s). PC permite compor documentos/cargas diferentes; MP e PD respeitam as regras de carga única do servidor.</p>}
         {selectedDocument && (
           <div className="mt-3 grid gap-3 sm:grid-cols-[130px_1fr_auto]">
             <label>
@@ -672,8 +732,8 @@ export function RecebimentoOperacional({ direct = false }: { direct?: boolean })
               />
             </label>
             <div className="flex items-end">
-              <PrimaryButton onClick={() => void addDocument()} disabled={loading || quantity < 1}>
-                Alocar
+              <PrimaryButton onClick={() => void (selectedDocuments.length > 1 ? addDocumentsBatch() : addDocument())} disabled={loading || quantity < 1}>
+                {selectedDocuments.length > 1 ? `Alocar ${selectedDocuments.length} NF/DC` : "Alocar"}
               </PrimaryButton>
             </div>
           </div>

@@ -14,6 +14,7 @@ import { OperationalVeiculosConfig } from "@/components/ops/cadastros/Operationa
 import { OperationalFinanceConfig } from "@/components/ops/cadastros/OperationalFinanceConfig";
 import { OperationalCampoConfig } from "@/components/ops/cadastros/OperationalCampoConfig";
 import { CitiesRegistry } from "@/components/ops/cadastros/CitiesRegistry";
+import { AgentsRegistry } from "@/components/ops/cadastros/AgentsRegistry";
 import {
   SectionHeader,
   DataTable,
@@ -30,6 +31,7 @@ import {
   createFornecedor,
   createUsuarioCadastro,
   listCidades,
+  listAgentes,
   listColaboradores,
   listFornecedores,
   listPerfisCadastro,
@@ -41,6 +43,7 @@ import {
   updatePerfilCadastro,
   updateUsuarioCadastro,
   type CidadeApi,
+  type AgenteApi,
   type ColaboradorApi,
   type FornecedorApi,
   type PerfilCadastroApi,
@@ -63,7 +66,8 @@ type Tab =
   | "precos_passagem"
   | "precos_carga"
   | "fornecedores"
-  | "colaboradores";
+  | "colaboradores"
+  | "agentes";
 
 function Cadastros() {
   const [tab, setTab] = useState<Tab>("usuarios");
@@ -77,6 +81,7 @@ function Cadastros() {
   const [precosCarga, setPrecosCarga] = useState<PrecoItemApi[]>([]);
   const [fornecedores, setFornecedores] = useState<FornecedorApi[]>([]);
   const [colaboradores, setColaboradores] = useState<ColaboradorApi[]>([]);
+  const [agentes, setAgentes] = useState<AgenteApi[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [reajustando, setReajustando] = useState(false);
   const [showFornecedorForm, setShowFornecedorForm] = useState(false);
@@ -132,6 +137,7 @@ function Cadastros() {
           cargaApi,
           fornecedoresApi,
           colaboradoresApi,
+          agentesApi,
         ] = await Promise.all([
           listUsuariosCadastro(),
           listPerfisCadastro(),
@@ -141,6 +147,7 @@ function Cadastros() {
           listPrecos({ tipo: "carga" }),
           listFornecedores(),
           listColaboradores(),
+          listAgentes(),
         ]);
         if (!alive) return;
         setUsuarios(usuariosApi);
@@ -151,6 +158,7 @@ function Cadastros() {
         setPrecosCarga(cargaApi);
         setFornecedores(fornecedoresApi);
         setColaboradores(colaboradoresApi);
+        setAgentes(agentesApi);
       } catch (error) {
         console.error(error);
         setErro(error instanceof Error ? error.message : "Falha ao carregar cadastros");
@@ -262,7 +270,7 @@ function Cadastros() {
   }
 
   function abrirNovoCadastroGeral() {
-    if (tab === "config_operacional") return;
+    if (tab === "config_operacional" || tab === "agentes") return;
     if (tab === "usuarios") {
       abrirNovoUsuario();
       return;
@@ -381,6 +389,7 @@ function Cadastros() {
     ["precos_carga", "Preços · Carga"],
     ["fornecedores", "Fornecedores"],
     ["colaboradores", "Colaboradores"],
+    ["agentes", "Agentes"],
   ];
 
   return (
@@ -390,7 +399,7 @@ function Cadastros() {
         title="Cadastros e motor de preços"
         description="Parâmetros operacionais versionados, acessos, preços e dados-mestre — sem regras presas no código."
         actions={
-          tab !== "config_operacional" && tab !== "cidades" ? (
+          tab !== "config_operacional" && tab !== "cidades" && tab !== "agentes" ? (
             <PrimaryButton icon={Plus} onClick={abrirNovoCadastroGeral}>
               Novo cadastro
             </PrimaryButton>
@@ -434,6 +443,10 @@ function Cadastros() {
 
       {tab === "cidades" && (
         <CitiesRegistry cidades={cidades} onCidadesChange={setCidades} />
+      )}
+
+      {tab === "agentes" && (
+        <div className="mt-5"><AgentsRegistry agents={agentes} setAgents={setAgentes} cidades={cidades} usuarios={usuarios} /></div>
       )}
 
       {tab === "usuarios" && (

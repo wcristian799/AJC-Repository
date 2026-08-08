@@ -54,6 +54,57 @@ export class CampoRepository {
       .filter((app) => includeInactive || app.permissoes.some((permission) => granted.has(permission)));
   }
 
+  async agentePainel(userId: string) {
+    const agente = await this.agenteDoUsuario(userId);
+    const [clientes, pedidos, cotacoes, captacao] = await Promise.all([
+      this.db.query(`SELECT c.id,c.codigo,c.nome,c.cidade_sigla,c.contatos,
+                       max(COALESCE(cg.criado_em,c.criado_em)) AS ultima_movimentacao
+                    FROM cliente c
+                    LEFT JOIN carga cg ON cg.cliente_remetente_id=c.id AND cg.excluido_em IS NULL
+                    WHERE c.excluido_em IS NULL AND c.agente_id=$1
+                    GROUP BY c.id ORDER BY ultima_movimentacao DESC NULLS LAST,c.nome LIMIT 120`, [agente.id]),
+      this.db.query(`SELECT p.id,p.codigo,p.tipo,p.status,p.origem_sigla,p.destino_sigla,p.valor_estimado,p.criado_em,c.nome AS cliente_nome
+                    FROM pedido_envio p JOIN cliente c ON c.id=p.cliente_id
+                    WHERE p.excluido_em IS NULL AND p.agente_id=$1 ORDER BY p.criado_em DESC LIMIT 50`, [agente.id]),
+      this.db.query(`SELECT cot.id,cot.tipo::text,cot.status::text,cot.valor_estimado,cot.criado_em,c.nome AS cliente_nome
+                    FROM cotacao cot JOIN cliente c ON c.id=cot.cliente_id
+                    WHERE cot.agente_id=$1 ORDER BY cot.criado_em DESC LIMIT 50`, [agente.id]),
+      this.db.one<{base:string|null}>(`SELECT COALESCE(sum(valor_estimado) FILTER (WHERE status NOT IN ('cancelado','convertido')),0)::text AS base
+                    FROM pedido_envio WHERE agente_id=$1 AND excluido_em IS NULL
+                      AND date_trunc('month',criado_em)=date_trunc('month',now())`, [agente.id]),
+    ]);
+    const base = Number(captacao?.base ?? 0);
+    const percentual = agente.percentual_comissao == null ? null : Number(agente.percentual_comissao);
+    return {
+      agente: { id: agente.id, nome: agente.nome, cidadeSigla: agente.cidade_sigla, percentualComissao: percentual },
+      resumo: {
+        clientes: clientes.rows.length,
+        cotacoesAbertas: cotacoes.rows.filter((row:any) => row.status === 'aberta').length,
+        pedidosAbertos: pedidos.rows.filter((row:any) => !['cancelado','convertido'].includes(row.status)).length,
+        captadoMes: base,
+        comissaoEstimada: percentual == null ? null : Number((base * percentual / 100).toFixed(2)),
+      },
+      clientes: clientes.rows,
+      pedidos: pedidos.rows.map((row:any)=>({...row,valor_estimado:row.valor_estimado == null ? null : Number(row.valor_estimado)})),
+      cotacoes: cotacoes.rows.map((row:any)=>({...row,valor_estimado:row.valor_estimado == null ? null : Number(row.valor_estimado)})),
+    };
+  }
+
+  async clientesDoAgente(userId: string) {
+    const agente = await this.agenteDoUsuario(userId);
+    const rows = await this.db.query(`SELECT id,codigo,nome,cidade_sigla FROM cliente
+      WHERE excluido_em IS NULL AND agente_id=$1 ORDER BY nome LIMIT 250`, [agente.id]);
+    return rows.rows;
+  }
+
+  async agenteDoUsuario(userId: string) {
+    const agente = await this.db.one<{id:string;nome:string;cidade_sigla:string;percentual_comissao:string|null}>(
+      `SELECT id,nome,cidade_sigla,percentual_comissao FROM agente
+       WHERE usuario_id=$1 AND ativo=true AND excluido_em IS NULL`, [userId]);
+    if (!agente) throw new NotFoundException('Seu usuario ainda nao esta vinculado a um agente ativo. Solicite o vinculo em Cadastros > Agentes.');
+    return agente;
+  }
+
   async updateAplicativo(codigo: string, input: SaveCampoAplicativoInput, userId: string) {
     const nome = requiredText(input.nome, "nome", 120);
     const descricao = requiredText(input.descricao, "descricao", 500);

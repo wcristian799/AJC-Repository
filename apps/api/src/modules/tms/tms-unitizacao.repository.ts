@@ -468,20 +468,6 @@ export class TmsUnitizacaoRepository {
         throw new BadRequestException(
           `Quantidade excede os ${declared} volumes declarados; informe a justificativa da divergencia`,
         );
-      if (conference.tipo_unitizacao === "PD") {
-        const previous = Number(
-          (
-            await client.query<{ total: number }>(
-              "SELECT count(*)::int AS total FROM conferencia_recebimento_item WHERE conferencia_id=$1",
-              [conferenciaId],
-            )
-          ).rows[0]?.total ?? 0,
-        );
-        if (previous > 0)
-          throw new BadRequestException(
-            "Palete dedicado aceita somente uma carga/NF/DC",
-          );
-      }
       if (["MP", "PD"].includes(conference.tipo_unitizacao)) {
         const other = await client.query(
           "SELECT 1 FROM conferencia_recebimento_item WHERE conferencia_id=$1 AND carga_id<>$2 LIMIT 1",

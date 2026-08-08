@@ -17,6 +17,11 @@ export default defineConfig({
         },
       },
     },
+    optimizeDeps: {
+      // react-store imports this CJS shim by a named ESM export during dev.
+      // Pre-bundling keeps the dev SSR/client graph consistent with production.
+      include: ["use-sync-external-store/shim/with-selector"],
+    },
   },
   // Fora do ambiente Lovable, o plugin de deploy do Nitro é pulado por padrão.
   // Forçamos o Nitro com preset "vercel" para gerar a saída SSR que a Vercel entende

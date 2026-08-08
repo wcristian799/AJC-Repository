@@ -38,6 +38,16 @@ export interface AgenteDto {
   cidadeSigla: string;
   percentualComissao: number | null;
   ativo: boolean;
+  usuarioId: string | null;
+  usuarioNome: string | null;
+}
+
+export interface SaveAgenteInput {
+  nome: string;
+  cidadeSigla: string;
+  percentualComissao?: number | null;
+  usuarioId?: string | null;
+  ativo?: boolean;
 }
 
 export interface ClienteDto {
@@ -536,12 +546,16 @@ export class CadastrosRepository {
       cidade_sigla: string;
       percentual_comissao: string | null;
       ativo: boolean;
+      usuario_id: string | null;
+      usuario_nome: string | null;
     }>(
       `
-      SELECT id, nome, cidade_sigla, percentual_comissao, ativo
-      FROM agente
-      WHERE excluido_em IS NULL
-      ORDER BY nome
+      SELECT a.id, a.nome, a.cidade_sigla, a.percentual_comissao, a.ativo,
+             a.usuario_id, u.nome AS usuario_nome
+      FROM agente a
+      LEFT JOIN usuario u ON u.id=a.usuario_id AND u.excluido_em IS NULL
+      WHERE a.excluido_em IS NULL
+      ORDER BY a.nome
       `,
     );
     return result.rows.map((row) => ({
@@ -550,7 +564,59 @@ export class CadastrosRepository {
       cidadeSigla: row.cidade_sigla,
       percentualComissao: row.percentual_comissao ? Number(row.percentual_comissao) : null,
       ativo: row.ativo,
+      usuarioId: row.usuario_id,
+      usuarioNome: row.usuario_nome,
     }));
+  }
+
+  async createAgente(input: SaveAgenteInput, userId: string): Promise<AgenteDto> {
+    const nome = input.nome?.trim();
+    if (!nome) throw new BadRequestException('Informe o nome do agente');
+    if (!input.cidadeSigla?.trim()) throw new BadRequestException('Informe a cidade do agente');
+    const percentual = input.percentualComissao == null ? null : Number(input.percentualComissao);
+    if (percentual != null && (!Number.isFinite(percentual) || percentual < 0 || percentual > 100)) throw new BadRequestException('Percentual de comissao invalido');
+    if (input.usuarioId) await this.ensureAgenteUsuario(input.usuarioId);
+    const row = await this.db.one<{id:string}>(
+      `INSERT INTO agente(nome,cidade_sigla,percentual_comissao,usuario_id,ativo)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [nome,input.cidadeSigla.trim().toUpperCase(),percentual,input.usuarioId || null,input.ativo ?? true],
+    );
+    await this.audit('agente', row!.id, 'criar', userId, { nome, cidadeSigla: input.cidadeSigla, usuarioId: input.usuarioId || null });
+    return this.getAgente(row!.id);
+  }
+
+  async updateAgente(id: string, input: SaveAgenteInput, userId: string): Promise<AgenteDto> {
+    const before = await this.db.one<{id:string}>('SELECT id FROM agente WHERE id=$1 AND excluido_em IS NULL', [id]);
+    if (!before) throw new BadRequestException('Agente nao encontrado');
+    const nome = input.nome?.trim();
+    if (!nome || !input.cidadeSigla?.trim()) throw new BadRequestException('Nome e cidade sao obrigatorios');
+    const percentual = input.percentualComissao == null ? null : Number(input.percentualComissao);
+    if (percentual != null && (!Number.isFinite(percentual) || percentual < 0 || percentual > 100)) throw new BadRequestException('Percentual de comissao invalido');
+    if (input.usuarioId) await this.ensureAgenteUsuario(input.usuarioId, id);
+    await this.db.query(
+      `UPDATE agente SET nome=$2,cidade_sigla=$3,percentual_comissao=$4,usuario_id=$5,ativo=$6,atualizado_em=now()
+       WHERE id=$1`,
+      [id,nome,input.cidadeSigla.trim().toUpperCase(),percentual,input.usuarioId || null,input.ativo ?? true],
+    );
+    const after = await this.getAgente(id);
+    await this.audit('agente', id, 'atualizar', userId, { before, after });
+    return after;
+  }
+
+  private async getAgente(id: string): Promise<AgenteDto> {
+    const result = await this.db.one<{
+      id:string; nome:string; cidade_sigla:string; percentual_comissao:string|null; ativo:boolean; usuario_id:string|null; usuario_nome:string|null;
+    }>(`SELECT a.id,a.nome,a.cidade_sigla,a.percentual_comissao,a.ativo,a.usuario_id,u.nome AS usuario_nome
+        FROM agente a LEFT JOIN usuario u ON u.id=a.usuario_id WHERE a.id=$1 AND a.excluido_em IS NULL`, [id]);
+    if (!result) throw new BadRequestException('Agente nao encontrado');
+    return { id:result.id,nome:result.nome,cidadeSigla:result.cidade_sigla,percentualComissao:result.percentual_comissao?Number(result.percentual_comissao):null,ativo:result.ativo,usuarioId:result.usuario_id,usuarioNome:result.usuario_nome };
+  }
+
+  private async ensureAgenteUsuario(usuarioId: string, excludeAgenteId?: string) {
+    const user = await this.db.one('SELECT id FROM usuario WHERE id=$1 AND ativo=true AND excluido_em IS NULL', [usuarioId]);
+    if (!user) throw new BadRequestException('Usuario vinculado inexistente ou inativo');
+    const linked = await this.db.one('SELECT id FROM agente WHERE usuario_id=$1 AND excluido_em IS NULL AND ($2::uuid IS NULL OR id<>$2::uuid)', [usuarioId,excludeAgenteId || null]);
+    if (linked) throw new BadRequestException('Este usuario ja esta vinculado a outro agente');
   }
 
   async listClientes(): Promise<ClienteDto[]> {

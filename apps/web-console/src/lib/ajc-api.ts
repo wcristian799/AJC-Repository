@@ -117,10 +117,21 @@ export async function getMeAjc() {
 }
 
 export type CampoAplicativoApi = { codigo:string; nome:string; descricao:string; rota:string; ordem:number; ativo:boolean; permissoes:string[] };
+export type CampoAgentePainelApi = {
+  agente:{id:string;nome:string;cidadeSigla:string;percentualComissao:number|null};
+  resumo:{clientes:number;cotacoesAbertas:number;pedidosAbertos:number;captadoMes:number;comissaoEstimada:number|null};
+  clientes:Array<{id:string;codigo:string;nome:string;cidade_sigla:string|null;contatos:unknown[];ultima_movimentacao:string|null}>;
+  pedidos:Array<{id:string;codigo:string;tipo:string;status:string;origem_sigla:string;destino_sigla:string;valor_estimado:number|null;criado_em:string;cliente_nome:string}>;
+  cotacoes:Array<{id:string;tipo:string;status:string;valor_estimado:number|null;criado_em:string;cliente_nome:string}>;
+};
+export type CampoAgenteClienteApi={id:string;codigo:string;nome:string;cidade_sigla:string|null};
 export type CampoPortariaApi = { id:string; placa:string; empresa:string; empresa_nome?:string; entrada_em:string; saida_em:string|null; local_nome?:string; motorista_nome?:string; foto_url?:string|null; saida_foto_url?:string|null };
 export type CampoPortariaListApi = { items:CampoPortariaApi[]; resumo:{no_patio:number; entradas_periodo:number; saidas_periodo:number}; paginacao:{pagina:number;porPagina:number;total:number;paginas:number}; config:{pollingSegundos:number;fotoEntrada:string;fotoSaida:string} };
 export type CampoEmpresaApi = { tipo:"cliente"|"fornecedor"; id:string; nome:string; documento:string|null; cidade_sigla:string|null };
 export function listCampoAplicativos() { return request<CampoAplicativoApi[]>("/campo/aplicativos",{auth:true}); }
+export function getCampoAgentePainel(){return request<CampoAgentePainelApi>("/campo/agente/painel",{auth:true});}
+export function listCampoAgenteClientes(){return request<CampoAgenteClienteApi[]>("/campo/agente/clientes",{auth:true});}
+export function createCampoAgentePedido(input:{tipo:"carga"|"encomenda"|"veiculo"|"maquina";clienteId:string;origemSigla:string;destinoSigla:string;valorEstimado?:number|null;observacao?:string|null;clientUuid:string}){return request<Record<string,unknown>>("/campo/agente/pedidos",{method:"POST",body:JSON.stringify(input),auth:true});}
 export function listCampoCatalogo() { return request<CampoAplicativoApi[]>("/campo/catalogo",{auth:true}); }
 export function updateCampoCatalogo(codigo:string,input:{nome:string;descricao:string;ordem:number;ativo:boolean}) { return request<CampoAplicativoApi>(`/campo/catalogo/${codigo}`,{method:"PATCH",body:JSON.stringify(input),auth:true}); }
 export function listCampoPortaria(params:Record<string,string|undefined> = {}) { const q=new URLSearchParams(); Object.entries(params).forEach(([k,v])=>v&&q.set(k,v)); return request<CampoPortariaListApi>(`/campo/portaria${q.size?`?${q}`:""}`,{auth:true}); }
@@ -401,6 +412,8 @@ export type AgenteApi = {
   cidadeSigla: string;
   percentualComissao: number | null;
   ativo: boolean;
+  usuarioId: string | null;
+  usuarioNome: string | null;
 };
 
 export type ClienteApi = {
@@ -606,6 +619,12 @@ export function createColaborador(input: SaveColaboradorInput) {
 
 export function listAgentes() {
   return request<AgenteApi[]>("/cadastros/agentes", { auth: true });
+}
+export function createAgente(input:{nome:string;cidadeSigla:string;percentualComissao?:number|null;usuarioId?:string|null;ativo?:boolean}){
+  return request<AgenteApi>("/cadastros/agentes",{method:"POST",body:JSON.stringify(input),auth:true});
+}
+export function updateAgente(id:string,input:{nome:string;cidadeSigla:string;percentualComissao?:number|null;usuarioId?:string|null;ativo?:boolean}){
+  return request<AgenteApi>(`/cadastros/agentes/${id}`,{method:"PATCH",body:JSON.stringify(input),auth:true});
 }
 
 export function listClientes() {

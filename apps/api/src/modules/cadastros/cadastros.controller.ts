@@ -3,7 +3,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { AuthTokenPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermissions } from '../auth/permissions.decorator';
-import { CadastrosRepository, SaveCidadeInput, SaveClienteInput, SaveColaboradorInput, SaveEmbarcacaoInput, SaveFornecedorInput, SavePerfilInput, SaveUsuarioInput } from './cadastros.repository';
+import { CadastrosRepository, SaveAgenteInput, SaveCidadeInput, SaveClienteInput, SaveColaboradorInput, SaveEmbarcacaoInput, SaveFornecedorInput, SavePerfilInput, SaveUsuarioInput } from './cadastros.repository';
 
 @UseGuards(AuthGuard)
 @Controller('cadastros')
@@ -92,6 +92,18 @@ export class CadastrosController {
   @RequirePermissions('crm.ver')
   listAgentes() {
     return this.repository.listAgentes();
+  }
+
+  @Post('agentes')
+  @RequirePermissions('cadastros.editar')
+  createAgente(@Body() body: SaveAgenteInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.repository.createAgente(body, user.sub);
+  }
+
+  @Patch('agentes/:id')
+  @RequirePermissions('cadastros.editar')
+  updateAgente(@Param('id') id: string, @Body() body: SaveAgenteInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.repository.updateAgente(id, body, user.sub);
   }
 
   @Get('clientes')

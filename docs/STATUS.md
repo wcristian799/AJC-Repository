@@ -1014,3 +1014,11 @@ Integrar front?back removendo mocks residuais por módulo (prioridade: `/campo/*
 - **Publicação validada:** o deployment `8efb71b` compilou e iniciou a função SSR sem `__exportAll`.
 - **Produção validada:** `https://pegasus.amazonasfb.com.br/`, `https://pegasus.amazonasfb.com.br/campo` e `https://ajcmvp.vercel.app/` responderam HTTP 200.
 - **Runtime final:** Node 24.x na Vercel (Node 20 foi revertido por estar descontinuado na plataforma); o conserto efetivo é Vite 7/Rollup + `@tanstack/query-core` declarado diretamente.
+
+## Trabalho 2026-08-08 - Revisao de fluxos dos apps de campo
+
+- CRM Comercial permaneceu superficie interna; novo app independente **Agente Comercial** em `/campo/agente`, com carteira vinculada ao usuario e captacao que cria somente pedido comercial idempotente.
+- Migration 0042 associa usuario/agente de forma unica, publica `campo.agente`; Cadastros ganhou aba Agentes para cidade, conta, status e percentual.
+- Recebimento agora le palete pelo codigo, validando banco, local, status, viagem/destino e classificacao; a tela deixa claro que leitura de palete nao e baixa de mercadoria.
+- Composicao permite selecao multipla de NF/DC; MP/PD/PC seguem regras fisicas na API e AVULSA conserva etiqueta+bipe por volume. Documento: `docs/feedback/2026-08-08-revisao-fluxos-apps-campo.md`.
+- QA: migration local 42/42, Nest build e SSR/Vercel build verdes. Vite dev local bloqueado por incompatibilidade preexistente de `use-sync-external-store`; repetir visual autenticado em preview/deployment.

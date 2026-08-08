@@ -6,6 +6,7 @@ import { RequirePermissions } from "../auth/permissions.decorator";
 import { AuthTokenPayload } from "../auth/auth.types";
 import { TmsEvidenceService } from "../tms/tms-evidence.service";
 import { CampoRepository } from "./campo.repository";
+import { CrmRepository, PedidoEnvioInput } from "../crm/crm.repository";
 import { PortariaEntradaInput, PortariaQuery, PortariaSaidaInput, RegisterCampoDispositivoInput, SaveCampoAplicativoInput, SaveCampoContextoInput, VehicleChecklistInput } from "./campo.types";
 
 type Uploaded = { originalname: string; mimetype: string; size: number; buffer: Buffer };
@@ -13,7 +14,7 @@ type Uploaded = { originalname: string; mimetype: string; size: number; buffer: 
 @UseGuards(AuthGuard)
 @Controller("campo")
 export class CampoController {
-  constructor(private readonly repository: CampoRepository, private readonly evidence: TmsEvidenceService) {}
+  constructor(private readonly repository: CampoRepository, private readonly evidence: TmsEvidenceService, private readonly crm: CrmRepository) {}
 
   @Get("aplicativos")
   aplicativos(@CurrentUser() user: AuthTokenPayload) { return this.repository.listAplicativos(user); }
@@ -30,6 +31,21 @@ export class CampoController {
 
   @Get("configuracao")
   config() { return this.repository.config(); }
+
+  @Get("agente/painel")
+  @RequirePermissions("campo.agente")
+  agentePainel(@CurrentUser() user: AuthTokenPayload) { return this.repository.agentePainel(user.sub); }
+
+  @Get("agente/clientes")
+  @RequirePermissions("campo.agente")
+  agenteClientes(@CurrentUser() user: AuthTokenPayload) { return this.repository.clientesDoAgente(user.sub); }
+
+  @Post("agente/pedidos")
+  @RequirePermissions("campo.agente")
+  async agentePedido(@Body() body: PedidoEnvioInput, @CurrentUser() user: AuthTokenPayload) {
+    const agente = await this.repository.agenteDoUsuario(user.sub);
+    return this.crm.createPedido({ ...body, agenteId: agente.id }, user.sub);
+  }
 
   @Get("contextos/meus")
   meusContextos(@CurrentUser() user: AuthTokenPayload) { return this.repository.meusContextos(user.sub); }
